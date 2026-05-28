@@ -362,44 +362,68 @@ function OwnerContent() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
         .fade { animation: fadeUp 0.25s ease forwards; opacity: 0; }
-        .row-hover:hover { background: #FAFBFF !important; }
+        .row-hover:hover { background: #F5F8FF !important; }
         .row-hover:hover .row-actions { opacity: 1 !important; }
         .row-actions { opacity: 0; transition: opacity 0.15s; }
-        .msg-row:hover { background: #FAFBFF; }
+        .msg-row:hover { background: #F5F8FF; }
       `}</style>
 
-      {/* ── Page header ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.75rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.025em', margin: '0 0 4px' }}>
-            Welcome back, Alhaji Sule
-          </h1>
-          <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>
-            Your inventory and earnings this month
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          {/* Earnings highlight */}
-          <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', padding: '14px 20px', textAlign: 'right', minWidth: '160px' }}>
-            <p style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 4px' }}>
-              Earnings this month
-            </p>
-            <p style={{ fontSize: '1.625rem', fontWeight: 800, color: '#10B981', letterSpacing: '-0.03em', margin: 0, fontFamily: 'monospace' }}>
-              {formatNaira(monthlyEarnings)}
-            </p>
-            <p style={{ fontSize: '0.6875rem', color: '#CBD5E1', margin: '2px 0 0' }}>
-              {activeBookings.length} active booking{activeBookings.length !== 1 ? 's' : ''}
+      {/* ── Welcome strip ── */}
+      <div style={{
+        background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16,
+        padding: '18px 24px', marginBottom: '1.5rem',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+      }}>
+        {/* Left: avatar + greeting */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{
+            width: 46, height: 46, borderRadius: 13, flexShrink: 0,
+            background: 'linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="9" width="18" height="12" rx="2"/><path d="M3 9l9-6 9 6"/><line x1="9" y1="21" x2="9" y2="13"/><line x1="15" y1="21" x2="15" y2="13"/>
+            </svg>
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+              <h1 style={{ fontSize: '1.0625rem', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+                Owner Dashboard
+              </h1>
+              <span style={{ fontSize: '0.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#7C3AED', background: '#F5F3FF', padding: '2px 8px', borderRadius: 999 }}>
+                Owner Portal
+              </span>
+            </div>
+            <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>
+              {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           </div>
-          {/* Add board button */}
+        </div>
+        {/* Right: stats + action */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexShrink: 0 }}>
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#7C3AED', fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em' }}>{boards.length}</p>
+            <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total boards</p>
+          </div>
+          <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#10B981', fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em' }}>{formatNaira(monthlyEarnings)}</p>
+            <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>This month</p>
+          </div>
+          <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em', color: occupancyRate >= 60 ? '#10B981' : '#F59E0B' }}>{occupancyRate}%</p>
+            <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Occupancy</p>
+          </div>
+          <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
           <button
             onClick={openAdd}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               background: '#7C3AED', color: '#fff', border: 'none',
-              padding: '10px 18px', borderRadius: '10px',
+              padding: '9px 16px', borderRadius: 10,
               fontSize: '0.8125rem', fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit',
+              cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
             }}
           >
             <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>+</span> Add board
