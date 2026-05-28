@@ -194,6 +194,289 @@ function FieldInput({ value, onChange, type = 'text', placeholder, required }: {
   );
 }
 
+// ── Rate Card ─────────────────────────────────────────────────────────────
+
+type RateCardData = {
+  baseRate: number;
+  seasons: { id: string; label: string; emoji: string; multiplier: number }[];
+  durations: { months: number; label: string; discount: number }[];
+};
+
+const DEFAULT_SEASONS = [
+  { id: 'regular',  label: 'Regular',          emoji: '📅', multiplier: 1.0  },
+  { id: 'q4',       label: 'Q4 (Oct–Dec)',      emoji: '📈', multiplier: 1.3  },
+  { id: 'festive',  label: 'Festive (Dec–Jan)', emoji: '🎉', multiplier: 1.5  },
+  { id: 'ramadan',  label: 'Ramadan',           emoji: '🌙', multiplier: 1.2  },
+];
+
+const DEFAULT_DURATIONS = [
+  { months: 1,  label: '1 month',  discount: 0    },
+  { months: 3,  label: '3 months', discount: 0.05 },
+  { months: 6,  label: '6 months', discount: 0.10 },
+  { months: 12, label: '12 months',discount: 0.15 },
+];
+
+function loadRateCard(boardId: string, askingRate: number): RateCardData {
+  try {
+    const raw = localStorage.getItem(`ooh_rate_card_${boardId}`);
+    if (raw) return JSON.parse(raw) as RateCardData;
+  } catch {}
+  return { baseRate: askingRate, seasons: DEFAULT_SEASONS.map(s => ({ ...s })), durations: DEFAULT_DURATIONS.map(d => ({ ...d })) };
+}
+
+function saveRateCard(boardId: string, card: RateCardData) {
+  localStorage.setItem(`ooh_rate_card_${boardId}`, JSON.stringify(card));
+}
+
+function RateCardTab({ boards, formatNaira, onSave }: { boards: Board[]; formatNaira: (n: number) => string; onSave: () => void }) {
+  const [selectedBoardId, setSelectedBoardId] = useState<string>(boards[0]?.id || '');
+  const [card, setCard] = useState<RateCardData | null>(null);
+  const [previewSeason, setPreviewSeason] = useState<string>('regular');
+  const [saved, setSaved] = useState(false);
+
+  const selectedBoard = boards.find(b => b.id === selectedBoardId);
+
+  useEffect(() => {
+    if (selectedBoardId && selectedBoard) {
+      setCard(loadRateCard(selectedBoardId, selectedBoard.asking_rate));
+    }
+  }, [selectedBoardId]);
+
+  if (boards.length === 0) {
+    return (
+      <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '4rem', textAlign: 'center' }}>
+        <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>Add boards first to configure rate cards</p>
+      </div>
+    );
+  }
+
+  if (!card || !selectedBoard) return null;
+
+  function updateSeason(id: string, multiplier: number) {
+    setCard(prev => prev ? ({ ...prev, seasons: prev.seasons.map(s => s.id === id ? { ...s, multiplier } : s) }) : prev);
+  }
+
+  function updateDiscount(months: number, discount: number) {
+    setCard(prev => prev ? ({ ...prev, durations: prev.durations.map(d => d.months === months ? { ...d, discount } : d) }) : prev);
+  }
+
+  function handleSave() {
+    if (!card) return;
+    saveRateCard(selectedBoardId, card);
+    setSaved(true);
+    onSave();
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  const effectiveRate = (season: typeof DEFAULT_SEASONS[0], dur: typeof DEFAULT_DURATIONS[0]) =>
+    Math.round(card.baseRate * season.multiplier * (1 - dur.discount));
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+        <div>
+          <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px' }}>Rate Card</h2>
+          <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>
+            Set seasonal multipliers and duration discounts per board. Rates appear automatically in negotiations.
+          </p>
+        </div>
+        <button
+          onClick={handleSave}
+          style={{ padding: '9px 20px', background: saved ? '#10B981' : '#7C3AED', color: '#fff', border: 'none', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.3s' }}
+        >
+          {saved ? '✓ Saved' : 'Save rate card'}
+        </button>
+      </div>
+
+      {/* Board selector */}
+      <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '14px 18px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 16 }}>
+        <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#374151', margin: 0, flexShrink: 0 }}>Board</p>
+        <select
+          value={selectedBoardId}
+          onChange={e => setSelectedBoardId(e.target.value)}
+          style={{ flex: 1, padding: '8px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: '0.875rem', color: '#0F172A', fontFamily: 'inherit', cursor: 'pointer', outline: 'none', background: '#fff' }}
+        >
+          {boards.map(b => (
+            <option key={b.id} value={b.id}>{b.name} — {b.city}</option>
+          ))}
+        </select>
+        <div style={{ flexShrink: 0, textAlign: 'right' }}>
+          <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '0 0 2px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current asking rate</p>
+          <p style={{ fontSize: '1rem', fontWeight: 800, color: '#7C3AED', fontFamily: 'monospace', margin: 0 }}>{formatNaira(selectedBoard.asking_rate)}/mo</p>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+
+        {/* Base rate */}
+        <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '18px 20px' }}>
+          <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 12px' }}>Base rate (₦/month)</p>
+          <div style={{ position: 'relative' }}>
+            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: '0.9375rem', fontWeight: 700, color: '#7C3AED' }}>₦</span>
+            <input
+              type="number"
+              value={card.baseRate}
+              onChange={e => setCard(prev => prev ? ({ ...prev, baseRate: parseFloat(e.target.value) || 0 }) : prev)}
+              style={{ width: '100%', padding: '10px 12px 10px 28px', border: '1.5px solid #DDD6FE', borderRadius: 9, fontSize: '1.125rem', fontWeight: 700, fontFamily: 'monospace', color: '#0F172A', outline: 'none', boxSizing: 'border-box', background: '#FAFAFF' }}
+              onFocus={e => e.currentTarget.style.borderColor = '#7C3AED'}
+              onBlur={e => e.currentTarget.style.borderColor = '#DDD6FE'}
+            />
+          </div>
+          <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '6px 0 0' }}>
+            This overrides the board's asking rate for negotiation guidance. It doesn't change what's publicly listed.
+          </p>
+        </div>
+
+        {/* Duration discounts */}
+        <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '18px 20px' }}>
+          <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 12px' }}>Duration discounts</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {card.durations.map(dur => (
+              <div key={dur.months} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: '#475569', minWidth: 80 }}>{dur.label}</span>
+                <div style={{ flex: 1, position: 'relative' }}>
+                  <input
+                    type="range"
+                    min={0} max={30} step={1}
+                    value={Math.round(dur.discount * 100)}
+                    onChange={e => updateDiscount(dur.months, parseFloat(e.target.value) / 100)}
+                    style={{ width: '100%', accentColor: '#7C3AED' }}
+                  />
+                </div>
+                <span style={{
+                  minWidth: 48, textAlign: 'right', fontSize: '0.8125rem', fontWeight: 700,
+                  color: dur.discount === 0 ? '#94A3B8' : '#7C3AED',
+                  fontFamily: 'monospace',
+                }}>
+                  {dur.discount === 0 ? '—' : `-${Math.round(dur.discount * 100)}%`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Seasonal multipliers */}
+      <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '18px 20px', marginBottom: '1rem' }}>
+        <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 14px' }}>Seasonal multipliers</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+          {card.seasons.map(season => (
+            <div
+              key={season.id}
+              style={{
+                background: previewSeason === season.id ? '#F5F3FF' : '#F8FAFC',
+                border: `1.5px solid ${previewSeason === season.id ? '#DDD6FE' : '#E8EDF2'}`,
+                borderRadius: 10, padding: '14px',
+                cursor: 'pointer', transition: 'all 0.15s',
+              }}
+              onClick={() => setPreviewSeason(season.id)}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <span style={{ fontSize: '1.125rem' }}>{season.emoji}</span>
+                {previewSeason === season.id && (
+                  <span style={{ fontSize: '0.5625rem', fontWeight: 700, color: '#7C3AED', background: '#EDE9FE', padding: '2px 6px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Preview</span>
+                )}
+              </div>
+              <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151', margin: '0 0 8px' }}>{season.label}</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="number"
+                  min={0.5} max={3} step={0.05}
+                  value={season.multiplier}
+                  onClick={e => e.stopPropagation()}
+                  onChange={e => updateSeason(season.id, parseFloat(e.target.value) || 1)}
+                  style={{ width: '60px', padding: '5px 8px', border: '1px solid #E2E8F0', borderRadius: 6, fontSize: '0.875rem', fontWeight: 700, fontFamily: 'monospace', color: '#0F172A', outline: 'none', textAlign: 'center' }}
+                  onFocus={e => { e.stopPropagation(); e.currentTarget.style.borderColor = '#7C3AED'; }}
+                  onBlur={e => e.currentTarget.style.borderColor = '#E2E8F0'}
+                />
+                <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>×</span>
+                <span style={{
+                  fontSize: '0.75rem', fontWeight: 700,
+                  color: season.multiplier > 1 ? '#059669' : season.multiplier < 1 ? '#DC2626' : '#94A3B8',
+                }}>
+                  {season.multiplier > 1 ? `+${Math.round((season.multiplier - 1) * 100)}%` : season.multiplier < 1 ? `-${Math.round((1 - season.multiplier) * 100)}%` : 'base'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Preview matrix */}
+      <div style={{ background: '#0F172A', borderRadius: 12, padding: '20px 22px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div>
+            <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#F8FAFC', margin: '0 0 3px' }}>Effective rate matrix</p>
+            <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', margin: 0 }}>
+              Rates after seasonal multiplier + duration discount — what you'd quote in negotiations
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {card.seasons.map(s => (
+              <button
+                key={s.id}
+                onClick={() => setPreviewSeason(s.id)}
+                style={{
+                  padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  background: previewSeason === s.id ? '#7C3AED' : 'rgba(255,255,255,0.08)',
+                  color: previewSeason === s.id ? '#fff' : 'rgba(255,255,255,0.5)',
+                }}
+              >
+                {s.emoji} {s.label.split(' ')[0]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Matrix grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: `120px repeat(${card.durations.length}, 1fr)`, gap: '1px', background: 'rgba(255,255,255,0.05)', borderRadius: 8, overflow: 'hidden' }}>
+          {/* Header row */}
+          <div style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)' }} />
+          {card.durations.map(d => (
+            <div key={d.months} style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.03)', textAlign: 'center' }}>
+              <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'rgba(255,255,255,0.5)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{d.label}</p>
+              {d.discount > 0 && <p style={{ fontSize: '0.5625rem', color: '#10B981', margin: '2px 0 0', fontWeight: 600 }}>-{Math.round(d.discount * 100)}%</p>}
+            </div>
+          ))}
+          {/* Data rows — one per season, highlight selected */}
+          {card.seasons.map(season => {
+            const isActive = previewSeason === season.id;
+            return (
+              <>
+                <div key={season.id + '-label'} style={{ padding: '10px 12px', background: isActive ? 'rgba(124,58,237,0.2)' : 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: '0.875rem' }}>{season.emoji}</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: isActive ? 700 : 500, color: isActive ? '#C4B5FD' : 'rgba(255,255,255,0.4)' }}>{season.label.split(' ')[0]}</span>
+                  {season.multiplier !== 1 && (
+                    <span style={{ fontSize: '0.5625rem', color: season.multiplier > 1 ? '#10B981' : '#F87171', fontWeight: 700 }}>
+                      {season.multiplier > 1 ? `+${Math.round((season.multiplier - 1) * 100)}%` : `-${Math.round((1 - season.multiplier) * 100)}%`}
+                    </span>
+                  )}
+                </div>
+                {card.durations.map(dur => {
+                  const rate = effectiveRate(season, dur);
+                  return (
+                    <div key={season.id + '-' + dur.months} style={{ padding: '10px 12px', background: isActive ? 'rgba(124,58,237,0.12)' : 'rgba(255,255,255,0.02)', textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.04)' }}>
+                      <p style={{ fontSize: '0.875rem', fontWeight: isActive ? 800 : 600, color: isActive ? '#E9D5FF' : 'rgba(255,255,255,0.55)', margin: 0, fontFamily: 'monospace', letterSpacing: '-0.01em' }}>
+                        {formatNaira(rate)}
+                      </p>
+                      {dur.months > 1 && (
+                        <p style={{ fontSize: '0.5625rem', color: 'rgba(255,255,255,0.25)', margin: '2px 0 0' }}>
+                          {formatNaira(rate * dur.months)} total
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main content ───────────────────────────────────────────────────────────
 
 function OwnerContent() {
@@ -202,7 +485,7 @@ function OwnerContent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [creativesByBooking, setCreativesByBooking] = useState<Record<string, { id: string; file_url: string; file_name: string; file_size: number | null; status: string; notes: string | null }>>({});
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'boards' | 'bookings' | 'messages' | 'earnings' | 'calendar' | 'analytics'>('boards');
+  const [activeTab, setActiveTab] = useState<'boards' | 'bookings' | 'messages' | 'earnings' | 'calendar' | 'analytics' | 'rate-card'>('boards');
   const [reviewingCreative, setReviewingCreative] = useState<{ bookingId: string; fileUrl: string; fileName: string; creativeId: string } | null>(null);
   const [reviewNote, setReviewNote] = useState('');
   const [reviewSaving, setReviewSaving] = useState(false);
@@ -210,7 +493,7 @@ function OwnerContent() {
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab === 'bookings' || tab === 'messages' || tab === 'earnings' || tab === 'calendar' || tab === 'analytics') {
+    if (tab === 'bookings' || tab === 'messages' || tab === 'earnings' || tab === 'calendar' || tab === 'analytics' || tab === 'rate-card') {
       setActiveTab(tab as typeof activeTab);
     }
   }, [searchParams]);
@@ -460,12 +743,13 @@ function OwnerContent() {
       {/* ── Tabs ── */}
       <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: 4, borderRadius: 10, width: 'fit-content', marginBottom: '1.25rem' }}>
         {[
-          { key: 'boards',    label: `My Boards (${boards.length})`,       badge: 0 },
-          { key: 'bookings',  label: `Bookings (${bookings.length})`,       badge: pendingBookings.length },
-          { key: 'calendar',  label: 'Calendar',                             badge: 0 },
-          { key: 'messages',  label: `Messages (${messages.length})`,        badge: 0 },
-          { key: 'earnings',  label: 'Earnings',                             badge: 0 },
-          { key: 'analytics', label: 'Analytics',                            badge: 0 },
+          { key: 'boards',     label: `My Boards (${boards.length})`,       badge: 0 },
+          { key: 'bookings',   label: `Bookings (${bookings.length})`,       badge: pendingBookings.length },
+          { key: 'calendar',   label: 'Calendar',                             badge: 0 },
+          { key: 'messages',   label: `Messages (${messages.length})`,        badge: 0 },
+          { key: 'earnings',   label: 'Earnings',                             badge: 0 },
+          { key: 'analytics',  label: 'Analytics',                            badge: 0 },
+          { key: 'rate-card',  label: 'Rate Card',                            badge: 0 },
         ].map(tab => (
           <button
             key={tab.key}
@@ -1418,6 +1702,11 @@ function OwnerContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Rate Card tab ── */}
+      {activeTab === 'rate-card' && (
+        <RateCardTab boards={boards} formatNaira={formatNaira} onSave={() => showToast('Rate card saved')} />
       )}
 
       {/* Toast */}
