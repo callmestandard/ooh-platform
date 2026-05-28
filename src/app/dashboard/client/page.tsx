@@ -644,19 +644,69 @@ function ClientContent() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
         .fade { animation: fadeUp 0.25s ease forwards; }
-        .board-row:hover { background: #FAFBFF; }
+        .board-row:hover { background: #F5F8FF; }
         .attn-row:hover { opacity: 0.85; }
       `}</style>
 
       {/* ── Welcome strip ── */}
-      <div style={{ background: 'linear-gradient(135deg, #0F172A 0%, #1B4F8A 100%)', borderRadius: 14, padding: '20px 24px', marginBottom: '1.5rem', color: '#fff' }}>
-        <p style={{ fontSize: '0.6875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'rgba(255,255,255,0.5)', margin: '0 0 6px' }}>Client portal</p>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em' }}>
-          Welcome back, {brandName}
-        </h1>
-        <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.75)', margin: 0, maxWidth: 520 }}>
-          Track your OOH campaigns end to end — approve plans, verify proof of posting, and pay invoices in one place.
-        </p>
+      <div style={{
+        background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16,
+        padding: '18px 24px', marginBottom: '1.5rem',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+      }}>
+        {/* Left: avatar + greeting */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{
+            width: 46, height: 46, borderRadius: 13, flexShrink: 0,
+            background: 'linear-gradient(135deg, #1B4F8A 0%, #7C3AED 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span style={{ fontSize: '1.125rem', fontWeight: 800, color: '#fff', lineHeight: 1 }}>
+              {brandName.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+              <h1 style={{ fontSize: '1.0625rem', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+                Welcome back, {brandName}
+              </h1>
+              <span style={{ fontSize: '0.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#1B4F8A', background: '#EFF6FF', padding: '2px 8px', borderRadius: 999 }}>
+                Client Portal
+              </span>
+            </div>
+            <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>
+              Approve boards · Track compliance · Manage invoices
+            </p>
+          </div>
+        </div>
+
+        {/* Right: live stats */}
+        {!loadingCampaign && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexShrink: 0 }}>
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1B4F8A', fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em' }}>{liveBoards}</p>
+              <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Live boards</p>
+            </div>
+            <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em', color: daysLeft > 14 ? '#10B981' : daysLeft > 0 ? '#F59E0B' : '#EF4444' }}>
+                {daysLeft > 0 ? daysLeft : '—'}
+              </p>
+              <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Days left</p>
+            </div>
+            {bookings.length > 0 && (
+              <>
+                <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em', color: compRate >= 90 ? '#10B981' : compRate >= 70 ? '#F59E0B' : '#EF4444' }}>
+                    {compRate}%
+                  </p>
+                  <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Compliance</p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Page header ── */}
