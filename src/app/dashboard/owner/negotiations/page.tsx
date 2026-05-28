@@ -83,7 +83,7 @@ export default function OwnerNegotiationsPage() {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
-        .nego-row:hover { background: #F8FAFF !important; }
+        .nego-row:hover { background: #F5F8FF !important; }
         .nego-row:hover .row-arrow { opacity: 1 !important; }
       `}</style>
 
@@ -257,6 +257,14 @@ export default function OwnerNegotiationsPage() {
               </div>
             );
           })}
+          <div style={{ padding: '10px 20px', borderTop: '1px solid #F1F5F9', background: '#FAFBFC', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
+              Showing {filtered.length} of {bookings.length} deal{bookings.length !== 1 ? 's' : ''}
+            </span>
+            <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
+              {pendingCount > 0 ? `${pendingCount} awaiting action` : 'All caught up'}
+            </span>
+          </div>
         </div>
       )}
     </div>

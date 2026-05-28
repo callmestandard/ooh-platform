@@ -182,7 +182,7 @@ function AdminContent() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
         .fade { animation: fadeUp 0.25s ease forwards; opacity: 0; }
-        .row-hover:hover { background: #FAFBFF !important; }
+        .row-hover:hover { background: #F5F8FF !important; }
       `}</style>
 
       {/* ── Page header ── */}
@@ -510,6 +510,16 @@ function AdminContent() {
               </tbody>
             </table>
           )}
+          {boards.length > 0 && (
+            <div style={{ padding: '10px 16px', borderTop: '1px solid #F1F5F9', background: '#FAFBFC', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
+                {boards.length} board{boards.length !== 1 ? 's' : ''} · {boards.filter(b => b.status === 'available').length} available · {bookedBoards} booked
+              </span>
+              <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
+                {occupancy}% occupancy rate
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -666,6 +676,11 @@ function AdminContent() {
               })}
             </tbody>
           </table>
+          <div style={{ padding: '10px 16px', borderTop: '1px solid #F1F5F9', background: '#FAFBFC', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
+              {demoUsers.length} user{demoUsers.length !== 1 ? 's' : ''} · {demoUsers.filter(u => u.status === 'active').length} active
+            </span>
+          </div>
         </div>
       )}
 

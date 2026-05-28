@@ -166,7 +166,7 @@ export default function CompliancePage() {
     <div style={{ fontFamily: "'DM Sans', 'Inter', sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap');
-        .comp-row:hover { background: #F8FAFF; cursor: pointer; }
+        .comp-row:hover { background: #F5F8FF; cursor: pointer; }
         .tab-btn { transition: all 0.15s ease; cursor: pointer; border: none; background: none; font-family: inherit; }
         @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
         .fade-up { animation: fadeUp 0.25s ease forwards; }
@@ -341,6 +341,16 @@ export default function CompliancePage() {
                 </div>
               );
             })}
+            {!loading && (
+              <div style={{ padding: '10px 16px', borderTop: '1px solid #F1F5F9', background: '#FAFBFC', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
+                  Showing {filtered.length} of {checks.length} check{checks.length !== 1 ? 's' : ''}
+                </span>
+                <button onClick={() => setActiveTab('upload')} style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1B4F8A', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 0' }}>
+                  + Upload proof
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Detail panel */}

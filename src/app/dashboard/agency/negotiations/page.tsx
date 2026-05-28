@@ -101,7 +101,7 @@ export default function NegotiationsPage() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
         .nego-row { transition: background 0.12s ease, box-shadow 0.12s ease; cursor: pointer; }
-        .nego-row:hover { background: #F8FAFF !important; }
+        .nego-row:hover { background: #F5F8FF !important; }
         .nego-row:hover .open-arrow { opacity: 1 !important; transform: translateX(0) !important; }
         .open-arrow { opacity: 0; transform: translateX(-4px); transition: all 0.15s ease; }
         .filter-btn { transition: all 0.12s ease; cursor: pointer; border: none; }
@@ -322,6 +322,14 @@ export default function NegotiationsPage() {
               </div>
             );
           })}
+          <div style={{ padding: '10px 16px', borderTop: '1px solid #F1F5F9', background: '#FAFBFC', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
+              Showing {filtered.length} of {bookings.length} deal{bookings.length !== 1 ? 's' : ''}
+            </span>
+            <button onClick={() => router.push('/dashboard/agency/boards-map')} style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1B4F8A', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 0' }}>
+              + New request
+            </button>
+          </div>
         </div>
       )}
     </div>

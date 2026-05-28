@@ -196,7 +196,7 @@ export default function InvoicesPage() {
                   <tr key={inv.id}
                     onClick={() => router.push(`/dashboard/agency/invoices/${inv.id}`)}
                     style={{ borderBottom: '1px solid #F8FAFC', cursor: 'pointer', transition: 'background 0.1s', animation: `fadeIn 0.2s ${i * 0.03}s both` }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#FAFBFC'}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#F5F8FF'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = ''}
                   >
                     <td style={{ padding: '14px 16px' }}>
@@ -238,6 +238,16 @@ export default function InvoicesPage() {
               })}
             </tbody>
           </table>
+        )}
+        {!loading && filtered.length > 0 && (
+          <div style={{ padding: '10px 16px', borderTop: '1px solid #F1F5F9', background: '#FAFBFC', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
+              Showing {filtered.length} of {invoices.length} invoice{invoices.length !== 1 ? 's' : ''}
+            </span>
+            <button onClick={() => setShowModal(true)} style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1B4F8A', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 0' }}>
+              + New invoice
+            </button>
+          </div>
         )}
       </div>
 
