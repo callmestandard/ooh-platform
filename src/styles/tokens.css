@@ -1,0 +1,31 @@
+/**
+ * Design tokens — OOH Platform
+ * Imported from globals.css
+ */
+:root {
+  /* Brand */
+  --color-primary: #1b4f8a;
+  --color-primary-hover: #164070;
+  --color-primary-muted: #1b4f8a1a;
+
+  --color-success: #0f6e56;
+  --color-success-hover: #0c5a46;
+  --color-success-muted: #0f6e561a;
+
+  --color-warning: #854f0b;
+  --color-warning-hover: #6f4209;
+  --color-warning-muted: #854f0b1a;
+
+  --color-danger: #a32d2d;
+  --color-danger-hover: #862525;
+  --color-danger-muted: #a32d2d1a;
+
+  /* Info (aligned with primary family for dashboards) */
+  --color-info: #1b4f8a;
+  --color-info-muted: #e8eef5;
+
+  /* Neutrals */
+  --color-neutral-bg: #f4f4f5;
+  --color-neutral-text: #3f3f46;
+  --color-neutral-border: #e4e4e7;
+}
