@@ -97,28 +97,71 @@ export default function AgencyDashboardPage() {
     <div style={{ fontFamily: "'Inter', -apple-system, sans-serif" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } } .fade { animation: fadeUp 0.25s ease forwards; }`}</style>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.75rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.025em', margin: '0 0 4px' }}>
-            Agency dashboard
-          </h1>
-          <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>
-            {new Date().toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-          </p>
+      {/* Welcome strip */}
+      <div style={{
+        background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16,
+        padding: '18px 24px', marginBottom: '1.75rem',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+      }}>
+        {/* Left: avatar + greeting */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{
+            width: 46, height: 46, borderRadius: 13, flexShrink: 0,
+            background: 'linear-gradient(135deg, #1B4F8A 0%, #0EA5E9 100%)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+              <h1 style={{ fontSize: '1.0625rem', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+                Agency Workspace
+              </h1>
+              <span style={{ fontSize: '0.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#1B4F8A', background: '#EFF6FF', padding: '2px 8px', borderRadius: 999 }}>
+                Dashboard
+              </span>
+            </div>
+            <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>
+              {new Date().toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          </div>
         </div>
-        <button
-          onClick={() => router.push('/dashboard/agency/campaigns')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            background: '#1B4F8A', color: '#fff', border: 'none',
-            padding: '9px 16px', borderRadius: '8px',
-            fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
-          <span style={{ fontSize: '1rem', lineHeight: 1 }}>+</span> New campaign
-        </button>
+
+        {/* Right: stats + action */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1B4F8A', fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em' }}>{activeCampaigns}</p>
+              <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active</p>
+            </div>
+            <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#10B981', fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em' }}>{boardCount}</p>
+              <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Boards</p>
+            </div>
+            <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em', color: pendingNegotiations > 0 ? '#F59E0B' : '#94A3B8' }}>{pendingNegotiations}</p>
+              <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pending</p>
+            </div>
+          </div>
+          <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
+          <button
+            onClick={() => router.push('/dashboard/agency/campaigns')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: '#1B4F8A', color: '#fff', border: 'none',
+              padding: '9px 16px', borderRadius: 9,
+              fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
+              fontFamily: 'inherit', whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{ fontSize: '1rem', lineHeight: 1 }}>+</span> New campaign
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -162,7 +205,7 @@ export default function AgencyDashboardPage() {
                 {campaigns.slice(0, 6).map((c, i) => (
                   <tr key={c.id} className="fade" style={{ borderBottom: i < Math.min(campaigns.length, 6) - 1 ? '1px solid #F8FAFC' : 'none', animationDelay: `${i * 0.05}s`, cursor: 'pointer' }}
                     onClick={() => router.push('/dashboard/agency/campaigns')}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#FAFBFF'}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#F5F8FF'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
                   >
                     <td style={{ padding: '12px 16px' }}>
@@ -213,7 +256,7 @@ export default function AgencyDashboardPage() {
                   cursor: 'pointer', transition: 'background 0.1s',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
                 }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#FAFBFF'}
+                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#F5F8FF'}
                 onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
               >
                 <div style={{ minWidth: 0 }}>
