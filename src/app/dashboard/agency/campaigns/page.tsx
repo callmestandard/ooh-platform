@@ -8,6 +8,7 @@ import { formatNaira, formatDate } from '@/lib/utils';
 
 const STATUS_CONFIG: Record<string, { bg: string; color: string; dot: string }> = {
   draft:     { bg: '#F1F5F9', color: '#475569', dot: '#94A3B8' },
+  pending:   { bg: '#FFFBEB', color: '#92400E', dot: '#F59E0B' },
   active:    { bg: '#ECFDF5', color: '#065F46', dot: '#10B981' },
   completed: { bg: '#EFF6FF', color: '#1E3A8A', dot: '#3B82F6' },
   cancelled: { bg: '#FEF2F2', color: '#7F1D1D', dot: '#EF4444' },
@@ -408,7 +409,14 @@ export default function CampaignsPage() {
                     <td style={{ padding: '13px 16px', fontSize: '0.75rem', color: '#94A3B8', whiteSpace: 'nowrap' }}>
                       {formatDate(campaign.start_date)} → {formatDate(campaign.end_date)}
                     </td>
-                    <td style={{ padding: '13px 16px' }}><StatusPill status={campaign.status} /></td>
+                    <td style={{ padding: '13px 16px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <StatusPill status={campaign.status} />
+                        {campaign.status === 'pending' && (
+                          <span style={{ fontSize: '0.625rem', fontWeight: 600, color: '#D97706' }}>Awaiting client approval</span>
+                        )}
+                      </div>
+                    </td>
                     <td style={{ padding: '13px 16px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={e => e.stopPropagation()}>
                         {/* Open Plan button */}

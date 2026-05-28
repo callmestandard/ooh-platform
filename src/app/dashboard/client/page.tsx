@@ -485,24 +485,40 @@ function ClientContent() {
     setSavingCampaign(false);
   }
 
-  async function approveBooking(id: string) {
-    setApprovingId(id);
-    const { error } = await supabase.from('bookings').update({ status: 'agreed' }).eq('id', id);
+  async function approveBooking(bookingId: string) {
+    setApprovingId(bookingId);
+    const booking = bookings.find(b => b.id === bookingId);
+    const { error } = await supabase.from('bookings').update({ status: 'agreed' }).eq('id', bookingId);
     if (error) showToast('Failed to approve', 'error');
     else {
-      setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'agreed' } : b));
+      setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'agreed' } : b));
+      await createNotification({
+        recipientRole: 'agency',
+        type: 'campaign_approved',
+        title: `${brandName} approved a board`,
+        body: `${booking?.boards?.name || 'Board'} approved for ${activeCampaign?.name || 'campaign'}`,
+        link: `/dashboard/agency/campaigns/${activeCampaign?.id}`,
+      });
       showToast('Board approved — agency notified');
     }
     setApprovingId(null);
   }
 
-  async function declineBooking(id: string) {
-    setDecliningId(id);
-    const { error } = await supabase.from('bookings').update({ status: 'declined' }).eq('id', id);
+  async function declineBooking(bookingId: string) {
+    setDecliningId(bookingId);
+    const booking = bookings.find(b => b.id === bookingId);
+    const { error } = await supabase.from('bookings').update({ status: 'declined' }).eq('id', bookingId);
     if (error) showToast('Failed to decline', 'error');
     else {
-      setBookings(prev => prev.map(b => b.id === id ? { ...b, status: 'declined' } : b));
-      showToast('Board removed from plan');
+      setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'declined' } : b));
+      await createNotification({
+        recipientRole: 'agency',
+        type: 'campaign_approved',
+        title: `${brandName} declined a board`,
+        body: `${booking?.boards?.name || 'Board'} was declined from ${activeCampaign?.name || 'campaign'}`,
+        link: `/dashboard/agency/campaigns/${activeCampaign?.id}`,
+      });
+      showToast('Board declined — agency notified');
     }
     setDecliningId(null);
   }
@@ -514,7 +530,14 @@ function ClientContent() {
     if (error) showToast('Failed to approve all', 'error');
     else {
       setBookings(prev => prev.map(b => pendingIds.includes(b.id) ? { ...b, status: 'agreed' } : b));
-      showToast(`All ${pendingIds.length} boards approved!`);
+      await createNotification({
+        recipientRole: 'agency',
+        type: 'campaign_approved',
+        title: `${brandName} approved the full media plan`,
+        body: `All ${pendingIds.length} boards approved for ${activeCampaign?.name || 'campaign'} — ready to proceed`,
+        link: `/dashboard/agency/campaigns/${activeCampaign?.id}`,
+      });
+      showToast(`All ${pendingIds.length} boards approved — agency notified!`);
     }
   }
 

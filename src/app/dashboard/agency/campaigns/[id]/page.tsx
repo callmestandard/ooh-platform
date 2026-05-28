@@ -229,7 +229,7 @@ export default function CampaignPlanPage() {
     setSendingToClient(true);
     const { error } = await supabase
       .from('campaigns')
-      .update({ client_id: selectedClientId })
+      .update({ client_id: selectedClientId, status: 'pending' })
       .eq('id', campaign.id);
     if (!error) {
       const client = clientProfiles.find(c => c.id === selectedClientId);
@@ -240,7 +240,7 @@ export default function CampaignPlanPage() {
         body: `${campaign.name} — ${planItems.length} board${planItems.length !== 1 ? 's' : ''} proposed`,
         link: '/dashboard/client?tab=plan',
       });
-      setCampaign(prev => prev ? { ...prev, client_id: selectedClientId } : null);
+      setCampaign(prev => prev ? { ...prev, client_id: selectedClientId, status: 'pending' } : null);
       setShowSendToClient(false);
       showToast(`Plan sent to ${client?.company_name || client?.full_name || 'client'} for approval`);
     } else {
@@ -387,15 +387,7 @@ export default function CampaignPlanPage() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            {planItems.length > 0 && !campaign.approved_at && campaign.status === 'draft' && (
-              <button
-                onClick={approvePlan}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0', padding: '9px 16px', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                ✓ Mark plan approved
-              </button>
-            )}
-            {planItems.length > 0 && (
+            {planItems.length > 0 && campaign.status !== 'pending' && (
               <button
                 onClick={openSendToClient}
                 style={{
@@ -458,6 +450,29 @@ export default function CampaignPlanPage() {
   />
 </div>
 
+        {/* Awaiting client approval banner */}
+        {campaign.status === 'pending' && campaign.client_id && (
+          <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '12px 18px', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#92400E', margin: '0 0 2px' }}>
+                Awaiting client approval — {planItems.filter(i => i.status === 'pending' || i.status === 'negotiating').length} board{planItems.filter(i => i.status === 'pending' || i.status === 'negotiating').length !== 1 ? 's' : ''} pending decision
+              </p>
+              <p style={{ fontSize: '0.75rem', color: '#92400E', opacity: 0.7, margin: 0 }}>
+                Plan was submitted for client review. You will be notified when they approve or decline boards.
+              </p>
+            </div>
+            <button
+              onClick={openSendToClient}
+              style={{ fontSize: '0.75rem', fontWeight: 600, color: '#92400E', background: 'none', border: '1px solid #FDE68A', borderRadius: 7, padding: '5px 12px', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+            >
+              Resend
+            </button>
+          </div>
+        )}
+
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: 4, borderRadius: 10, width: 'fit-content', marginBottom: '1.25rem' }}>
           {[
@@ -505,7 +520,7 @@ export default function CampaignPlanPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
-                      {['Board', 'Location', 'Format', 'Duration', 'Rate/month', 'Total cost', 'Type', 'Status', 'Artwork', 'POE link', ''].map(h => (
+                      {['Board', 'Location', 'Format', 'Duration', 'Rate/month', 'Total cost', 'Type', 'Status', 'Client', 'Artwork', 'POE link', ''].map(h => (
                         <th key={h} style={{ padding: '10px 14px', fontSize: '0.625rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'left', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -565,6 +580,25 @@ export default function CampaignPlanPage() {
                           </td>
                           <td style={{ padding: '12px 14px' }}>
                             <StatusPill status={item.status} />
+                          </td>
+                          <td style={{ padding: '12px 14px' }}>
+                            {campaign.client_id ? (
+                              ['agreed', 'signed', 'live', 'completed'].includes(item.status) ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#ECFDF5', color: '#065F46', padding: '3px 9px', borderRadius: 999, fontSize: '0.6875rem', fontWeight: 700 }}>
+                                  ✓ Approved
+                                </span>
+                              ) : item.status === 'declined' ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#FEF2F2', color: '#7F1D1D', padding: '3px 9px', borderRadius: 999, fontSize: '0.6875rem', fontWeight: 700 }}>
+                                  ✕ Declined
+                                </span>
+                              ) : (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#FFFBEB', color: '#92400E', padding: '3px 9px', borderRadius: 999, fontSize: '0.6875rem', fontWeight: 600 }}>
+                                  ⏳ Pending
+                                </span>
+                              )
+                            ) : (
+                              <span style={{ fontSize: '0.6875rem', color: '#CBD5E1' }}>—</span>
+                            )}
                           </td>
                           <td style={{ padding: '10px 14px' }}>
                             {(() => {
