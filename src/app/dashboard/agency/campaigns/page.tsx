@@ -362,7 +362,7 @@ export default function CampaignsPage() {
             <div style={{ width: 28, height: 28, border: '2px solid #E2E8F0', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
           </div>
         ) : filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '5rem 2rem' }}>
+          <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', textAlign: 'center', padding: '5rem 2rem', minHeight: 320, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: 48, height: 48, background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.5"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
             </div>
@@ -393,13 +393,15 @@ export default function CampaignsPage() {
                   <tr
                     key={campaign.id}
                     onClick={() => setSelected(campaign)}
-                    style={{ borderBottom: i < filtered.length - 1 ? '1px solid #F8FAFC' : 'none', cursor: 'pointer', transition: 'background 0.1s' }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#FAFBFF'}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                    style={{ borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none', cursor: 'pointer', transition: 'background 0.12s' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#F5F8FF'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                   >
-                    <td style={{ padding: '13px 16px' }}>
-                      <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: 0 }}>{campaign.name}</p>
-                      <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '2px 0 0' }}>{campaign.boards_count || 0} boards</p>
+                    <td style={{ padding: '14px 16px' }}>
+                      <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 4px' }}>{campaign.name}</p>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#F1F5F9', color: '#64748B', fontSize: '0.625rem', fontWeight: 700, padding: '2px 7px', borderRadius: '999px', letterSpacing: '0.02em' }}>
+                        {campaign.boards_count || 0} boards
+                      </span>
                     </td>
                     <td style={{ padding: '13px 16px', fontSize: '0.8125rem', color: '#475569' }}>{campaign.client_name || '—'}</td>
                     <td style={{ padding: '13px 16px', fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', fontFamily: 'monospace' }}>{formatNaira(campaign.total_budget)}</td>
@@ -441,6 +443,18 @@ export default function CampaignsPage() {
                 ))}
               </tbody>
             </table>
+            {/* Table footer */}
+            <div style={{ padding: '10px 16px', borderTop: '1px solid #F1F5F9', background: '#FAFBFC', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
+                Showing {filtered.length} of {campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}
+              </span>
+              <button
+                onClick={() => setShowNew(true)}
+                style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1B4F8A', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 0' }}
+              >
+                + Add campaign
+              </button>
+            </div>
           </div>
         )}
       </div>
