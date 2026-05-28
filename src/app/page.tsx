@@ -292,6 +292,16 @@ export default function LoginPage() {
             <div style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
           </div>
 
+          {/* Browse marketplace link */}
+          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <a
+              href="/marketplace"
+              style={{ fontSize: '0.8125rem', color: '#1B4F8A', fontWeight: 500, textDecoration: 'none' }}
+            >
+              Browse available boards without signing in →
+            </a>
+          </div>
+
           {/* Demo role buttons */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {DEMO_ROLES.map(({ role, label, sub, color, bg }) => {
