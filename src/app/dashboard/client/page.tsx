@@ -672,7 +672,7 @@ function ClientContent() {
       `}</style>
 
       {/* ── Welcome strip ── */}
-      <div style={{
+      <div className="welcome-strip" style={{
         background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16,
         padding: '18px 24px', marginBottom: '1.5rem',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
@@ -705,7 +705,7 @@ function ClientContent() {
 
         {/* Right: live stats */}
         {!loadingCampaign && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexShrink: 0 }}>
+          <div className="welcome-stats" style={{ display: 'flex', alignItems: 'center', gap: 24, flexShrink: 0 }}>
             <div style={{ textAlign: 'center' }}>
               <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1B4F8A', fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em' }}>{liveBoards}</p>
               <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Live boards</p>
@@ -772,7 +772,7 @@ function ClientContent() {
       </div>
 
       {/* ── Tab nav ── */}
-      <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: 4, borderRadius: 10, flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+      <div className="resp-tabs" style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: 4, borderRadius: 10, flexWrap: 'wrap', marginBottom: '1.5rem' }}>
         {[
           { key: 'overview' as ClientTab,      label: 'Overview',              badge: 0 },
           { key: 'plan' as ClientTab,          label: 'Proposals',             badge: planBookings.length },
@@ -812,7 +812,7 @@ function ClientContent() {
       <CampaignJourneyStrip steps={journeySteps} />
 
       {/* ── Metric cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.75rem' }}>
+      <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.75rem' }}>
         <MetricBlock
           label="Active Boards"
           value={loadingCampaign ? '—' : String(liveBoards)}
@@ -938,7 +938,7 @@ function ClientContent() {
       )}
 
       {/* ── All boards table ── */}
-      <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden' }}>
+      <div className="table-scroll" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden' }}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h2 style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>Active boards</h2>
@@ -1035,7 +1035,7 @@ function ClientContent() {
           ) : (
             <>
               {/* Status summary row */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: '1.25rem' }}>
+              <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: '1.25rem' }}>
                 {[
                   { label: 'Live boards',    count: bookings.filter(b => b.status === 'live').length,                               color: '#10B981', bg: '#ECFDF5' },
                   { label: 'Agreed / Signed', count: bookings.filter(b => ['agreed','signed'].includes(b.status)).length,          color: '#8B5CF6', bg: '#F5F3FF' },
@@ -1136,7 +1136,7 @@ function ClientContent() {
       {activeTab === 'compliance' && (
         <div>
           {/* Summary header */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: '1.25rem' }}>
+          <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: '1.25rem' }}>
             {[
               { label: 'Total submissions',  count: compliance.length,                                          color: '#0F172A', bg: '#F8FAFC',  border: '#E8EDF2' },
               { label: 'Verified',           count: compliance.filter(c => c.status === 'verified').length,    color: '#065F46', bg: '#ECFDF5',  border: '#A7F3D0' },
@@ -1171,7 +1171,7 @@ function ClientContent() {
           </div>
 
           {/* Per-board compliance table */}
-          <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, overflow: 'hidden' }}>
+          <div className="table-scroll" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, overflow: 'hidden' }}>
             <div style={{ padding: '14px 20px', borderBottom: '1px solid #F1F5F9' }}>
               <h2 style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>Board-by-board compliance</h2>
               <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>Proof of posting status for every board in this campaign</p>
@@ -1529,7 +1529,7 @@ function ClientContent() {
             </div>
 
             {/* Summary banner */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: '1.25rem' }}>
+            <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: '1.25rem' }}>
               {[
                 { label: 'Pending approval',  value: planBookings.length,   color: '#D97706', bg: '#FFFBEB', border: '#FDE68A' },
                 { label: 'Approved boards',   value: approved.length,       color: '#065F46', bg: '#ECFDF5', border: '#A7F3D0' },

@@ -652,7 +652,7 @@ function OwnerContent() {
       `}</style>
 
       {/* ── Welcome strip ── */}
-      <div style={{
+      <div className="welcome-strip" style={{
         background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16,
         padding: '18px 24px', marginBottom: '1.5rem',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
@@ -683,7 +683,7 @@ function OwnerContent() {
           </div>
         </div>
         {/* Right: stats + action */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexShrink: 0 }}>
+        <div className="welcome-stats" style={{ display: 'flex', alignItems: 'center', gap: 24, flexShrink: 0 }}>
           <div style={{ textAlign: 'center' }}>
             <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#7C3AED', fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em' }}>{boards.length}</p>
             <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total boards</p>
@@ -715,7 +715,7 @@ function OwnerContent() {
       </div>
 
       {/* ── Stat cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.75rem' }}>
+      <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.75rem' }}>
         <StatBlock label="Total Boards" value={String(boards.length)} bar="#7C3AED" sub="In your inventory" />
         <StatBlock label="Booked" value={String(bookedCount)} bar="#10B981" sub={`${availableCount} available`} />
         <StatBlock label="Occupancy Rate" value={`${occupancyRate}%`} bar={occupancyRate >= 60 ? '#10B981' : '#F59E0B'} sub="Board utilisation" />
@@ -741,7 +741,7 @@ function OwnerContent() {
       )}
 
       {/* ── Tabs ── */}
-      <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: 4, borderRadius: 10, width: 'fit-content', marginBottom: '1.25rem' }}>
+      <div className="resp-tabs" style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: 4, borderRadius: 10, width: 'fit-content', marginBottom: '1.25rem' }}>
         {[
           { key: 'boards',     label: `My Boards (${boards.length})`,       badge: 0 },
           { key: 'bookings',   label: `Bookings (${bookings.length})`,       badge: pendingBookings.length },
@@ -776,7 +776,7 @@ function OwnerContent() {
 
       {/* ── Boards tab ── */}
       {activeTab === 'boards' && (
-        <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden' }}>
+        <div className="table-scroll" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden' }}>
           {boards.length === 0 ? (
             <div style={{ padding: '5rem 2rem', textAlign: 'center' }}>
               <div style={{ width: 52, height: 52, background: '#F5F3FF', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
@@ -869,7 +869,7 @@ function OwnerContent() {
 
       {/* ── Bookings tab ── */}
       {activeTab === 'bookings' && (
-        <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden' }}>
+        <div className="table-scroll" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden' }}>
           {bookings.length === 0 ? (
             <div style={{ padding: '4rem', textAlign: 'center' }}>
               <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>No bookings yet</p>

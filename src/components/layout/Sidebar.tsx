@@ -101,9 +101,11 @@ type Props = {
   userName: string;
   roleLabel: string;
   onLogout: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 };
 
-export function Sidebar({ role, userName, roleLabel, onLogout }: Props) {
+export function Sidebar({ role, userName, roleLabel, onLogout, isOpen, onClose }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const items = navByRole[role];
@@ -130,7 +132,7 @@ export function Sidebar({ role, userName, roleLabel, onLogout }: Props) {
   const initials = userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
   return (
-    <aside style={{
+    <aside className={`ooh-sidebar${isOpen ? ' sidebar-open' : ''}`} style={{
       width: 240,
       background: "#0F172A",
       display: "flex",
@@ -138,7 +140,19 @@ export function Sidebar({ role, userName, roleLabel, onLogout }: Props) {
       height: "100vh",
       flexShrink: 0,
       overflow: "hidden",
+      position: "relative",
     }}>
+      {/* Mobile close button */}
+      <button
+        className="sidebar-close-btn"
+        onClick={onClose}
+        aria-label="Close menu"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+
       {/* Logo */}
       <div style={{ padding: "20px 16px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
         <Link href={`/dashboard/${role}`} style={{ display: "inline-block" }}>
@@ -154,6 +168,7 @@ export function Sidebar({ role, userName, roleLabel, onLogout }: Props) {
             <Link
               key={item.id}
               href={item.path}
+              onClick={onClose}
               style={{
                 display: "flex",
                 alignItems: "center",

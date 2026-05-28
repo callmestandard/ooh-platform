@@ -165,7 +165,7 @@ export default function AgencyDashboardPage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.75rem' }}>
+      <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.75rem' }}>
         <StatCard label="Active campaigns" value={String(activeCampaigns)} bar="#1B4F8A" sub={`${campaigns.length} total`} />
         <StatCard label="Boards in inventory" value={String(boardCount)} bar="#10B981" sub="Across Nigeria" />
         <StatCard label="Pending negotiations" value={String(pendingNegotiations)} bar="#F59E0B" sub="Awaiting response" />
@@ -174,7 +174,7 @@ export default function AgencyDashboardPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '16px' }}>
         {/* Campaigns table */}
-        <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden' }}>
+        <div className="table-scroll" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #F1F5F9' }}>
             <div>
               <h2 style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>Campaigns</h2>

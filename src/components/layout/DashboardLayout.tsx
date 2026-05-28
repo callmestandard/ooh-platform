@@ -3,7 +3,7 @@
 import { supabase } from "@/lib/supabase";
 import { getSession, getCurrentProfile, signOut } from "@/lib/auth";
 import { ROLE_STORAGE_KEY, type DemoRole } from "@/lib/constants";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Suspense, createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 
@@ -30,11 +30,16 @@ function SidebarFallback() {
 }
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const router = useRouter();
-  const [role, setRole]         = useState<DemoRole | null>(null);
-  const [userName, setUserName] = useState("");
+  const router   = useRouter();
+  const pathname = usePathname();
+  const [role, setRole]           = useState<DemoRole | null>(null);
+  const [userName, setUserName]   = useState("");
   const [roleLabel, setRoleLabel] = useState("");
-  const [mounted, setMounted]   = useState(false);
+  const [mounted, setMounted]     = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Close sidebar on route change
+  useEffect(() => { setSidebarOpen(false); }, [pathname]);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,16 +118,40 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <DashboardRoleContext.Provider value={role}>
       <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+        {/* Backdrop — click to close sidebar on mobile */}
+        {sidebarOpen && (
+          <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
+        )}
+
         <Suspense fallback={<SidebarFallback />}>
           <Sidebar
             role={role}
             userName={userName}
             roleLabel={roleLabel}
             onLogout={handleLogout}
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
           />
         </Suspense>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <main style={{ flex: 1, overflowY: "auto", background: "#F8FAFC", padding: "28px 32px" }}>
+
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+          {/* Mobile top bar */}
+          <div className="mobile-header">
+            <button
+              className="hamburger-btn"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open menu"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <line x1="3" y1="12" x2="21" y2="12"/>
+                <line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>
+            </button>
+            <span className="mobile-header-title">OOH Platform</span>
+          </div>
+
+          <main className="ooh-main" style={{ flex: 1, overflowY: "auto", background: "#F8FAFC", padding: "28px 32px" }}>
             {children}
           </main>
         </div>
