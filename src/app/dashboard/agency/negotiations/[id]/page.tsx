@@ -14,6 +14,9 @@ type Booking = {
   end_date: string;
   notes: string | null;
   created_at: string;
+  mpo_number?: string | null;
+  mpo_issued_at?: string | null;
+  mpo_agency_name?: string | null;
   boards: {
     id: string;
     name: string;
@@ -193,6 +196,9 @@ export default function NegotiationDetailPage() {
     if (!booking) return;
     setExportingMPO(true);
     try {
+      const agencyName = (typeof localStorage !== 'undefined' && localStorage.getItem('ooh_company_name')) || 'OOH Platform Agency';
+      const mpoNum = `OOH-MPO-${new Date().getFullYear()}-${booking.id.slice(0, 6).toUpperCase()}`;
+
       const res = await fetch('/api/mpo-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -210,9 +216,12 @@ export default function NegotiationDetailPage() {
           board_format:  booking.boards?.format || 'billboard',
           board_width:   booking.boards?.width,
           board_height:  booking.boards?.height,
+          agency_name:   agencyName,
         }),
       });
       if (!res.ok) throw new Error('PDF failed');
+
+      // Download the PDF
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -222,6 +231,16 @@ export default function NegotiationDetailPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+
+      // Stamp the booking so the owner can see it in their dashboard
+      await supabase.from('bookings').update({
+        mpo_number:      mpoNum,
+        mpo_issued_at:   new Date().toISOString(),
+        mpo_agency_name: agencyName,
+      }).eq('id', booking.id);
+
+      // Refresh local state
+      setBooking(prev => prev ? { ...prev, mpo_number: mpoNum, mpo_issued_at: new Date().toISOString(), mpo_agency_name: agencyName } : prev);
     } catch {
       // silent — user will notice the download didn't happen
     } finally {
@@ -448,38 +467,49 @@ export default function NegotiationDetailPage() {
 
           {/* Raise MPO — only available once deal is agreed/live */}
           {['agreed', 'signed', 'live'].includes(booking.status) && (
-            <button
-              onClick={handleRaiseMPO}
-              disabled={exportingMPO}
-              style={{
-                width: '100%', padding: '12px 16px',
-                background: exportingMPO ? '#F1F5F9' : '#0F172A',
-                color: exportingMPO ? '#94A3B8' : '#fff',
-                border: 'none', borderRadius: '14px',
-                fontSize: '0.8125rem', fontWeight: 700,
-                cursor: exportingMPO ? 'not-allowed' : 'pointer',
-                fontFamily: 'inherit', transition: 'all 0.15s',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                boxShadow: exportingMPO ? 'none' : '0 4px 14px rgba(15,23,42,0.25)',
-              }}
-            >
-              {exportingMPO ? (
-                <>
-                  <span style={{ width: 14, height: 14, border: '2px solid #CBD5E1', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
-                  Generating MPO…
-                </>
-              ) : (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                    <line x1="12" y1="18" x2="12" y2="12"/>
-                    <line x1="9" y1="15" x2="15" y2="15"/>
-                  </svg>
-                  Raise MPO
-                </>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {booking.mpo_issued_at && (
+                <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: '0.75rem' }}>✅</span>
+                  <div>
+                    <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#065F46', margin: 0 }}>MPO issued — {booking.mpo_number}</p>
+                    <p style={{ fontSize: '0.6875rem', color: '#10B981', margin: 0 }}>Owner notified · {new Date(booking.mpo_issued_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
+                  </div>
+                </div>
               )}
-            </button>
+              <button
+                onClick={handleRaiseMPO}
+                disabled={exportingMPO}
+                style={{
+                  width: '100%', padding: '12px 16px',
+                  background: exportingMPO ? '#F1F5F9' : booking.mpo_issued_at ? '#F8FAFC' : '#0F172A',
+                  color: exportingMPO ? '#94A3B8' : booking.mpo_issued_at ? '#64748B' : '#fff',
+                  border: booking.mpo_issued_at ? '1px solid #E2E8F0' : 'none', borderRadius: '14px',
+                  fontSize: '0.8125rem', fontWeight: 700,
+                  cursor: exportingMPO ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit', transition: 'all 0.15s',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  boxShadow: exportingMPO || booking.mpo_issued_at ? 'none' : '0 4px 14px rgba(15,23,42,0.25)',
+                }}
+              >
+                {exportingMPO ? (
+                  <>
+                    <span style={{ width: 14, height: 14, border: '2px solid #CBD5E1', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                    Generating MPO…
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="12" y1="18" x2="12" y2="12"/>
+                      <line x1="9" y1="15" x2="15" y2="15"/>
+                    </svg>
+                    {booking.mpo_issued_at ? 'Re-download MPO' : 'Raise MPO'}
+                  </>
+                )}
+              </button>
+            </div>
           )}
         </div>
 

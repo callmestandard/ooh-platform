@@ -36,6 +36,9 @@ type Booking = {
   end_date: string;
   duration_months: number | null;
   created_at: string;
+  mpo_number?: string | null;
+  mpo_issued_at?: string | null;
+  mpo_agency_name?: string | null;
   boards: { name: string; city: string; format: string };
   campaigns: { name: string; client_name: string | null };
 };
@@ -510,7 +513,7 @@ function OwnerContent() {
     compiled_invoice_id: string | null;
     created_at: string;
     campaign?: { id: string; name: string } | null;
-    items?: { description: string; total: number }[];
+    items?: { description: string; total: number; booking_id?: string | null }[];
   };
   const [ownerInvoices, setOwnerInvoices] = useState<MPI[]>([]);
   const [invoicesLoaded, setInvoicesLoaded] = useState(false);
@@ -521,7 +524,7 @@ function OwnerContent() {
   async function fetchOwnerInvoices() {
     const { data } = await supabase
       .from('invoices')
-      .select('*, campaign:campaigns(id, name), items:invoice_items(description, total)')
+      .select('*, campaign:campaigns(id, name), items:invoice_items(description, total, booking_id)')
       .eq('invoice_type', 'media_partner')
       .order('created_at', { ascending: false });
     if (data) setOwnerInvoices(data as unknown as MPI[]);
@@ -1795,6 +1798,61 @@ function OwnerContent() {
               + Create Invoice
             </button>
           </div>
+
+          {/* ── MPO-pending section ── */}
+          {(() => {
+            // Bookings where agency issued an MPO and no MPI has been raised yet for that booking
+            const invoicedBookingIds = new Set(
+              ownerInvoices.flatMap(inv => (inv.items ?? []).map((it: { booking_id?: string | null }) => it.booking_id).filter(Boolean))
+            );
+            const mpoBookings = bookings.filter(b =>
+              b.mpo_issued_at &&
+              !invoicedBookingIds.has(b.id)
+            );
+            if (mpoBookings.length === 0) return null;
+            return (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#F59E0B', flexShrink: 0 }} />
+                  <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#92400E', margin: 0 }}>MPO Received — Invoice Required</h3>
+                  <span style={{ fontSize: '0.6875rem', fontWeight: 700, background: '#FEF3C7', color: '#92400E', padding: '2px 8px', borderRadius: 999 }}>{mpoBookings.length}</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {mpoBookings.map(b => (
+                    <div key={b.id} style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ width: 38, height: 38, background: '#FEF3C7', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.125rem', flexShrink: 0 }}>📄</div>
+                        <div>
+                          <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>{b.boards?.name}</p>
+                          <p style={{ fontSize: '0.75rem', color: '#92400E', margin: '0 0 1px', fontWeight: 600 }}>MPO: {b.mpo_number} · From: {b.mpo_agency_name}</p>
+                          <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>
+                            {b.campaigns?.name} · ₦{Number(b.agreed_rate ?? b.offered_rate).toLocaleString('en-NG')}/mo ·
+                            Issued {new Date(b.mpo_issued_at!).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setMpiForm({
+                            bookingId: b.id,
+                            agencyName: b.mpo_agency_name || '',
+                            agencyEmail: '',
+                            dueDate: '',
+                            notes: `Re: MPO ${b.mpo_number}`,
+                            taxRate: '0',
+                          });
+                          setShowMPIPanel(true);
+                        }}
+                        style={{ background: '#F59E0B', color: '#fff', border: 'none', padding: '9px 16px', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                      >
+                        Create Invoice →
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Status legend */}
           <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
