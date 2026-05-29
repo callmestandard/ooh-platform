@@ -485,7 +485,7 @@ function OwnerContent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [creativesByBooking, setCreativesByBooking] = useState<Record<string, { id: string; file_url: string; file_name: string; file_size: number | null; status: string; notes: string | null }>>({});
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'boards' | 'bookings' | 'messages' | 'earnings' | 'calendar' | 'analytics' | 'rate-card'>('boards');
+  const [activeTab, setActiveTab] = useState<'boards' | 'bookings' | 'messages' | 'earnings' | 'calendar' | 'analytics' | 'rate-card' | 'invoices'>('boards');
   const [reviewingCreative, setReviewingCreative] = useState<{ bookingId: string; fileUrl: string; fileName: string; creativeId: string } | null>(null);
   const [reviewNote, setReviewNote] = useState('');
   const [reviewSaving, setReviewSaving] = useState(false);
@@ -493,10 +493,84 @@ function OwnerContent() {
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab === 'bookings' || tab === 'messages' || tab === 'earnings' || tab === 'calendar' || tab === 'analytics' || tab === 'rate-card') {
+    if (tab === 'bookings' || tab === 'messages' || tab === 'earnings' || tab === 'calendar' || tab === 'analytics' || tab === 'rate-card' || tab === 'invoices') {
       setActiveTab(tab as typeof activeTab);
     }
   }, [searchParams]);
+
+  // Invoices state
+  type MPI = {
+    id: string;
+    invoice_number: string;
+    client_name: string;
+    status: string;
+    total_amount: number;
+    due_date: string | null;
+    campaign_id: string | null;
+    compiled_invoice_id: string | null;
+    created_at: string;
+    campaign?: { id: string; name: string } | null;
+    items?: { description: string; total: number }[];
+  };
+  const [ownerInvoices, setOwnerInvoices] = useState<MPI[]>([]);
+  const [invoicesLoaded, setInvoicesLoaded] = useState(false);
+  const [showMPIPanel, setShowMPIPanel] = useState(false);
+  const [mpiForm, setMpiForm] = useState({ bookingId: '', agencyName: '', agencyEmail: '', dueDate: '', notes: '', taxRate: '0' });
+  const [mpiSaving, setMpiSaving] = useState(false);
+
+  async function fetchOwnerInvoices() {
+    const { data } = await supabase
+      .from('invoices')
+      .select('*, campaign:campaigns(id, name), items:invoice_items(description, total)')
+      .eq('invoice_type', 'media_partner')
+      .order('created_at', { ascending: false });
+    if (data) setOwnerInvoices(data as unknown as MPI[]);
+    setInvoicesLoaded(true);
+  }
+
+  async function createMPI() {
+    if (!mpiForm.agencyName.trim()) { showToast('Enter agency name', 'error'); return; }
+    if (!mpiForm.bookingId) { showToast('Select a booking', 'error'); return; }
+    setMpiSaving(true);
+    try {
+      const res = await fetch('/api/invoices/media-partner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id: mpiForm.bookingId,
+          agency_name: mpiForm.agencyName.trim(),
+          agency_email: mpiForm.agencyEmail.trim() || undefined,
+          due_date: mpiForm.dueDate || undefined,
+          notes: mpiForm.notes.trim() || undefined,
+          tax_rate: parseFloat(mpiForm.taxRate) || 0,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setOwnerInvoices(prev => [data as MPI, ...prev]);
+      setShowMPIPanel(false);
+      setMpiForm({ bookingId: '', agencyName: '', agencyEmail: '', dueDate: '', notes: '', taxRate: '0' });
+      showToast('Invoice created');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed', 'error');
+    } finally {
+      setMpiSaving(false);
+    }
+  }
+
+  async function sendMPI(id: string) {
+    const res = await fetch('/api/invoices/media-partner', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status: 'sent' }),
+    });
+    if (res.ok) {
+      setOwnerInvoices(prev => prev.map(i => i.id === id ? { ...i, status: 'sent' } : i));
+      showToast('Invoice sent to agency');
+    } else {
+      showToast('Send failed', 'error');
+    }
+  }
 
   // Board management state
   const [showPanel, setShowPanel] = useState(false);
@@ -750,10 +824,11 @@ function OwnerContent() {
           { key: 'earnings',   label: 'Earnings',                             badge: 0 },
           { key: 'analytics',  label: 'Analytics',                            badge: 0 },
           { key: 'rate-card',  label: 'Rate Card',                            badge: 0 },
+          { key: 'invoices',   label: `Invoices (${ownerInvoices.length})`,    badge: 0 },
         ].map(tab => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key as typeof activeTab)}
+            onClick={() => { setActiveTab(tab.key as typeof activeTab); if (tab.key === 'invoices' && !invoicesLoaded) fetchOwnerInvoices(); }}
             style={{
               padding: '6px 14px', borderRadius: 7, border: 'none',
               background: activeTab === tab.key ? '#fff' : 'transparent',
@@ -1701,6 +1776,225 @@ function OwnerContent() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Invoices tab ── */}
+      {activeTab === 'invoices' && (
+        <div>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>Media Partner Invoices</h2>
+              <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>Invoices you raise and send to agencies for your boards</p>
+            </div>
+            <button
+              onClick={() => setShowMPIPanel(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#1B4F8A', color: '#fff', border: 'none', padding: '9px 16px', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              + Create Invoice
+            </button>
+          </div>
+
+          {/* Status legend */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+            {[
+              { status: 'draft', label: 'Draft', bg: '#F1F5F9', color: '#475569' },
+              { status: 'sent', label: 'Sent to Agency', bg: '#EFF6FF', color: '#1D4ED8' },
+              { status: 'acknowledged', label: 'Compiled by Agency', bg: '#F5F3FF', color: '#3730A3' },
+              { status: 'paid', label: 'Paid', bg: '#ECFDF5', color: '#065F46' },
+            ].map(s => (
+              <span key={s.status} style={{ fontSize: '0.6875rem', fontWeight: 600, background: s.bg, color: s.color, padding: '3px 10px', borderRadius: 999 }}>{s.label}: {ownerInvoices.filter(i => i.status === s.status).length}</span>
+            ))}
+          </div>
+
+          {ownerInvoices.length === 0 ? (
+            <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '3rem', textAlign: 'center' }}>
+              <p style={{ fontSize: '2rem', margin: '0 0 8px' }}>🧾</p>
+              <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 4px' }}>No invoices yet</p>
+              <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: '0 0 16px' }}>Create your first media partner invoice to send to an agency</p>
+              <button onClick={() => setShowMPIPanel(true)} style={{ background: '#1B4F8A', color: '#fff', border: 'none', padding: '9px 18px', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Create Invoice</button>
+            </div>
+          ) : (
+            <div className="table-scroll" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#F8FAFC' }}>
+                    {['Invoice #', 'Agency', 'Items', 'Amount', 'Due', 'Status', 'Actions'].map(h => (
+                      <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ownerInvoices.map((inv, i) => {
+                    const sc: Record<string, { bg: string; color: string; label: string }> = {
+                      draft:        { bg: '#F1F5F9', color: '#475569', label: 'Draft' },
+                      sent:         { bg: '#EFF6FF', color: '#1D4ED8', label: 'Sent' },
+                      acknowledged: { bg: '#F5F3FF', color: '#3730A3', label: 'Compiled' },
+                      paid:         { bg: '#ECFDF5', color: '#065F46', label: 'Paid' },
+                      overdue:      { bg: '#FEF2F2', color: '#991B1B', label: 'Overdue' },
+                    };
+                    const cfg = sc[inv.status] ?? sc.draft;
+                    return (
+                      <tr key={inv.id} style={{ borderBottom: i < ownerInvoices.length - 1 ? '1px solid #F8FAFC' : 'none' }}>
+                        <td style={{ padding: '12px 14px' }}>
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', fontFamily: 'monospace' }}>{inv.invoice_number}</span>
+                          {inv.compiled_invoice_id && <span style={{ display: 'block', fontSize: '0.625rem', color: '#8B5CF6', fontWeight: 600, marginTop: 2 }}>↗ Compiled into client invoice</span>}
+                        </td>
+                        <td style={{ padding: '12px 14px' }}>
+                          <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', margin: 0 }}>{inv.client_name}</p>
+                          {inv.campaign && <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '2px 0 0' }}>{inv.campaign.name}</p>}
+                        </td>
+                        <td style={{ padding: '12px 14px', fontSize: '0.8125rem', color: '#64748B' }}>{inv.items?.length ?? 0} item{(inv.items?.length ?? 0) !== 1 ? 's' : ''}</td>
+                        <td style={{ padding: '12px 14px', fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', fontFamily: 'monospace' }}>
+                          ₦{Number(inv.total_amount).toLocaleString('en-NG')}
+                        </td>
+                        <td style={{ padding: '12px 14px', fontSize: '0.8125rem', color: inv.due_date && new Date(inv.due_date) < new Date() && inv.status !== 'paid' ? '#DC2626' : '#64748B' }}>
+                          {inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
+                        </td>
+                        <td style={{ padding: '12px 14px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: cfg.bg, color: cfg.color, padding: '3px 9px', borderRadius: 999, fontSize: '0.6875rem', fontWeight: 600 }}>
+                            {cfg.label}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 14px' }}>
+                          {inv.status === 'draft' && (
+                            <button
+                              onClick={() => sendMPI(inv.id)}
+                              style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1B4F8A', background: '#EFF6FF', border: 'none', padding: '5px 10px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit' }}
+                            >
+                              Send to Agency →
+                            </button>
+                          )}
+                          {inv.status === 'sent' && (
+                            <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>Awaiting agency</span>
+                          )}
+                          {inv.status === 'acknowledged' && (
+                            <a href={`/invoice/${inv.compiled_invoice_id}`} target="_blank" style={{ fontSize: '0.75rem', fontWeight: 600, color: '#8B5CF6', textDecoration: 'none' }}>View client invoice →</a>
+                          )}
+                          {inv.status === 'paid' && (
+                            <span style={{ fontSize: '0.75rem', color: '#10B981', fontWeight: 600 }}>✓ Paid</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Create MPI Panel */}
+          {showMPIPanel && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+              onClick={e => { if (e.target === e.currentTarget) setShowMPIPanel(false); }}
+            >
+              <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 560, padding: '24px 24px 32px', maxHeight: '90vh', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>Create Media Partner Invoice</h3>
+                  <button onClick={() => setShowMPIPanel(false)} style={{ background: 'none', border: 'none', fontSize: '1.25rem', color: '#94A3B8', cursor: 'pointer', lineHeight: 1 }}>×</button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Booking selector */}
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>Select Booking *</label>
+                    <select
+                      value={mpiForm.bookingId}
+                      onChange={e => setMpiForm(f => ({ ...f, bookingId: e.target.value }))}
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: '0.875rem', fontFamily: 'inherit', background: '#fff', color: '#0F172A' }}
+                    >
+                      <option value="">— Select a booking —</option>
+                      {bookings.filter(b => ['agreed', 'signed', 'live', 'complete'].includes(b.status)).map(b => (
+                        <option key={b.id} value={b.id}>
+                          {b.boards?.name} · {b.campaigns?.name} · ₦{Number(b.agreed_rate ?? b.offered_rate).toLocaleString('en-NG')}
+                        </option>
+                      ))}
+                    </select>
+                    {bookings.filter(b => ['agreed', 'signed', 'live', 'complete'].includes(b.status)).length === 0 && (
+                      <p style={{ fontSize: '0.6875rem', color: '#F59E0B', margin: '4px 0 0' }}>No agreed/active bookings found. Bookings must be agreed/signed/live to invoice.</p>
+                    )}
+                  </div>
+
+                  {/* Agency name */}
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>Agency Name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. MediaReach OMD"
+                      value={mpiForm.agencyName}
+                      onChange={e => setMpiForm(f => ({ ...f, agencyName: e.target.value }))}
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  {/* Agency email */}
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>Agency Email (optional)</label>
+                    <input
+                      type="email"
+                      placeholder="agency@example.com"
+                      value={mpiForm.agencyEmail}
+                      onChange={e => setMpiForm(f => ({ ...f, agencyEmail: e.target.value }))}
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  {/* Due date + VAT */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>Due Date</label>
+                      <input
+                        type="date"
+                        value={mpiForm.dueDate}
+                        onChange={e => setMpiForm(f => ({ ...f, dueDate: e.target.value }))}
+                        style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>VAT %</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="25"
+                        value={mpiForm.taxRate}
+                        onChange={e => setMpiForm(f => ({ ...f, taxRate: e.target.value }))}
+                        style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 5 }}>Notes (optional)</label>
+                    <textarea
+                      rows={3}
+                      placeholder="Payment terms, bank details, etc."
+                      value={mpiForm.notes}
+                      onChange={e => setMpiForm(f => ({ ...f, notes: e.target.value }))}
+                      style={{ width: '100%', padding: '9px 12px', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: '0.875rem', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
+                    <button
+                      onClick={() => setShowMPIPanel(false)}
+                      style={{ flex: 1, padding: '10px', borderRadius: 9, border: '1px solid #E2E8F0', background: '#F8FAFC', fontSize: '0.875rem', fontWeight: 600, color: '#64748B', cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={createMPI}
+                      disabled={mpiSaving}
+                      style={{ flex: 2, padding: '10px', borderRadius: 9, border: 'none', background: mpiSaving ? '#94A3B8' : '#1B4F8A', fontSize: '0.875rem', fontWeight: 700, color: '#fff', cursor: mpiSaving ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
+                    >
+                      {mpiSaving ? 'Creating…' : 'Create Invoice'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

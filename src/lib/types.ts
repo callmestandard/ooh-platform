@@ -78,14 +78,18 @@ export interface ComplianceCheck {
 export interface Invoice {
   id: string
   invoice_number: string
+  invoice_type?: 'media_partner' | 'client'
   campaign_id?: string
+  owner_id?: string
+  agency_id?: string
+  compiled_invoice_id?: string | null
   client_name: string
   client_email?: string
   subtotal: number
   tax_rate: number
   tax_amount: number
   total_amount: number
-  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'
+  status: 'draft' | 'sent' | 'acknowledged' | 'paid' | 'overdue' | 'cancelled'
   due_date?: string
   paid_at?: string
   payment_ref?: string

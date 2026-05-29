@@ -281,6 +281,7 @@ export default function AgencyDashboardPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {[
                 { label: 'Browse boards map', sub: 'Find & book locations', path: '/dashboard/agency/boards-map', color: '#1B4F8A' },
+                { label: 'Invoice management', sub: 'Receive, compile & send invoices', path: '/dashboard/agency/invoices', color: '#F59E0B' },
                 { label: 'Upload compliance proof', sub: 'Submit proof of posting', path: '/dashboard/agency/compliance', color: '#10B981' },
                 { label: 'View reports', sub: 'Performance analytics', path: '/dashboard/agency/reports', color: '#8B5CF6' },
               ].map(({ label, sub, path, color }) => (
