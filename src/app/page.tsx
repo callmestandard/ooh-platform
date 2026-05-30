@@ -213,9 +213,14 @@ export default function LoginPage() {
             </div>
 
             <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: '6px' }}>
-                Password
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ fontSize: '0.8125rem', fontWeight: 500, color: '#374151' }}>
+                  Password
+                </label>
+                <a href="/forgot-password" style={{ fontSize: '0.75rem', color: '#1B4F8A', fontWeight: 500, textDecoration: 'none' }}>
+                  Forgot password?
+                </a>
+              </div>
               <div style={{ position: 'relative' }}>
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -284,6 +289,11 @@ export default function LoginPage() {
               {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
+
+          <p style={{ textAlign: 'center', fontSize: '0.8125rem', color: '#94A3B8', margin: '-8px 0 20px' }}>
+            Don&apos;t have an account?{' '}
+            <a href="/signup" style={{ color: '#1B4F8A', fontWeight: 600, textDecoration: 'none' }}>Create one</a>
+          </p>
 
           {/* Divider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
