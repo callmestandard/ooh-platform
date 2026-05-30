@@ -151,6 +151,18 @@ export default function CompliancePage() {
     await supabase.from('compliance_checks').update({ status }).eq('id', id);
     setChecks(prev => prev.map(c => c.id === id ? { ...c, status } : c));
     if (selectedCheck?.id === id) setSelectedCheck(prev => prev ? { ...prev, status } : null);
+
+    const check = checks.find(c => c.id === id);
+    const boardName = check?.bookings?.boards?.name || 'a board';
+    await createNotification({
+      recipientRole: 'client',
+      type: status === 'verified' ? 'poe_verified' : 'poe_flagged',
+      title: status === 'verified' ? 'Proof of posting verified' : 'Proof of posting flagged',
+      body: status === 'verified'
+        ? `${boardName} compliance has been verified`
+        : `${boardName} has been flagged — please review`,
+      link: '/dashboard/client?tab=compliance',
+    });
   }
 
   const filtered = filterStatus === 'all' ? checks : checks.filter(c => c.status === filterStatus);

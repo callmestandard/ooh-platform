@@ -239,6 +239,15 @@ export default function NegotiationDetailPage() {
         mpo_agency_name: agencyName,
       }).eq('id', booking.id);
 
+      // Notify the owner so they know to create their invoice
+      await createNotification({
+        recipientRole: 'owner',
+        type: 'mpo_raised',
+        title: 'MPO received — create your invoice',
+        body: `${agencyName} has raised MPO ${mpoNum} for ${booking.boards?.name || 'your board'}`,
+        link: '/dashboard/owner?tab=invoices',
+      });
+
       // Refresh local state
       setBooking(prev => prev ? { ...prev, mpo_number: mpoNum, mpo_issued_at: new Date().toISOString(), mpo_agency_name: agencyName } : prev);
     } catch {

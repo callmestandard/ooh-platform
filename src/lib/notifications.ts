@@ -38,8 +38,13 @@ export type NotificationType =
   | 'offer_declined'
   | 'message'
   | 'poe_submitted'
+  | 'poe_verified'
+  | 'poe_flagged'
   | 'plan_approved'
-  | 'campaign_request';
+  | 'campaign_request'
+  | 'mpo_raised'
+  | 'invoice_sent'
+  | 'invoice_paid';
 
 export type Notification = {
   id: string;
@@ -83,12 +88,17 @@ export async function markOneRead(id: string) {
 
 /** Icon emoji per notification type — used in the bell dropdown. */
 export const NOTIF_ICONS: Record<NotificationType, string> = {
-  new_booking:    '📋',
-  counter_offer:  '🔄',
-  offer_accepted: '✅',
-  offer_declined: '❌',
-  message:        '💬',
-  poe_submitted:  '📸',
-  plan_approved:  '🎉',
+  new_booking:      '📋',
+  counter_offer:    '🔄',
+  offer_accepted:   '✅',
+  offer_declined:   '❌',
+  message:          '💬',
+  poe_submitted:    '📸',
+  poe_verified:     '✅',
+  poe_flagged:      '⚠️',
+  plan_approved:    '🎉',
   campaign_request: '📝',
+  mpo_raised:       '📄',
+  invoice_sent:     '🧾',
+  invoice_paid:     '💰',
 };

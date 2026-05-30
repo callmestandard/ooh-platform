@@ -50,14 +50,19 @@ const NIGERIAN_BANKS = [
 ];
 
 const NOTIF_LABELS: Record<NotificationType, { label: string; desc: string; roles: DemoRole[] }> = {
-  new_booking:    { label: 'New booking request',  desc: 'When an agency books one of your boards',              roles: ['owner'] },
-  counter_offer:  { label: 'Counter offer',         desc: 'When a counter-offer is made on a negotiation',       roles: ['agency', 'owner', 'client'] },
-  offer_accepted: { label: 'Offer accepted',         desc: 'When your offer or counter-offer is accepted',        roles: ['agency', 'owner'] },
-  offer_declined: { label: 'Offer declined',         desc: 'When your offer or counter-offer is declined',        roles: ['agency', 'owner'] },
-  message:        { label: 'New message',            desc: 'When you receive a new message in negotiations',      roles: ['agency', 'owner', 'client'] },
-  poe_submitted:  { label: 'Proof of posting',       desc: 'When a field rep submits a proof of posting photo',  roles: ['agency', 'client'] },
-  plan_approved:  { label: 'Plan approved',          desc: 'When a client approves your media plan',             roles: ['agency', 'client'] },
-  campaign_request: { label: 'New campaign brief', desc: 'When a client submits a new campaign brief',         roles: ['agency'] },
+  new_booking:      { label: 'New booking request',    desc: 'When an agency books one of your boards',                  roles: ['owner'] },
+  counter_offer:    { label: 'Counter offer',           desc: 'When a counter-offer is made on a negotiation',           roles: ['agency', 'owner', 'client'] },
+  offer_accepted:   { label: 'Offer accepted',           desc: 'When your offer or counter-offer is accepted',            roles: ['agency', 'owner'] },
+  offer_declined:   { label: 'Offer declined',           desc: 'When your offer or counter-offer is declined',            roles: ['agency', 'owner'] },
+  message:          { label: 'New message',              desc: 'When you receive a new message in negotiations',          roles: ['agency', 'owner', 'client'] },
+  poe_submitted:    { label: 'Proof of posting',         desc: 'When a field rep submits a proof of posting photo',      roles: ['agency', 'client'] },
+  poe_verified:     { label: 'POE verified',             desc: 'When a proof of posting is verified by the agency',      roles: ['client'] },
+  poe_flagged:      { label: 'POE flagged',              desc: 'When a proof of posting is flagged for review',          roles: ['client'] },
+  plan_approved:    { label: 'Plan approved',            desc: 'When a client approves your media plan',                 roles: ['agency', 'client'] },
+  campaign_request: { label: 'New campaign brief',       desc: 'When a client submits a new campaign brief',             roles: ['agency'] },
+  mpo_raised:       { label: 'MPO received',             desc: 'When an agency raises a Media Purchase Order for you',   roles: ['owner'] },
+  invoice_sent:     { label: 'Invoice received',         desc: 'When your agency sends you an invoice',                  roles: ['client'] },
+  invoice_paid:     { label: 'Payment received',         desc: 'When a client pays an invoice',                          roles: ['agency'] },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -219,8 +224,9 @@ export default function SettingsPage() {
   // Notification prefs
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>({
     new_booking: true, counter_offer: true, offer_accepted: true,
-    offer_declined: true, message: true, poe_submitted: true, plan_approved: true,
-    campaign_request: true,
+    offer_declined: true, message: true, poe_submitted: true, poe_verified: true,
+    poe_flagged: true, plan_approved: true, campaign_request: true,
+    mpo_raised: true, invoice_sent: true, invoice_paid: true,
   });
 
   // Payout (owner only)

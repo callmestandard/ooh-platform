@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { createNotification } from '@/lib/notifications';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -249,8 +250,16 @@ export default function AgencyInvoicesPage() {
       body: JSON.stringify({ status: 'sent' }),
     });
     if (res.ok) {
+      const inv = clientInvoices.find(i => i.id === id);
       setClientInvoices(prev => prev.map(i => i.id === id ? { ...i, status: 'sent' } : i));
       showToast('Invoice marked as sent');
+      await createNotification({
+        recipientRole: 'client',
+        type: 'invoice_sent',
+        title: 'New invoice from your agency',
+        body: inv ? `Invoice ${inv.invoice_number} for ₦${(inv.total_amount / 1_000_000).toFixed(2)}M is ready for payment` : 'A new invoice has been issued',
+        link: '/dashboard/client?tab=billing',
+      });
     } else {
       showToast('Failed to update status', true);
     }

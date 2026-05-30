@@ -287,6 +287,7 @@ function ClientContent() {
   const [activeTab, setActiveTab] = useState<ClientTab>('overview');
   const [brandName, setBrandName] = useState('Your brand');
   const [unpaidInvoices, setUnpaidInvoices] = useState(0);
+  const [exportingPOE, setExportingPOE] = useState<'pdf' | 'pptx' | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [decliningId, setDecliningId] = useState<string | null>(null);
   const [showNewCampaign, setShowNewCampaign] = useState(false);
@@ -550,6 +551,30 @@ function ClientContent() {
   const verifiedCount = compliance.filter(c => c.status === 'verified').length;
   const compRate = bookings.length > 0 ? Math.round((verifiedCount / bookings.length) * 100) : 0;
   const daysLeft = activeCampaign ? getDaysRemaining(activeCampaign.end_date) : 0;
+
+  async function downloadPOE(format: 'pdf' | 'pptx') {
+    if (!activeCampaign) return;
+    setExportingPOE(format);
+    try {
+      const res = await fetch('/api/poe-deck', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ campaignId: activeCampaign.id, format }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `POE-${activeCampaign.name.replace(/\s+/g, '-')}.${format === 'pdf' ? 'pdf' : 'pptx'}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch { /* silent */ } finally {
+      setExportingPOE(null);
+    }
+  }
   const estImpressions = liveBoards * 15000;
 
   const attentionBoards = bookings.filter(b => {
@@ -1157,9 +1182,23 @@ function ClientContent() {
                 <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>Overall compliance rate</p>
                 <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>Target: 95% verified before campaign ends</p>
               </div>
-              <span style={{ fontSize: '2rem', fontWeight: 800, fontFamily: 'monospace', color: compRate >= 90 ? '#10B981' : compRate >= 70 ? '#F59E0B' : '#EF4444', letterSpacing: '-0.03em' }}>
-                {compRate}%
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button
+                  onClick={() => downloadPOE('pdf')}
+                  disabled={exportingPOE !== null}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: exportingPOE === 'pdf' ? '#E2E8F0' : '#1B4F8A', color: exportingPOE === 'pdf' ? '#94A3B8' : '#fff', fontSize: '0.75rem', fontWeight: 700, border: 'none', cursor: exportingPOE !== null ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
+                  {exportingPOE === 'pdf' ? '⏳ Generating…' : '⬇ POE PDF'}
+                </button>
+                <button
+                  onClick={() => downloadPOE('pptx')}
+                  disabled={exportingPOE !== null}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: exportingPOE === 'pptx' ? '#E2E8F0' : '#0F172A', color: exportingPOE === 'pptx' ? '#94A3B8' : '#fff', fontSize: '0.75rem', fontWeight: 700, border: 'none', cursor: exportingPOE !== null ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
+                  {exportingPOE === 'pptx' ? '⏳ Generating…' : '⬇ POE Deck'}
+                </button>
+                <span style={{ fontSize: '2rem', fontWeight: 800, fontFamily: 'monospace', color: compRate >= 90 ? '#10B981' : compRate >= 70 ? '#F59E0B' : '#EF4444', letterSpacing: '-0.03em' }}>
+                  {compRate}%
+                </span>
+              </div>
             </div>
             <div style={{ height: 10, background: '#F1F5F9', borderRadius: 999, overflow: 'hidden' }}>
               <div style={{ height: '100%', borderRadius: 999, width: `${compRate}%`, background: compRate >= 90 ? '#10B981' : compRate >= 70 ? '#F59E0B' : '#EF4444', transition: 'width 1s ease' }} />
