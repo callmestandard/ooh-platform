@@ -120,16 +120,16 @@ BEGIN
 
   -- ── 7. Negotiation messages ────────────────────────────────────────────────
   -- book3 (Oshodi Billboard — negotiating)
-  INSERT INTO messages (booking_id, sender_role, message, offer_amount, created_at) VALUES
-  (v_book3, 'agency', 'Hi, we''d like to book the Oshodi Interchange for 2 months. Our offer is ₦600k/month.', 600000, NOW() - INTERVAL '5 days'),
-  (v_book3, 'owner',  'Thanks for your interest. That location does very strong numbers at Oshodi. We''d need ₦640k to make it work.', 640000, NOW() - INTERVAL '4 days'),
-  (v_book3, 'agency', 'We can stretch to ₦620k — client budget is tight on this one.', 620000, NOW() - INTERVAL '3 days'),
-  (v_book3, 'owner',  'Let''s do ₦625k and I''ll include the production installation. Final offer.', 625000, NOW() - INTERVAL '2 days');
+  INSERT INTO messages (booking_id, sender_role, message_type, content, offered_rate, created_at) VALUES
+  (v_book3, 'agency', 'offer',         'Hi, we''d like to book the Oshodi Interchange for 2 months. Our offer is ₦600k/month.', 600000, NOW() - INTERVAL '5 days'),
+  (v_book3, 'owner',  'counter_offer', 'Thanks for your interest. That location does very strong numbers at Oshodi. We''d need ₦640k to make it work.', 640000, NOW() - INTERVAL '4 days'),
+  (v_book3, 'agency', 'counter_offer', 'We can stretch to ₦620k — client budget is tight on this one.', 620000, NOW() - INTERVAL '3 days'),
+  (v_book3, 'owner',  'counter_offer', 'Let''s do ₦625k and I''ll include the production installation. Final offer.', 625000, NOW() - INTERVAL '2 days');
 
   -- book6 (Abuja Airport Road — negotiating for Guinness)
-  INSERT INTO messages (booking_id, sender_role, message, offer_amount, created_at) VALUES
-  (v_book6, 'agency', 'Guinness requires the Abuja Airport Road for their national launch. Offering ₦900k/month for 2 months.', 900000, NOW() - INTERVAL '2 days'),
-  (v_book6, 'owner',  'Airport Road is our premium location. Minimum is ₦950k. This site had 4 competing bids last quarter.', 950000, NOW() - INTERVAL '1 day');
+  INSERT INTO messages (booking_id, sender_role, message_type, content, offered_rate, created_at) VALUES
+  (v_book6, 'agency', 'offer',         'Guinness requires the Abuja Airport Road for their national launch. Offering ₦900k/month for 2 months.', 900000, NOW() - INTERVAL '2 days'),
+  (v_book6, 'owner',  'counter_offer', 'Airport Road is our premium location. Minimum is ₦950k. This site had 4 competing bids last quarter.', 950000, NOW() - INTERVAL '1 day');
 
   -- book4 (Gbagada — pending, no messages yet)
 
