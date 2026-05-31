@@ -56,10 +56,22 @@ BEGIN
   -- ── 2. Owner = same user as agency (avoids FK issues; both dashboards populated)
   v_owner_id := v_agency_id;
 
-  -- ── 3. Fix broken FK so owner_id can reference profiles (not public.users) ─
-  ALTER TABLE boards DROP CONSTRAINT IF EXISTS boards_owner_id_fkey;
-  ALTER TABLE boards ADD CONSTRAINT boards_owner_id_fkey
-    FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+  -- ── 3. Fix all broken FKs (original schema pointed to public.users, not auth.users)
+  ALTER TABLE boards    DROP CONSTRAINT IF EXISTS boards_owner_id_fkey;
+  ALTER TABLE boards    ADD  CONSTRAINT boards_owner_id_fkey
+    FOREIGN KEY (owner_id)  REFERENCES auth.users(id) ON DELETE SET NULL;
+
+  ALTER TABLE campaigns DROP CONSTRAINT IF EXISTS campaigns_agency_id_fkey;
+  ALTER TABLE campaigns ADD  CONSTRAINT campaigns_agency_id_fkey
+    FOREIGN KEY (agency_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+  ALTER TABLE invoices  DROP CONSTRAINT IF EXISTS invoices_agency_id_fkey;
+  ALTER TABLE invoices  ADD  CONSTRAINT invoices_agency_id_fkey
+    FOREIGN KEY (agency_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+  ALTER TABLE invoices  DROP CONSTRAINT IF EXISTS invoices_owner_id_fkey;
+  ALTER TABLE invoices  ADD  CONSTRAINT invoices_owner_id_fkey
+    FOREIGN KEY (owner_id)  REFERENCES auth.users(id) ON DELETE SET NULL;
 
   -- ── 4. Clean up previous demo data ────────────────────────────────────────
   DELETE FROM notifications  WHERE link LIKE '%d1000000%' OR link LIKE '%c1000000%';
