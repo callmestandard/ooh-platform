@@ -19,7 +19,7 @@ DECLARE
   v_owner_id    UUID;
 
   -- Fixed demo UUIDs (stable so re-runs clean up correctly)
-  v_demo_owner  UUID := 'a1000000-0000-0000-0000-000000000001'::UUID;
+  v_demo_owner  UUID := 'a1000000-0000-0000-0000-000000000001'::UUID; -- unused but kept for cleanup
 
   v_board1  UUID := 'b1000000-0000-0000-0000-000000000001'::UUID;
   v_board2  UUID := 'b1000000-0000-0000-0000-000000000002'::UUID;
@@ -48,19 +48,13 @@ DECLARE
 BEGIN
 
   -- ── 1. Find the agency user ────────────────────────────────────────────────
-  SELECT id INTO v_agency_id FROM profiles WHERE role = 'agency' ORDER BY created_at LIMIT 1;
+  SELECT id INTO v_agency_id FROM profiles WHERE role = 'agency' LIMIT 1;
   IF v_agency_id IS NULL THEN
     RAISE EXCEPTION 'No agency profile found. Sign up as an agency first, then run this script.';
   END IF;
 
-  -- ── 2. Find or create owner profile ───────────────────────────────────────
-  SELECT id INTO v_owner_id FROM profiles WHERE role = 'owner' ORDER BY created_at LIMIT 1;
-  IF v_owner_id IS NULL THEN
-    v_owner_id := v_demo_owner;
-    INSERT INTO profiles (id, role, full_name, company_name)
-    VALUES (v_demo_owner, 'owner', 'Bisi Adeyemi', 'Adeyemi Outdoor Ltd')
-    ON CONFLICT (id) DO NOTHING;
-  END IF;
+  -- ── 2. Owner = same user as agency (avoids FK issues; both dashboards populated)
+  v_owner_id := v_agency_id;
 
   -- ── 3. Clean up previous demo data ────────────────────────────────────────
   DELETE FROM notifications  WHERE link LIKE '%d1000000%' OR link LIKE '%c1000000%';
@@ -73,12 +67,12 @@ BEGIN
 
   -- ── 4. Boards ──────────────────────────────────────────────────────────────
   INSERT INTO boards (id, name, format, address, city, state, width, height, face_count, illuminated, asking_rate, latitude, longitude, status, owner_id, notes) VALUES
-  (v_board1, 'Lekki-Epe Expressway Unipole',     'unipole',      'Opposite Lekki Phase 1 Gate',       'Lekki',           'Lagos',       14, 8,  1, true,  850000,  6.4344,  3.4734,  'available', v_owner_id, 'High-traffic corridor serving Lekki–VI commuters'),
-  (v_board2, 'Ikorodu Road Bridge Panel',         'bridge_panel', 'Ketu Bridge, Ikorodu Road',         'Lagos',           'Lagos',       6,  4,  2, true,  420000,  6.5958,  3.3874,  'booked',    v_owner_id, 'Visible to both inbound and outbound traffic'),
-  (v_board3, 'Victoria Island Gantry',            'gantry',       'Ozumba Mbadiwe, opposite MRS',      'Victoria Island', 'Lagos',       18, 5,  1, true,  1200000, 6.4281,  3.4219,  'booked',    v_owner_id, 'Premium VI location, 3 lanes coverage'),
-  (v_board4, 'Oshodi Interchange Billboard',      'billboard',    'Agege Motor Road, Oshodi',          'Oshodi',          'Lagos',       12, 8,  2, false, 650000,  6.5581,  3.3494,  'available', v_owner_id, 'Major interchange with 200k+ daily impressions'),
-  (v_board5, 'Gbagada Expressway Unipole',        'unipole',      'Gbagada Phase 2, by flyover',       'Gbagada',         'Lagos',       14, 8,  1, true,  580000,  6.5501,  3.3791,  'available', v_owner_id, 'Clean sight lines on the expressway'),
-  (v_board6, 'Abuja Airport Road Unipole',        'unipole',      'Airport Road, by Nnamdi Azikiwe',   'Abuja',           'FCT - Abuja', 14, 8,  1, true,  950000,  9.0082,  7.4634,  'available', v_owner_id, 'First impression for all arriving travellers');
+  (v_board1, 'Lekki-Epe Expressway Unipole',     'unipole',      'Opposite Lekki Phase 1 Gate',       'Lekki',           'Lagos',       14, 8,  1, true,  850000,  6.4344,  3.4734,  'available', NULL, 'High-traffic corridor serving Lekki–VI commuters'),
+  (v_board2, 'Ikorodu Road Bridge Panel',         'bridge_panel', 'Ketu Bridge, Ikorodu Road',         'Lagos',           'Lagos',       6,  4,  2, true,  420000,  6.5958,  3.3874,  'booked',    NULL, 'Visible to both inbound and outbound traffic'),
+  (v_board3, 'Victoria Island Gantry',            'gantry',       'Ozumba Mbadiwe, opposite MRS',      'Victoria Island', 'Lagos',       18, 5,  1, true,  1200000, 6.4281,  3.4219,  'booked',    NULL, 'Premium VI location, 3 lanes coverage'),
+  (v_board4, 'Oshodi Interchange Billboard',      'billboard',    'Agege Motor Road, Oshodi',          'Oshodi',          'Lagos',       12, 8,  2, false, 650000,  6.5581,  3.3494,  'available', NULL, 'Major interchange with 200k+ daily impressions'),
+  (v_board5, 'Gbagada Expressway Unipole',        'unipole',      'Gbagada Phase 2, by flyover',       'Gbagada',         'Lagos',       14, 8,  1, true,  580000,  6.5501,  3.3791,  'available', NULL, 'Clean sight lines on the expressway'),
+  (v_board6, 'Abuja Airport Road Unipole',        'unipole',      'Airport Road, by Nnamdi Azikiwe',   'Abuja',           'FCT - Abuja', 14, 8,  1, true,  950000,  9.0082,  7.4634,  'available', NULL, 'First impression for all arriving travellers');
 
   -- ── 5. Campaigns ──────────────────────────────────────────────────────────
   INSERT INTO campaigns (id, name, client_name, status, start_date, end_date, total_budget, plan_notes, agency_id) VALUES
@@ -139,7 +133,7 @@ BEGIN
   -- ── 9. Invoices ───────────────────────────────────────────────────────────
   -- Media partner invoice: owner → agency for book1 + book2
   INSERT INTO invoices (id, invoice_number, campaign_id, invoice_type, owner_id, agency_id, status, total_amount, due_date, client_name, client_email, line_items) VALUES
-  (v_inv1, 'MPI-2026-0031', v_camp1, 'media_partner', v_owner_id, v_agency_id, 'acknowledged', 4395000, NOW() + INTERVAL '14 days',
+  (v_inv1, 'MPI-2026-0031', v_camp1, 'media_partner', NULL, v_agency_id, 'acknowledged', 4395000, NOW() + INTERVAL '14 days',
    'Maximedia Yello', 'finance@maximediayello.com',
    '[{"description":"Lekki-Epe Expressway Unipole — 3 months","quantity":3,"unit_price":765000,"total":2295000},{"description":"Victoria Island Gantry — 2 months","quantity":2,"unit_price":1050000,"total":2100000}]'::jsonb);
 
