@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { formatNaira, formatDate } from '@/lib/utils';
+import { getMarketRate, type MarketRate } from '@/lib/rate-intelligence';
 
 type Campaign = {
   id: string;
@@ -144,6 +145,9 @@ export default function CampaignPlanPage() {
   const [selectedClientId, setSelectedClientId] = useState('');
   const [sendingToClient, setSendingToClient] = useState(false);
 
+  const [marketRate, setMarketRate] = useState<MarketRate | null>(null);
+  const [marketRateLoading, setMarketRateLoading] = useState(false);
+
   // Add board form state
   const [addForm, setAddForm] = useState({
     boardId: '',
@@ -164,6 +168,17 @@ export default function CampaignPlanPage() {
   useEffect(() => {
     if (id) fetchData();
   }, [id]);
+
+  useEffect(() => {
+    if (!addForm.boardId) { setMarketRate(null); return; }
+    const board = allBoards.find(b => b.id === addForm.boardId);
+    if (!board) return;
+    setMarketRateLoading(true);
+    getMarketRate(board.format, board.city).then(rate => {
+      setMarketRate(rate);
+      setMarketRateLoading(false);
+    });
+  }, [addForm.boardId, allBoards]);
 
   async function fetchData() {
     setLoading(true);
@@ -963,6 +978,70 @@ export default function CampaignPlanPage() {
                     </label>
                   </div>
                 </div>
+
+                {/* Market rate intelligence panel */}
+                {(() => {
+                  const board = allBoards.find(b => b.id === addForm.boardId);
+                  if (!board) return null;
+                  if (marketRateLoading) {
+                    return (
+                      <div style={{ background: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: 7, padding: '8px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 10, height: 10, border: '1.5px solid #CBD5E1', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
+                        <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>Loading market data…</span>
+                      </div>
+                    );
+                  }
+                  if (!marketRate) {
+                    return (
+                      <div style={{ background: '#F8FAFC', border: '1px dashed #CBD5E1', borderRadius: 7, padding: '8px 12px', marginBottom: 10 }}>
+                        <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>
+                          Building market data — no closed deals for {board.format} in {board.city} yet
+                        </span>
+                      </div>
+                    );
+                  }
+                  const enteredRate = parseFloat(addForm.rate);
+                  const vsAvg = !isNaN(enteredRate) && marketRate.avg > 0
+                    ? Math.round(((enteredRate - marketRate.avg) / marketRate.avg) * 100)
+                    : null;
+                  const isLow = vsAvg !== null && vsAvg < -10;
+                  const isHigh = vsAvg !== null && vsAvg > 15;
+                  return (
+                    <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '8px 12px', marginBottom: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Market Intel</span>
+                        <span style={{ fontSize: '0.6875rem', color: '#92400E' }}>·</span>
+                        <span style={{ fontSize: '0.6875rem', color: '#92400E' }}>
+                          {marketRate.count < 5 ? `${marketRate.count} deal${marketRate.count !== 1 ? 's' : ''} (limited data)` : `${marketRate.count} closed deals`}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.75rem', color: '#0F172A' }}>
+                          <span style={{ color: '#94A3B8', marginRight: 3 }}>avg</span>
+                          <strong style={{ fontFamily: 'monospace' }}>{formatNaira(marketRate.avg)}</strong>
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: '#0F172A' }}>
+                          <span style={{ color: '#94A3B8', marginRight: 3 }}>min</span>
+                          <strong style={{ fontFamily: 'monospace' }}>{formatNaira(marketRate.min)}</strong>
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: '#0F172A' }}>
+                          <span style={{ color: '#94A3B8', marginRight: 3 }}>max</span>
+                          <strong style={{ fontFamily: 'monospace' }}>{formatNaira(marketRate.max)}</strong>
+                        </span>
+                      </div>
+                      {vsAvg !== null && (
+                        <p style={{ fontSize: '0.6875rem', margin: '4px 0 0', color: isLow ? '#059669' : isHigh ? '#EF4444' : '#92400E', fontWeight: 600 }}>
+                          {isLow
+                            ? `Your rate is ${Math.abs(vsAvg)}% below market — good deal`
+                            : isHigh
+                              ? `Your rate is ${vsAvg}% above market`
+                              : `Your rate is within normal market range`}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {addForm.rate && addForm.durationMonths && (
                   <div style={{ background: '#EFF6FF', borderRadius: 7, padding: '8px 12px', marginBottom: 10 }}>

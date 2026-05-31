@@ -48,14 +48,28 @@ export default function ReportsPage() {
   useEffect(() => { fetchData(); }, []);
 
   async function fetchData() {
-    const [campRes, bookRes, boardRes] = await Promise.all([
-      supabase.from('campaigns').select('*').order('created_at', { ascending: false }),
-      supabase.from('bookings').select('*, boards(name, format, city, asking_rate), campaigns(name, client_name)').order('created_at', { ascending: false }),
-      supabase.from('boards').select('*').order('created_at', { ascending: false }),
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) { setLoading(false); return; }
+
+    const [campRes, bookRes] = await Promise.all([
+      supabase.from('campaigns').select('*').eq('agency_id', uid).order('created_at', { ascending: false }),
+      supabase
+        .from('bookings')
+        .select('*, boards(id, name, format, city, asking_rate, status), campaigns!inner(name, client_name, agency_id)')
+        .eq('campaigns.agency_id', uid)
+        .order('created_at', { ascending: false }),
     ]);
     if (campRes.data) setCampaigns(campRes.data as Campaign[]);
-    if (bookRes.data) setBookings(bookRes.data as Booking[]);
-    if (boardRes.data) setBoards(boardRes.data as Board[]);
+    if (bookRes.data) {
+      setBookings(bookRes.data as Booking[]);
+      // Derive unique boards from this agency's bookings for utilization tab
+      const boardMap = new Map<string, Board>();
+      for (const b of bookRes.data as unknown as { boards: Board }[]) {
+        if (b.boards?.id && !boardMap.has(b.boards.id)) boardMap.set(b.boards.id, b.boards);
+      }
+      setBoards(Array.from(boardMap.values()));
+    }
     setLoading(false);
   }
 

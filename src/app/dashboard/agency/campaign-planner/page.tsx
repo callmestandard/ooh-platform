@@ -307,6 +307,7 @@ export default function CampaignPlannerPage() {
     setSaving(true);
 
     // 1. Create campaign
+    const { data: { session: cpSession } } = await supabase.auth.getSession();
     const { data: camp, error: campErr } = await supabase
       .from('campaigns')
       .insert({
@@ -317,6 +318,7 @@ export default function CampaignPlannerPage() {
         total_budget: budget,
         status: 'draft',
         plan_notes: `Objective: ${form.objective}. Created via Campaign Planner.`,
+        agency_id: cpSession?.user?.id ?? null,
       })
       .select()
       .single();

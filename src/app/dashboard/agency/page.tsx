@@ -66,9 +66,13 @@ export default function AgencyDashboardPage() {
   useEffect(() => { fetchData(); }, []);
 
   async function fetchData() {
+    const { data: { session } } = await supabase.auth.getSession();
+    const uid = session?.user?.id;
+    if (!uid) { setLoading(false); return; }
+
     const [campRes, bookRes, boardRes] = await Promise.all([
-      supabase.from('campaigns').select('*').order('created_at', { ascending: false }),
-      supabase.from('bookings').select('*, boards(name, city), campaigns(name)').order('created_at', { ascending: false }).limit(5),
+      supabase.from('campaigns').select('*').eq('agency_id', uid).order('created_at', { ascending: false }),
+      supabase.from('bookings').select('*, boards(name, city), campaigns!inner(name, agency_id)').eq('campaigns.agency_id', uid).order('created_at', { ascending: false }).limit(5),
       supabase.from('boards').select('id', { count: 'exact', head: true }),
     ]);
     if (campRes.data) setCampaigns(campRes.data as Campaign[]);

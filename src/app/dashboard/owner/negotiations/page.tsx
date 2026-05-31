@@ -63,9 +63,14 @@ export default function OwnerNegotiationsPage() {
   useEffect(() => { fetchBookings(); }, []);
 
   async function fetchBookings() {
+    const { data: { session: onSession } } = await supabase.auth.getSession();
+    const uid = onSession?.user?.id;
+    if (!uid) { setLoading(false); return; }
+
     const { data } = await supabase
       .from('bookings')
-      .select('*, boards(id, name, city, format, asking_rate), campaigns(id, name, client_name)')
+      .select('*, boards!inner(id, name, city, format, asking_rate, owner_id), campaigns(id, name, client_name)')
+      .eq('boards.owner_id', uid)
       .not('status', 'eq', 'declined')
       .order('created_at', { ascending: false });
     setBookings((data as Booking[]) || []);

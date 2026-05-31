@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithEmail, getSession, getCurrentProfile, DEMO_CREDENTIALS } from '@/lib/auth';
 import { ROLE_STORAGE_KEY, type DemoRole } from '@/lib/constants';
+import { supabase } from '@/lib/supabase';
 
 function OOHLogoLarge() {
   return (
@@ -40,6 +41,9 @@ export default function LoginPage() {
   const [demoLoading, setDemoLoading]   = useState<DemoRole | string | null>(null);
   const [error, setError]               = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [unconfirmed, setUnconfirmed]   = useState(false);
+  const [resendSent, setResendSent]     = useState(false);
+  const [resending, setResending]       = useState(false);
 
   // If already signed in, skip the login page
   useEffect(() => {
@@ -56,11 +60,17 @@ export default function LoginPage() {
     if (!email || !password) { setError('Please enter your email and password.'); return; }
     setLoading(true);
     setError('');
+    setUnconfirmed(false);
 
     const { data, error: authError } = await signInWithEmail(email, password);
     if (authError || !data.session) {
       setLoading(false);
-      setError(authError?.message || 'Invalid credentials. Check your email and password.');
+      const msg = authError?.message ?? '';
+      if (msg.toLowerCase().includes('not confirmed') || msg.toLowerCase().includes('email not confirmed')) {
+        setUnconfirmed(true);
+      } else {
+        setError(msg || 'Invalid credentials. Check your email and password.');
+      }
       return;
     }
 
@@ -71,6 +81,14 @@ export default function LoginPage() {
     } else {
       setError('Account found but no role assigned. Contact your administrator.');
     }
+  }
+
+  async function handleResend() {
+    if (!email || resending) return;
+    setResending(true);
+    await supabase.auth.resend({ type: 'signup', email: email.trim().toLowerCase() });
+    setResending(false);
+    setResendSent(true);
   }
 
   async function loginAs(role: DemoRole) {
@@ -197,7 +215,7 @@ export default function LoginPage() {
               <input
                 type="email"
                 value={email}
-                onChange={e => { setEmail(e.target.value); setError(''); }}
+                onChange={e => { setEmail(e.target.value); setError(''); setUnconfirmed(false); setResendSent(false); }}
                 placeholder="you@company.com"
                 style={{
                   width: '100%', padding: '10px 12px',
@@ -225,7 +243,7 @@ export default function LoginPage() {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={e => { setPassword(e.target.value); setError(''); }}
+                  onChange={e => { setPassword(e.target.value); setError(''); setUnconfirmed(false); }}
                   placeholder="••••••••"
                   style={{
                     width: '100%', padding: '10px 40px 10px 12px',
@@ -256,6 +274,37 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+
+            {unconfirmed && (
+              <div style={{
+                background: '#FFFBEB', border: '1px solid #FDE68A',
+                borderRadius: '8px', padding: '12px 14px', marginBottom: '16px',
+              }}>
+                <p style={{ fontSize: '0.8125rem', color: '#92400E', margin: '0 0 8px', fontWeight: 500 }}>
+                  Email not confirmed
+                </p>
+                <p style={{ fontSize: '0.8125rem', color: '#78350F', margin: '0 0 10px', lineHeight: 1.5 }}>
+                  Check your inbox for a confirmation link, or click below to resend it.
+                </p>
+                {resendSent ? (
+                  <p style={{ fontSize: '0.8125rem', color: '#059669', margin: 0, fontWeight: 500 }}>Confirmation email sent — check your inbox.</p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={resending}
+                    style={{
+                      padding: '6px 14px', background: '#F59E0B', color: '#fff', border: 'none',
+                      borderRadius: '6px', fontSize: '0.8125rem', fontWeight: 600, cursor: resending ? 'not-allowed' : 'pointer',
+                      fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    {resending && <div style={{ width: 10, height: 10, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />}
+                    {resending ? 'Sending…' : 'Resend confirmation email'}
+                  </button>
+                )}
+              </div>
+            )}
 
             {error && (
               <div style={{

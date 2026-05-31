@@ -391,6 +391,7 @@ function PostBoardContent() {
 
     setSubmitting(true);
 
+    const { data: { session: pbSession } } = await supabase.auth.getSession();
     const uploadedPhotos = photos.filter(p => p.url).map(p => p.url as string);
 
     const payload = {
@@ -411,6 +412,7 @@ function PostBoardContent() {
       notes: notes.trim() || null,
       contact_phone: contactPhone.trim() || null,
       photo_urls: uploadedPhotos.length > 0 ? uploadedPhotos : null,
+      owner_id: pbSession?.user?.id ?? null,
     };
 
     const { data, error: insertError } = await supabase

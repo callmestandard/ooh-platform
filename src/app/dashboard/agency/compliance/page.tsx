@@ -78,18 +78,22 @@ export default function CompliancePage() {
   }, []);
 
   async function fetchData() {
+    const { data: { session: compSession } } = await supabase.auth.getSession();
+    const uid = compSession?.user?.id;
+    if (!uid) { setLoading(false); return; }
+
     const [checksRes, bookingsRes] = await Promise.all([
       supabase.from('compliance_checks').select(`
-        *, bookings (id, start_date, end_date,
+        *, bookings!inner (id, start_date, end_date,
           boards (name, address, city, format),
-          campaigns (name)
+          campaigns!inner (name, agency_id)
         )
-      `).order('submitted_at', { ascending: false }),
+      `).eq('bookings.campaigns.agency_id', uid).order('submitted_at', { ascending: false }),
       supabase.from('bookings').select(`
         id, status, start_date, end_date,
         boards (name, address, city, format),
-        campaigns (name)
-      `).in('status', ['pending', 'negotiating', 'agreed', 'signed', 'live'])
+        campaigns!inner (name, agency_id)
+      `).eq('campaigns.agency_id', uid).in('status', ['pending', 'negotiating', 'agreed', 'signed', 'live'])
     ]);
 
     if (checksRes.data) setChecks(checksRes.data as ComplianceCheck[]);

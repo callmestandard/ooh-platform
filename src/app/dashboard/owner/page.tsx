@@ -585,11 +585,16 @@ function OwnerContent() {
   useEffect(() => { fetchData(); }, []);
 
   async function fetchData() {
+    const { data: { session: ownerSession } } = await supabase.auth.getSession();
+    const uid = ownerSession?.user?.id;
+    if (!uid) { setBoards([]); setBookings([]); return; }
+
     const [boardsRes, bookingsRes, msgRes] = await Promise.all([
-      supabase.from('boards').select('*').order('created_at', { ascending: false }),
+      supabase.from('boards').select('*').eq('owner_id', uid).order('created_at', { ascending: false }),
       supabase
         .from('bookings')
-        .select('*, boards(name, city, format), campaigns(name, client_name)')
+        .select('*, boards!inner(name, city, format, owner_id), campaigns(name, client_name)')
+        .eq('boards.owner_id', uid)
         .not('status', 'eq', 'declined')
         .order('created_at', { ascending: false }),
       supabase

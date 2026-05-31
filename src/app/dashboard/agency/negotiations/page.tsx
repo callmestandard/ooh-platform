@@ -80,9 +80,14 @@ export default function NegotiationsPage() {
   }, [bookings, activeFilter]);
 
   async function fetchBookings() {
+    const { data: { session: negSession } } = await supabase.auth.getSession();
+    const uid = negSession?.user?.id;
+    if (!uid) { setLoading(false); return; }
+
     const { data, error } = await supabase
       .from('bookings')
-      .select(`*, boards (id, name, address, city, state, format, asking_rate, photos), campaigns (id, name)`)
+      .select(`*, boards (id, name, address, city, state, format, asking_rate, photos), campaigns!inner (id, name, agency_id)`)
+      .eq('campaigns.agency_id', uid)
       .order('created_at', { ascending: false });
     if (error) console.error(error);
     else setBookings((data as Booking[]) || []);
