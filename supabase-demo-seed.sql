@@ -135,16 +135,16 @@ BEGIN
 
   -- ── 8. Compliance checks ──────────────────────────────────────────────────
   -- book1 (live — verified)
-  INSERT INTO compliance_checks (booking_id, status, gps_lat, gps_lng, submitted_at, notes) VALUES
+  INSERT INTO compliance_checks (booking_id, status, latitude, longitude, submitted_at, notes) VALUES
   (v_book1, 'verified', 6.4344, 3.4734, NOW() - INTERVAL '12 days', 'Creative mounted correctly. Illumination confirmed working at night.'),
   (v_book1, 'verified', 6.4344, 3.4734, NOW() - INTERVAL '5 days',  'Week 2 check — no issues. Creative in good condition.');
 
   -- book2 (agreed — pending first check)
-  INSERT INTO compliance_checks (booking_id, status, gps_lat, gps_lng, submitted_at, notes) VALUES
+  INSERT INTO compliance_checks (booking_id, status, latitude, longitude, submitted_at, notes) VALUES
   (v_book2, 'pending', 6.4281, 3.4219, NOW() - INTERVAL '2 days', 'Mounting complete. Awaiting agency sign-off.');
 
   -- book5 (agreed Guinness — flagged)
-  INSERT INTO compliance_checks (booking_id, status, gps_lat, gps_lng, submitted_at, notes) VALUES
+  INSERT INTO compliance_checks (booking_id, status, latitude, longitude, submitted_at, notes) VALUES
   (v_book5, 'flagged', 6.5958, 3.3874, NOW() - INTERVAL '3 days', 'Creative appears faded on right panel. Requesting reprint.');
 
   -- ── 9. Invoices ───────────────────────────────────────────────────────────
