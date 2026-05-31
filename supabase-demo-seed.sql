@@ -56,7 +56,12 @@ BEGIN
   -- ── 2. Owner = same user as agency (avoids FK issues; both dashboards populated)
   v_owner_id := v_agency_id;
 
-  -- ── 3. Clean up previous demo data ────────────────────────────────────────
+  -- ── 3. Fix broken FK so owner_id can reference profiles (not public.users) ─
+  ALTER TABLE boards DROP CONSTRAINT IF EXISTS boards_owner_id_fkey;
+  ALTER TABLE boards ADD CONSTRAINT boards_owner_id_fkey
+    FOREIGN KEY (owner_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+  -- ── 4. Clean up previous demo data ────────────────────────────────────────
   DELETE FROM notifications  WHERE link LIKE '%d1000000%' OR link LIKE '%c1000000%';
   DELETE FROM compliance_checks WHERE booking_id IN (v_book1,v_book2,v_book3,v_book4,v_book5,v_book6,v_book7,v_book8);
   DELETE FROM messages       WHERE booking_id IN (v_book1,v_book2,v_book3,v_book4,v_book5,v_book6,v_book7,v_book8);
@@ -67,12 +72,12 @@ BEGIN
 
   -- ── 4. Boards ──────────────────────────────────────────────────────────────
   INSERT INTO boards (id, name, format, address, city, state, width, height, face_count, illuminated, asking_rate, latitude, longitude, status, owner_id, notes) VALUES
-  (v_board1, 'Lekki-Epe Expressway Unipole',     'unipole',      'Opposite Lekki Phase 1 Gate',       'Lekki',           'Lagos',       14, 8,  1, true,  850000,  6.4344,  3.4734,  'available', NULL, 'High-traffic corridor serving Lekki–VI commuters'),
-  (v_board2, 'Ikorodu Road Bridge Panel',         'bridge_panel', 'Ketu Bridge, Ikorodu Road',         'Lagos',           'Lagos',       6,  4,  2, true,  420000,  6.5958,  3.3874,  'booked',    NULL, 'Visible to both inbound and outbound traffic'),
-  (v_board3, 'Victoria Island Gantry',            'gantry',       'Ozumba Mbadiwe, opposite MRS',      'Victoria Island', 'Lagos',       18, 5,  1, true,  1200000, 6.4281,  3.4219,  'booked',    NULL, 'Premium VI location, 3 lanes coverage'),
-  (v_board4, 'Oshodi Interchange Billboard',      'billboard',    'Agege Motor Road, Oshodi',          'Oshodi',          'Lagos',       12, 8,  2, false, 650000,  6.5581,  3.3494,  'available', NULL, 'Major interchange with 200k+ daily impressions'),
-  (v_board5, 'Gbagada Expressway Unipole',        'unipole',      'Gbagada Phase 2, by flyover',       'Gbagada',         'Lagos',       14, 8,  1, true,  580000,  6.5501,  3.3791,  'available', NULL, 'Clean sight lines on the expressway'),
-  (v_board6, 'Abuja Airport Road Unipole',        'unipole',      'Airport Road, by Nnamdi Azikiwe',   'Abuja',           'FCT - Abuja', 14, 8,  1, true,  950000,  9.0082,  7.4634,  'available', NULL, 'First impression for all arriving travellers');
+  (v_board1, 'Lekki-Epe Expressway Unipole',     'unipole',      'Opposite Lekki Phase 1 Gate',       'Lekki',           'Lagos',       14, 8,  1, true,  850000,  6.4344,  3.4734,  'available', v_agency_id, 'High-traffic corridor serving Lekki–VI commuters'),
+  (v_board2, 'Ikorodu Road Bridge Panel',         'bridge_panel', 'Ketu Bridge, Ikorodu Road',         'Lagos',           'Lagos',       6,  4,  2, true,  420000,  6.5958,  3.3874,  'booked',    v_agency_id, 'Visible to both inbound and outbound traffic'),
+  (v_board3, 'Victoria Island Gantry',            'gantry',       'Ozumba Mbadiwe, opposite MRS',      'Victoria Island', 'Lagos',       18, 5,  1, true,  1200000, 6.4281,  3.4219,  'booked',    v_agency_id, 'Premium VI location, 3 lanes coverage'),
+  (v_board4, 'Oshodi Interchange Billboard',      'billboard',    'Agege Motor Road, Oshodi',          'Oshodi',          'Lagos',       12, 8,  2, false, 650000,  6.5581,  3.3494,  'available', v_agency_id, 'Major interchange with 200k+ daily impressions'),
+  (v_board5, 'Gbagada Expressway Unipole',        'unipole',      'Gbagada Phase 2, by flyover',       'Gbagada',         'Lagos',       14, 8,  1, true,  580000,  6.5501,  3.3791,  'available', v_agency_id, 'Clean sight lines on the expressway'),
+  (v_board6, 'Abuja Airport Road Unipole',        'unipole',      'Airport Road, by Nnamdi Azikiwe',   'Abuja',           'FCT - Abuja', 14, 8,  1, true,  950000,  9.0082,  7.4634,  'available', v_agency_id, 'First impression for all arriving travellers');
 
   -- ── 5. Campaigns ──────────────────────────────────────────────────────────
   INSERT INTO campaigns (id, name, client_name, status, start_date, end_date, total_budget, plan_notes, agency_id) VALUES
