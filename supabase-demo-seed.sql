@@ -41,12 +41,18 @@ BEGIN
   -- 2. Ensure columns exist and fix broken FK constraints
   ALTER TABLE boards    ADD COLUMN IF NOT EXISTS owner_id UUID;
   ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS agency_id UUID;
+  ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS objective TEXT;
+  ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS target_cities TEXT;
   ALTER TABLE invoices  ADD COLUMN IF NOT EXISTS invoice_type TEXT NOT NULL DEFAULT 'client' CHECK (invoice_type IN ('media_partner','client'));
   ALTER TABLE invoices  ADD COLUMN IF NOT EXISTS owner_id UUID;
   ALTER TABLE invoices  ADD COLUMN IF NOT EXISTS agency_id UUID;
+  ALTER TABLE invoices  ADD COLUMN IF NOT EXISTS client_invoice_number TEXT;
   ALTER TABLE invoices  DROP CONSTRAINT IF EXISTS invoices_status_check;
   ALTER TABLE invoices  ADD  CONSTRAINT invoices_status_check CHECK (status IN ('draft','sent','acknowledged','paid','overdue','cancelled'));
-  CREATE INDEX IF NOT EXISTS idx_boards_owner_id    ON boards(owner_id);
+  ALTER TABLE compliance_checks ADD COLUMN IF NOT EXISTS submitted_by TEXT;
+  ALTER TABLE notifications     ADD COLUMN IF NOT EXISTS body TEXT;
+
+  CREATE INDEX IF NOT EXISTS idx_boards_owner_id     ON boards(owner_id);
   CREATE INDEX IF NOT EXISTS idx_campaigns_agency_id ON campaigns(agency_id);
 
   ALTER TABLE boards    DROP CONSTRAINT IF EXISTS boards_owner_id_fkey;
@@ -59,9 +65,10 @@ BEGIN
   ALTER TABLE invoices  ADD  CONSTRAINT invoices_owner_id_fkey    FOREIGN KEY (owner_id)  REFERENCES auth.users(id) ON DELETE SET NULL;
 
   -- 3. Clean up previous demo data
-  DELETE FROM notifications     WHERE link LIKE '%d1000000%' OR link LIKE '%c1000000%';
+  DELETE FROM notifications     WHERE link LIKE '%d1000000%' OR link LIKE '%c1000000%' OR link LIKE '%e1000000%';
   DELETE FROM compliance_checks WHERE booking_id IN (v_book1,v_book2,v_book3,v_book4,v_book5,v_book6,v_book7,v_book8);
   DELETE FROM messages          WHERE booking_id IN (v_book1,v_book2,v_book3,v_book4,v_book5,v_book6,v_book7,v_book8);
+  DELETE FROM invoice_items     WHERE invoice_id IN (v_inv1,v_inv2,v_inv3);
   DELETE FROM invoices          WHERE id IN (v_inv1,v_inv2,v_inv3);
   DELETE FROM bookings          WHERE id IN (v_book1,v_book2,v_book3,v_book4,v_book5,v_book6,v_book7,v_book8);
   DELETE FROM campaigns         WHERE id IN (v_camp1,v_camp2,v_camp3);
@@ -77,10 +84,10 @@ BEGIN
   (v_board6,'Abuja Airport Road Unipole','unipole','Airport Road, by Nnamdi Azikiwe','Abuja','FCT - Abuja',14,8,1,true,950000,9.0082,7.4634,'available',v_agency_id,'First impression for all arriving travellers');
 
   -- 5. Campaigns
-  INSERT INTO campaigns (id, name, client_name, status, start_date, end_date, total_budget, plan_notes, agency_id) VALUES
-  (v_camp1,'MTN Fastlink — Q3 Push','MTN Nigeria','active','2026-06-01','2026-08-31',15000000,'Focus on high-traffic Lagos corridors. Prioritise illuminated formats for night visibility.',v_agency_id),
-  (v_camp2,'Guinness Black Campaign','Diageo Nigeria','active','2026-06-15','2026-07-31',8500000,'Premium placement only. VI and Lekki exclusively. Match brand dark aesthetic.',v_agency_id),
-  (v_camp3,'Access Bank — Digital Push','Access Bank','draft','2026-07-01','2026-09-30',6000000,'Target business districts. Abuja and Lagos. Decision pending client sign-off.',v_agency_id);
+  INSERT INTO campaigns (id, name, client_name, status, start_date, end_date, total_budget, objective, target_cities, plan_notes, agency_id) VALUES
+  (v_camp1,'MTN Fastlink — Q3 Push','MTN Nigeria','active','2026-06-01','2026-08-31',15000000,'brand_awareness','Lagos, Abuja','Focus on high-traffic Lagos corridors. Prioritise illuminated formats for night visibility. MTN Fastlink 5G launch targeting commuter and business audiences.',v_agency_id),
+  (v_camp2,'Guinness Black Campaign','Diageo Nigeria','active','2026-06-15','2026-07-31',8500000,'brand_reminder','Lagos','Premium placement only. VI and Lekki exclusively. Match brand dark aesthetic. Night illumination mandatory for all sites.',v_agency_id),
+  (v_camp3,'Access Bank — Digital Push','Access Bank','draft','2026-07-01','2026-09-30',6000000,'product_launch','Abuja, Lagos','Target business districts. Abuja and Lagos. Decision pending client sign-off.',v_agency_id);
 
   -- 6. Bookings
   INSERT INTO bookings (id, campaign_id, board_id, offered_rate, agreed_rate, status, start_date, end_date, duration_months, creative_type, print_required, mpo_number, mpo_issued_at, mpo_agency_name) VALUES
@@ -97,44 +104,47 @@ BEGIN
 
   -- 7. Negotiation messages
   INSERT INTO messages (booking_id, sender_role, message_type, content, offered_rate, created_at) VALUES
-  (v_book3,'agency','offer','Hi, we''d like to book the Oshodi Interchange for 2 months. Our offer is N600k/month.',600000,NOW()-INTERVAL '5 days'),
-  (v_book3,'owner','counter_offer','Thanks for your interest. That location does very strong numbers at Oshodi. We''d need N640k to make it work.',640000,NOW()-INTERVAL '4 days'),
-  (v_book3,'agency','counter_offer','We can stretch to N620k — client budget is tight on this one.',620000,NOW()-INTERVAL '3 days'),
-  (v_book3,'owner','counter_offer','Let''s do N625k and I''ll include the production installation. Final offer.',625000,NOW()-INTERVAL '2 days'),
-  (v_book6,'agency','offer','Guinness requires the Abuja Airport Road for their national launch. Offering N900k/month for 2 months.',900000,NOW()-INTERVAL '2 days'),
-  (v_book6,'owner','counter_offer','Airport Road is our premium location. Minimum is N950k. This site had 4 competing bids last quarter.',950000,NOW()-INTERVAL '1 day');
+  (v_book3,'agency','offer','Hi, we''d like to book the Oshodi Interchange for 2 months. Our offer is ₦600k/month.',600000,NOW()-INTERVAL '5 days'),
+  (v_book3,'owner','counter_offer','Thanks for your interest. That location does very strong numbers at Oshodi. We''d need ₦640k to make it work.',640000,NOW()-INTERVAL '4 days'),
+  (v_book3,'agency','counter_offer','We can stretch to ₦620k — client budget is tight on this one.',620000,NOW()-INTERVAL '3 days'),
+  (v_book3,'owner','counter_offer','Let''s do ₦625k and I''ll include the production installation. Final offer.',625000,NOW()-INTERVAL '2 days'),
+  (v_book6,'agency','offer','Guinness requires the Abuja Airport Road for their national launch. Offering ₦900k/month for 2 months.',900000,NOW()-INTERVAL '2 days'),
+  (v_book6,'owner','counter_offer','Airport Road is our premium location. Minimum is ₦950k. This site had 4 competing bids last quarter.',950000,NOW()-INTERVAL '1 day');
 
-  -- 8. Compliance checks
-  INSERT INTO compliance_checks (booking_id, status, latitude, longitude, submitted_at, notes) VALUES
-  (v_book1,'verified',6.4344,3.4734,NOW()-INTERVAL '12 days','Creative mounted correctly. Illumination confirmed working at night.'),
-  (v_book1,'verified',6.4344,3.4734,NOW()-INTERVAL '5 days','Week 2 check — no issues. Creative in good condition.'),
-  (v_book2,'submitted',6.4281,3.4219,NOW()-INTERVAL '2 days','Mounting complete. Awaiting agency sign-off.'),
-  (v_book5,'flagged',6.5958,3.3874,NOW()-INTERVAL '3 days','Creative appears faded on right panel. Requesting reprint.');
+  -- 8. Compliance checks (with photo_url and submitted_by for realistic demo)
+  INSERT INTO compliance_checks (booking_id, status, photo_url, latitude, longitude, submitted_at, submitted_by, notes) VALUES
+  (v_book1,'verified','https://images.unsplash.com/photo-1617791160505-6f00504e3519?w=900&q=80',6.4344,3.4734,NOW()-INTERVAL '12 days','Emeka Okafor','Creative mounted correctly. MTN Fastlink branding visible from both directions. Illumination confirmed working at night.'),
+  (v_book1,'verified','https://images.unsplash.com/photo-1555529669-e69e7aa0ba9a?w=900&q=80',6.4344,3.4734,NOW()-INTERVAL '5 days','Emeka Okafor','Week 2 check — no issues. Creative in good condition, colours vibrant. No structural concerns.'),
+  (v_book2,'submitted','https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=900&q=80',6.4281,3.4219,NOW()-INTERVAL '2 days','Chidi Nwosu','Mounting complete on VI Gantry. All 3 lanes visible. Awaiting agency sign-off on creative alignment.'),
+  (v_book5,'flagged','https://images.unsplash.com/photo-1579532537598-459ecdaf39cc?w=900&q=80',6.5958,3.3874,NOW()-INTERVAL '3 days','Tunde Adeleke','Right panel of Ikorodu Bridge creative appears faded — possible sun bleaching. Left panel fine. Requesting reprint of right face.');
 
   -- 9. Invoices
-  INSERT INTO invoices (id, invoice_number, campaign_id, invoice_type, owner_id, agency_id, status, subtotal, tax_rate, tax_amount, total_amount, due_date, client_name, client_email) VALUES
-  (v_inv1,'MPI-2026-0031',v_camp1,'media_partner',NULL,v_agency_id,'acknowledged',4395000,0,0,4395000,NOW()+INTERVAL '14 days','Maximedia Yello','finance@maximediayello.com'),
-  (v_inv2,'INV-2026-0058',v_camp1,'client',NULL,v_agency_id,'sent',4834500,0,0,4834500,NOW()+INTERVAL '21 days','MTN Nigeria','procurement@mtn.ng'),
-  (v_inv3,'INV-2026-0052',v_camp2,'client',NULL,v_agency_id,'paid',836000,0,0,836000,NOW()-INTERVAL '5 days','Diageo Nigeria','finance@diageo.ng');
+  INSERT INTO invoices (id, invoice_number, campaign_id, invoice_type, owner_id, agency_id, status, subtotal, tax_rate, tax_amount, total_amount, due_date, client_name, client_email, client_invoice_number) VALUES
+  (v_inv1,'MPI-2026-0031',v_camp1,'media_partner',NULL,v_agency_id,'acknowledged',4395000,0,0,4395000,NOW()+INTERVAL '14 days','Maximedia Yello','finance@maximediayello.com',NULL),
+  (v_inv2,'INV-2026-0058',v_camp1,'client',NULL,v_agency_id,'sent',4834500,0,0,4834500,NOW()+INTERVAL '21 days','MTN Nigeria','procurement@mtn.ng','4500278841'),
+  (v_inv3,'INV-2026-0052',v_camp2,'client',NULL,v_agency_id,'paid',836000,0,0,836000,NOW()-INTERVAL '5 days','Diageo Nigeria','finance@diageo.ng','DNG-2026-00193');
 
-  -- 9b. Invoice line items
-  INSERT INTO invoice_items (invoice_id, booking_id, description, quantity, unit_price, total) VALUES
-  (v_inv1,v_book1,'Lekki-Epe Expressway Unipole — 3 months',3,765000,2295000),
-  (v_inv1,v_book2,'Victoria Island Gantry — 2 months',2,1050000,2100000),
-  (v_inv2,v_book1,'Lekki-Epe Expressway Unipole — 3 months',3,765000,2295000),
-  (v_inv2,v_book2,'Victoria Island Gantry — 2 months',2,1050000,2100000),
-  (v_inv2,NULL,'Agency fee (10%)',1,439500,439500),
-  (v_inv3,v_book5,'Ikorodu Road Bridge Panel — 2 months',2,380000,760000),
-  (v_inv3,NULL,'Agency fee (10%)',1,76000,76000);
+  -- 9b. Invoice line items (with board details for PDF)
+  INSERT INTO invoice_items (invoice_id, booking_id, description, board_name, board_format, location, start_date, end_date, quantity, unit_price, total) VALUES
+  (v_inv1,v_book1,'Lekki-Epe Expressway Unipole — 3 months','Lekki-Epe Expressway Unipole','unipole','Lekki, Lagos','2026-06-01','2026-08-31',3,765000,2295000),
+  (v_inv1,v_book2,'Victoria Island Gantry — 2 months','Victoria Island Gantry','gantry','Victoria Island, Lagos','2026-06-01','2026-07-31',2,1050000,2100000),
+  (v_inv2,v_book1,'Lekki-Epe Expressway Unipole — 3 months','Lekki-Epe Expressway Unipole','unipole','Lekki, Lagos','2026-06-01','2026-08-31',3,765000,2295000),
+  (v_inv2,v_book2,'Victoria Island Gantry — 2 months','Victoria Island Gantry','gantry','Victoria Island, Lagos','2026-06-01','2026-07-31',2,1050000,2100000),
+  (v_inv2,NULL,'Agency management fee (10%)','','','','','',1,439500,439500),
+  (v_inv3,v_book5,'Ikorodu Road Bridge Panel — 2 months','Ikorodu Road Bridge Panel','bridge_panel','Lagos, Lagos','2026-06-15','2026-07-31',2,380000,760000),
+  (v_inv3,NULL,'Agency management fee (10%)','','','','','',1,76000,76000);
 
-  -- 10. Notifications
-  INSERT INTO notifications (recipient_role, type, title, read, created_at, link) VALUES
-  ('agency','booking_agreed','Deal agreed: Lekki-Epe Expressway Unipole for MTN Fastlink',true,NOW()-INTERVAL '10 days','/dashboard/agency/negotiations/'||v_book1),
-  ('agency','booking_agreed','Deal agreed: Victoria Island Gantry for MTN Fastlink',true,NOW()-INTERVAL '9 days','/dashboard/agency/negotiations/'||v_book2),
-  ('agency','counter_offer','Counter offer received on Oshodi Interchange — N625k',false,NOW()-INTERVAL '2 days','/dashboard/agency/negotiations/'||v_book3),
-  ('agency','counter_offer','Counter offer on Abuja Airport Road — owner wants N950k',false,NOW()-INTERVAL '1 day','/dashboard/agency/negotiations/'||v_book6),
-  ('agency','compliance_flagged','Compliance flag: Ikorodu Road Bridge Panel — creative faded',false,NOW()-INTERVAL '3 days','/dashboard/agency/compliance'),
-  ('agency','invoice_paid','Invoice INV-2026-0052 paid by Diageo Nigeria — N836,000',true,NOW()-INTERVAL '5 days','/dashboard/agency/invoices/'||v_inv3);
+  -- 10. Notifications (with body text for rich display in the bell dropdown)
+  INSERT INTO notifications (recipient_role, type, title, body, read, created_at, link) VALUES
+  ('agency','booking_agreed','Deal agreed: Lekki-Epe Expressway Unipole','MTN Fastlink campaign — ₦765k/month for 3 months. MPO-2026-0041 issued.',true,NOW()-INTERVAL '10 days','/dashboard/agency/negotiations/'||v_book1),
+  ('agency','booking_agreed','Deal agreed: Victoria Island Gantry','MTN Fastlink — ₦1.05M/month for 2 months. Premium VI location confirmed.',true,NOW()-INTERVAL '9 days','/dashboard/agency/negotiations/'||v_book2),
+  ('agency','counter_offer','Counter offer on Oshodi Interchange — ₦625k','Owner proposes ₦625k/month including installation. Awaiting your response.',false,NOW()-INTERVAL '2 days','/dashboard/agency/negotiations/'||v_book3),
+  ('agency','counter_offer','Counter offer on Abuja Airport Road — ₦950k','Owner wants ₦950k/month for the Airport Road site. 4 competing bids last quarter.',false,NOW()-INTERVAL '1 day','/dashboard/agency/negotiations/'||v_book6),
+  ('agency','compliance_flagged','Compliance flag: Ikorodu Road Bridge Panel','Right panel shows fading — possible sun bleaching. Reprint may be required.',false,NOW()-INTERVAL '3 days','/dashboard/agency/compliance'),
+  ('agency','invoice_paid','INV-2026-0052 paid by Diageo Nigeria','₦836,000 received. Oracle ref: DNG-2026-00193.',true,NOW()-INTERVAL '5 days','/dashboard/agency/invoices'),
+  ('owner','offer','New booking request: Lekki-Epe Expressway Unipole','Maximedia Yello offering ₦800k/month for the MTN Fastlink campaign. 3-month run.',true,NOW()-INTERVAL '16 days','/dashboard/owner/negotiations/'||v_book1),
+  ('client','plan_approved','Your media plan is ready for review','Maximedia Yello has proposed 4 sites for the MTN Fastlink Q3 campaign. Total: ₦4.83M.',false,NOW()-INTERVAL '8 days','/dashboard/client?tab=plan'),
+  ('client','invoice_sent','New invoice: INV-2026-0058 — ₦4,834,500','Due in 21 days. Download PDF and upload to Oracle for processing. Ref: 4500278841.',false,NOW()-INTERVAL '6 days','/dashboard/client?tab=billing');
 
   RAISE NOTICE 'Demo seed complete. Agency ID: %', v_agency_id;
 END;
