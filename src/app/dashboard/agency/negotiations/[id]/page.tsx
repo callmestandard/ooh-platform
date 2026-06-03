@@ -28,6 +28,7 @@ type Booking = {
     width: number;
     height: number;
     photos: string[];
+    contact_phone: string | null;
   };
   campaigns: {
     id: string;
@@ -86,6 +87,7 @@ export default function NegotiationDetailPage() {
   const [counterRate, setCounterRate] = useState('');
   const [sending, setSending]       = useState(false);
   const [exportingMPO, setExportingMPO] = useState(false);
+  const [showPhone, setShowPhone] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -156,6 +158,7 @@ export default function NegotiationDetailPage() {
       content = messageText || 'Thank you for your interest. We are unable to proceed at this time.';
       newStatus = 'declined';
     } else {
+      if (!messageText.trim()) { setSending(false); return; }
       newStatus = booking.status === 'pending' ? 'negotiating' : booking.status;
     }
 
@@ -386,6 +389,54 @@ export default function NegotiationDetailPage() {
             </div>
           </div>
 
+          {/* Contact owner card */}
+          {(() => {
+            const raw = booking.boards?.contact_phone;
+            const wa  = raw?.replace(/\s/g, '').replace(/^0/, '234');
+            const waMsg = encodeURIComponent(
+              `Hi, I found your board listing "${booking.boards?.name}" on OOH Platform and I'm interested.\n\nCan we discuss availability and pricing?`
+            );
+            return (
+              <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: '14px 16px', flexShrink: 0 }}>
+                <p style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>
+                  Contact owner
+                </p>
+                {raw ? (
+                  showPhone ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.36h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6.1 6.1l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                        <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#15803D', letterSpacing: '0.02em' }}>{raw}</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                        <a href={`tel:${raw}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', borderRadius: 9, background: '#F1F5F9', border: '1.5px solid #E2E8F0', color: '#0F172A', textDecoration: 'none', fontSize: '0.75rem', fontWeight: 700 }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.36h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6.1 6.1l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                          Call
+                        </a>
+                        <a href={`https://wa.me/${wa}?text=${waMsg}`} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', borderRadius: 9, background: '#25D366', color: '#fff', textDecoration: 'none', fontSize: '0.75rem', fontWeight: 700 }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                          WhatsApp
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowPhone(true)}
+                      style={{ width: '100%', padding: '10px', borderRadius: 9, border: '1.5px dashed #CBD5E1', background: '#F8FAFC', color: '#1B4F8A', fontSize: '0.8125rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.36h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6.1 6.1l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                      Show phone number
+                    </button>
+                  )
+                ) : (
+                  <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0, textAlign: 'center', padding: '8px 0' }}>
+                    No phone listed — use the chat to reach the owner
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Rate comparison card */}
           <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '14px 16px' }}>
             <p style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 12px' }}>Rate comparison</p>
@@ -558,138 +609,99 @@ export default function NegotiationDetailPage() {
 
           {/* ── Composer ── */}
           {!isResolved ? (
-            <div style={{ borderTop: '1px solid #F1F5F9', padding: '14px 16px', flexShrink: 0, background: '#FAFAFA' }}>
+            <div style={{ borderTop: '1px solid #F1F5F9', padding: '12px 16px', flexShrink: 0, background: '#FAFAFA' }}>
 
-              {/* Quick action pills */}
+              {/* Formal action banners (counter/accept/decline) */}
+              {actionMode === 'accept' && (
+                <div className="slide-up" style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 10, padding: '9px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#065F46' }}>Accepting at {formatNaira(booking.offered_rate)}/month — deal marked as agreed</span>
+                  </div>
+                  <button onClick={() => setActionMode(null)} style={{ background: 'none', border: 'none', color: '#6EE7B7', cursor: 'pointer', fontSize: 16, padding: 0, lineHeight: 1 }}>✕</button>
+                </div>
+              )}
+              {actionMode === 'decline' && (
+                <div className="slide-up" style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '9px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#991B1B' }}>Declining this booking — owner will be notified</span>
+                  </div>
+                  <button onClick={() => setActionMode(null)} style={{ background: 'none', border: 'none', color: '#FCA5A5', cursor: 'pointer', fontSize: 16, padding: 0, lineHeight: 1 }}>✕</button>
+                </div>
+              )}
+              {actionMode === 'counter' && (
+                <div className="slide-up" style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '9px 14px', marginBottom: 8 }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1D4ED8', flexShrink: 0 }}>Counter ₦/mo</span>
+                  <input
+                    type="number"
+                    value={counterRate}
+                    onChange={e => setCounterRate(e.target.value)}
+                    placeholder={String(booking.offered_rate)}
+                    autoFocus
+                    style={{ flex: 1, border: '1px solid #BFDBFE', borderRadius: 8, padding: '6px 10px', fontSize: '0.9375rem', fontWeight: 700, color: '#1D4ED8', background: '#fff', outline: 'none', fontFamily: "'DM Mono', monospace" }}
+                  />
+                  <button onClick={() => { setActionMode(null); setCounterRate(''); }} style={{ background: 'none', border: 'none', color: '#93C5FD', cursor: 'pointer', fontSize: 16, padding: 0, lineHeight: 1 }}>✕</button>
+                </div>
+              )}
+
+              {/* Action pills row (when no formal action active) */}
               {!actionMode && (
-                <div className="slide-up" style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
+                <div className="slide-up" style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                   {[
-                    { mode: 'message' as ActionMode, label: 'Message', icon: '💬', bg: '#F8FAFC', border: '#E2E8F0', color: '#475569' },
-                    { mode: 'counter' as ActionMode, label: 'Counter', icon: '🔄', bg: '#EFF6FF', border: '#BFDBFE', color: '#1D4ED8' },
-                    { mode: 'accept' as ActionMode,  label: 'Accept',  icon: '✓',  bg: '#ECFDF5', border: '#6EE7B7', color: '#065F46' },
-                    { mode: 'decline' as ActionMode, label: 'Decline', icon: '✕',  bg: '#FEF2F2', border: '#FCA5A5', color: '#991B1B' },
-                  ].map(({ mode, label, icon, bg, border, color }) => (
-                    <button
-                      key={mode}
-                      className="action-btn"
-                      onClick={() => setActionMode(mode)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '5px',
-                        padding: '7px 14px', borderRadius: '99px',
-                        background: bg, border: `1px solid ${border}`, color,
-                        fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'inherit',
-                      }}
-                    >
-                      <span style={{ fontSize: '0.75rem' }}>{icon}</span>
+                    { mode: 'counter' as ActionMode, label: 'Counter offer', bg: '#EFF6FF', border: '#BFDBFE', color: '#1D4ED8' },
+                    { mode: 'accept'  as ActionMode, label: 'Accept',        bg: '#ECFDF5', border: '#6EE7B7', color: '#065F46' },
+                    { mode: 'decline' as ActionMode, label: 'Decline',       bg: '#FEF2F2', border: '#FCA5A5', color: '#991B1B' },
+                  ].map(({ mode, label, bg, border, color }) => (
+                    <button key={mode} className="action-btn" onClick={() => setActionMode(mode)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 13px', borderRadius: 99, background: bg, border: `1px solid ${border}`, color, fontSize: '0.75rem', fontWeight: 600, fontFamily: 'inherit' }}>
                       {label}
                     </button>
                   ))}
                 </div>
               )}
 
-              {/* Active composer */}
-              {actionMode && (
-                <div className="slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {/* Context banner */}
-                  {actionMode === 'accept' && (
-                    <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '10px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
-                      <div>
-                        <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#065F46', margin: 0 }}>Accepting at {formatNaira(booking.offered_rate)}/month</p>
-                        <p style={{ fontSize: '0.6875rem', color: '#6EE7B7', margin: '1px 0 0' }}>This will mark the deal as agreed</p>
-                      </div>
-                    </div>
-                  )}
-                  {actionMode === 'decline' && (
-                    <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '10px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                      <div>
-                        <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#991B1B', margin: 0 }}>Declining this booking</p>
-                        <p style={{ fontSize: '0.6875rem', color: '#FCA5A5', margin: '1px 0 0' }}>The owner will be notified</p>
-                      </div>
-                    </div>
-                  )}
-                  {actionMode === 'counter' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '10px', padding: '10px 14px' }}>
-                      <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1D4ED8', margin: 0, flexShrink: 0 }}>Counter rate (₦/mo)</p>
-                      <input
-                        type="number"
-                        value={counterRate}
-                        onChange={e => setCounterRate(e.target.value)}
-                        placeholder={String(booking.offered_rate)}
-                        autoFocus
-                        style={{
-                          flex: 1, border: '1px solid #BFDBFE', borderRadius: '8px',
-                          padding: '7px 12px', fontSize: '0.9375rem', fontWeight: 700,
-                          color: '#1D4ED8', background: '#fff', outline: 'none',
-                          fontFamily: "'DM Mono', monospace"
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {/* Textarea row */}
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-                    <textarea
-                      value={messageText}
-                      onChange={e => setMessageText(e.target.value)}
-                      placeholder={
-                        actionMode === 'accept'  ? 'Add a note (optional)…' :
-                        actionMode === 'decline' ? 'Add a reason (optional)…' :
-                        actionMode === 'counter' ? 'Explain your counter offer…' :
-                        'Type your message…'
-                      }
-                      rows={2}
-                      style={{
-                        flex: 1, border: '1px solid #E2E8F0', borderRadius: '10px',
-                        padding: '10px 14px', fontSize: '0.875rem', color: '#334155',
-                        resize: 'none', outline: 'none', fontFamily: 'inherit',
-                        lineHeight: 1.5, background: '#fff',
-                        transition: 'border-color 0.15s'
-                      }}
-                      onFocus={e => { e.currentTarget.style.borderColor = '#93C5FD'; }}
-                      onBlur={e => { e.currentTarget.style.borderColor = '#E2E8F0'; }}
-                    />
-
-                    {/* Send + Cancel column */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <button
-                        className="action-btn"
-                        onClick={sendMessage}
-                        disabled={sending || (actionMode === 'counter' && !counterRate)}
-                        style={{
-                          padding: '9px 18px', borderRadius: '10px', fontSize: '0.8125rem',
-                          fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit',
-                          border: 'none', minWidth: 80, letterSpacing: '0.01em',
-                          background: actionMode === 'accept' ? '#059669' :
-                                      actionMode === 'decline' ? '#DC2626' :
-                                      actionMode === 'counter' ? '#2563EB' : '#1B4F8A',
-                          opacity: (sending || (actionMode === 'counter' && !counterRate)) ? 0.5 : 1,
-                        }}
-                      >
-                        {sending ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ width: 12, height: 12, border: '1.5px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
-                          </span>
-                        ) : actionMode === 'accept' ? 'Accept deal' :
-                           actionMode === 'decline' ? 'Decline' :
-                           actionMode === 'counter' ? 'Send offer' : 'Send'}
-                      </button>
-                      <button
-                        className="action-btn"
-                        onClick={() => { setActionMode(null); setMessageText(''); setCounterRate(''); }}
-                        style={{
-                          padding: '7px 18px', borderRadius: '10px', fontSize: '0.75rem',
-                          fontWeight: 500, color: '#94A3B8', cursor: 'pointer',
-                          fontFamily: 'inherit', border: '1px solid #E2E8F0', background: '#fff',
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Always-visible input row */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                <textarea
+                  value={messageText}
+                  onChange={e => setMessageText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !actionMode) { e.preventDefault(); if (messageText.trim()) sendMessage(); } }}
+                  placeholder={
+                    actionMode === 'accept'  ? 'Add a note for the owner (optional)…' :
+                    actionMode === 'decline' ? 'Add a reason (optional)…' :
+                    actionMode === 'counter' ? 'Explain your counter offer…' :
+                    'Message the owner… (Enter to send)'
+                  }
+                  rows={2}
+                  style={{
+                    flex: 1, border: '1px solid #E2E8F0', borderRadius: 10,
+                    padding: '10px 14px', fontSize: '0.875rem', color: '#334155',
+                    resize: 'none', outline: 'none', fontFamily: 'inherit',
+                    lineHeight: 1.5, background: '#fff', transition: 'border-color 0.15s',
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#93C5FD'; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#E2E8F0'; }}
+                />
+                <button
+                  className="action-btn"
+                  onClick={sendMessage}
+                  disabled={sending || (!messageText.trim() && !actionMode) || (actionMode === 'counter' && !counterRate)}
+                  style={{
+                    padding: '10px 16px', borderRadius: 10, fontSize: '0.8125rem',
+                    fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit',
+                    border: 'none', letterSpacing: '0.01em', flexShrink: 0,
+                    background: actionMode === 'accept' ? '#059669' : actionMode === 'decline' ? '#DC2626' : actionMode === 'counter' ? '#2563EB' : '#1B4F8A',
+                    opacity: (sending || (!messageText.trim() && !actionMode) || (actionMode === 'counter' && !counterRate)) ? 0.4 : 1,
+                  }}
+                >
+                  {sending
+                    ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+                    : actionMode === 'accept' ? 'Accept' : actionMode === 'decline' ? 'Decline' : actionMode === 'counter' ? 'Send' : (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    )}
+                </button>
+              </div>
             </div>
           ) : (
             /* Resolved state banner */
