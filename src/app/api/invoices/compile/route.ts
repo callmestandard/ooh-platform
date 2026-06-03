@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     tax_rate = 7.5,
     notes = '',
     include_compliance = false,
+    client_invoice_number,
   } = body as {
     mpi_ids: string[];
     campaign_id?: string;
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
     tax_rate?: number;
     notes?: string;
     include_compliance?: boolean;
+    client_invoice_number?: string;
   };
 
   if (!mpi_ids?.length) {
@@ -135,6 +137,7 @@ export async function POST(req: NextRequest) {
       total_amount,
       due_date: due_date ?? null,
       notes: finalNotes || null,
+      client_invoice_number: client_invoice_number || null,
       status: 'draft',
     })
     .select()

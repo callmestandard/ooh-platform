@@ -15,7 +15,7 @@ function generateInvoiceNumber(count: number): string {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { campaign_id, client_name, client_email, due_date, tax_rate = 7.5, notes } = body;
+  const { campaign_id, client_name, client_email, due_date, tax_rate = 7.5, notes, client_invoice_number } = body;
 
   if (!client_name) {
     return NextResponse.json({ error: 'client_name is required' }, { status: 400 });
@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
       invoice_number, campaign_id, client_name, client_email,
       subtotal, tax_rate, tax_amount, total_amount,
       due_date: due_date || null, notes: notes || null,
+      client_invoice_number: client_invoice_number || null,
       status: 'draft',
     })
     .select()

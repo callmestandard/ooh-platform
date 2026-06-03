@@ -32,7 +32,7 @@ export async function PATCH(
   const body = await req.json();
 
   // Only allow safe status/payment fields
-  const allowed = ['status', 'paid_at', 'payment_ref', 'payment_url', 'due_date', 'notes', 'client_email'];
+  const allowed = ['status', 'paid_at', 'payment_ref', 'payment_url', 'due_date', 'notes', 'client_email', 'client_invoice_number'];
   const updates: Record<string, unknown> = {};
   for (const key of allowed) {
     if (key in body) updates[key] = body[key];

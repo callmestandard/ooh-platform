@@ -94,6 +94,7 @@ export interface Invoice {
   paid_at?: string
   payment_ref?: string
   payment_url?: string
+  client_invoice_number?: string | null
   notes?: string
   created_at: string
   // joined

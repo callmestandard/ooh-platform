@@ -30,6 +30,7 @@ type MPI = {
 type ClientInvoice = {
   id: string;
   invoice_number: string;
+  client_invoice_number: string | null;
   client_name: string;
   client_email: string | null;
   total_amount: number;
@@ -96,6 +97,10 @@ export default function AgencyInvoicesPage() {
   const [newInvForm, setNewInvForm] = useState({ campaign_id: '', client_name: '', client_email: '', due_date: '', tax_rate: '7.5', notes: '' });
   const [newInvSaving, setNewInvSaving] = useState(false);
 
+  // Inline client-ref editing
+  const [editingRef, setEditingRef] = useState<string | null>(null); // invoice id
+  const [refValue, setRefValue] = useState('');
+
   // Filter
   const [filterCampaign, setFilterCampaign] = useState('');
 
@@ -103,6 +108,24 @@ export default function AgencyInvoicesPage() {
     setToast(msg); setToastErr(err);
     setTimeout(() => setToast(''), 3500);
   }, []);
+
+  async function saveClientRef(invoiceId: string) {
+    const trimmed = refValue.trim();
+    const res = await fetch(`/api/invoices/${invoiceId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_invoice_number: trimmed || null }),
+    });
+    if (res.ok) {
+      setClientInvoices(prev => prev.map(inv =>
+        inv.id === invoiceId ? { ...inv, client_invoice_number: trimmed || null } : inv
+      ));
+      showToast(trimmed ? 'Client reference saved' : 'Reference cleared');
+    } else {
+      showToast('Failed to save reference', true);
+    }
+    setEditingRef(null);
+  }
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -480,7 +503,7 @@ export default function AgencyInvoicesPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#F8FAFC' }}>
-                    {['Invoice #', 'Client', 'Campaign', 'Amount', 'Due', 'Status', 'Actions'].map(h => (
+                    {['Invoice #', 'Client Ref. (Oracle)', 'Client', 'Campaign', 'Amount', 'Due', 'Status', 'Actions'].map(h => (
                       <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -500,6 +523,41 @@ export default function AgencyInvoicesPage() {
                         <td style={{ padding: '12px 14px' }}>
                           <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', fontFamily: 'monospace' }}>{inv.invoice_number}</span>
                           <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '2px 0 0' }}>{fmtDate(inv.created_at)}</p>
+                        </td>
+                        {/* Client invoice number (Oracle ref) */}
+                        <td style={{ padding: '12px 14px', minWidth: 160 }}>
+                          {editingRef === inv.id ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <input
+                                autoFocus
+                                value={refValue}
+                                onChange={e => setRefValue(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') saveClientRef(inv.id); if (e.key === 'Escape') setEditingRef(null); }}
+                                placeholder="e.g. 4500123456"
+                                style={{ flex: 1, padding: '4px 8px', border: '1.5px solid #1B4F8A', borderRadius: 6, fontSize: '0.75rem', fontFamily: 'monospace', outline: 'none', width: 110 }}
+                              />
+                              <button onClick={() => saveClientRef(inv.id)} style={{ background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 5, padding: '4px 8px', fontSize: '0.6875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+                              <button onClick={() => setEditingRef(null)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: '0.75rem', padding: '4px' }}>✕</button>
+                            </div>
+                          ) : inv.client_invoice_number ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', fontFamily: 'monospace' }}>{inv.client_invoice_number}</span>
+                              <button
+                                onClick={() => { setEditingRef(inv.id); setRefValue(inv.client_invoice_number || ''); }}
+                                title="Edit reference"
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: 2, lineHeight: 1 }}
+                              >
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setEditingRef(inv.id); setRefValue(''); }}
+                              style={{ background: 'none', border: '1px dashed #CBD5E1', borderRadius: 6, padding: '3px 10px', fontSize: '0.6875rem', color: '#94A3B8', cursor: 'pointer', fontFamily: 'inherit' }}
+                            >
+                              + Add ref
+                            </button>
+                          )}
                         </td>
                         <td style={{ padding: '12px 14px' }}>
                           <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', margin: 0 }}>{inv.client_name}</p>

@@ -26,6 +26,26 @@ type Props = {
 export function ClientBillingTab({ campaignId, clientName }: Props) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingRef, setEditingRef] = useState<string | null>(null);
+  const [refValue, setRefValue] = useState('');
+  const [savingRef, setSavingRef] = useState(false);
+
+  async function saveOracleRef(invoiceId: string) {
+    const trimmed = refValue.trim();
+    setSavingRef(true);
+    const res = await fetch(`/api/invoices/${invoiceId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_invoice_number: trimmed || null }),
+    });
+    if (res.ok) {
+      setInvoices(prev => prev.map(inv =>
+        inv.id === invoiceId ? { ...inv, client_invoice_number: trimmed || null } : inv
+      ));
+    }
+    setSavingRef(false);
+    setEditingRef(null);
+  }
 
   useEffect(() => {
     async function load() {
@@ -86,14 +106,14 @@ export function ClientBillingTab({ campaignId, clientName }: Props) {
         <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '4rem 2rem', textAlign: 'center' }}>
           <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No invoices yet</p>
           <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0, maxWidth: 360, marginLeft: 'auto', marginRight: 'auto' }}>
-            Your agency will send an invoice when boards are booked. You can pay securely via Paystack from this page.
+            Your agency will send an invoice when boards are booked. Download the PDF and upload it to Oracle for processing.
           </p>
         </div>
       ) : (
         <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ padding: '14px 20px', borderBottom: '1px solid #F1F5F9' }}>
             <h2 style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>Invoices</h2>
-            <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>View, download, and pay campaign invoices</p>
+            <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>Download PDF and upload to Oracle for payment processing</p>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -112,9 +132,42 @@ export function ClientBillingTab({ campaignId, clientName }: Props) {
                   <tr key={inv.id} style={{ borderBottom: i < invoices.length - 1 ? '1px solid #F8FAFC' : 'none' }}>
                     <td style={{ padding: '14px 16px' }}>
                       <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px', fontFamily: 'monospace' }}>{inv.invoice_number}</p>
-                      <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>{inv.campaign?.name || 'Campaign invoice'}</p>
+                      <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '0 0 4px' }}>{inv.campaign?.name || 'Campaign invoice'}</p>
+                      {/* Oracle / Client reference */}
+                      {editingRef === inv.id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                          <input
+                            autoFocus
+                            value={refValue}
+                            onChange={e => setRefValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') saveOracleRef(inv.id); if (e.key === 'Escape') setEditingRef(null); }}
+                            placeholder="Oracle ref no."
+                            style={{ width: 120, padding: '3px 7px', border: '1.5px solid #1B4F8A', borderRadius: 5, fontSize: '0.6875rem', fontFamily: 'monospace', outline: 'none' }}
+                          />
+                          <button onClick={() => saveOracleRef(inv.id)} disabled={savingRef}
+                            style={{ background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 5, padding: '3px 8px', fontSize: '0.6875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            {savingRef ? '…' : 'Save'}
+                          </button>
+                          <button onClick={() => setEditingRef(null)} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: '0.6875rem', padding: 2 }}>✕</button>
+                        </div>
+                      ) : inv.client_invoice_number ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                          <span style={{ fontSize: '0.625rem', fontWeight: 700, color: '#065F46', background: '#D1FAE5', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace' }}>
+                            Oracle: {inv.client_invoice_number}
+                          </span>
+                          <button onClick={() => { setEditingRef(inv.id); setRefValue(inv.client_invoice_number || ''); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: 0, lineHeight: 1 }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setEditingRef(inv.id); setRefValue(''); }}
+                          style={{ marginTop: 3, background: 'none', border: '1px dashed #CBD5E1', borderRadius: 4, padding: '2px 8px', fontSize: '0.625rem', color: '#94A3B8', cursor: 'pointer', fontFamily: 'inherit' }}>
+                          + Add Oracle ref
+                        </button>
+                      )}
                       {inv.notes && (
-                        <p style={{ fontSize: '0.6875rem', color: '#7C3AED', margin: '2px 0 0', fontStyle: 'italic' }}>{inv.notes.slice(0, 60)}{inv.notes.length > 60 ? '…' : ''}</p>
+                        <p style={{ fontSize: '0.6875rem', color: '#7C3AED', margin: '4px 0 0', fontStyle: 'italic' }}>{inv.notes.slice(0, 60)}{inv.notes.length > 60 ? '…' : ''}</p>
                       )}
                     </td>
                     <td style={{ padding: '14px 16px' }}>
@@ -161,7 +214,7 @@ export function ClientBillingTab({ campaignId, clientName }: Props) {
                           rel="noopener noreferrer"
                           style={{ display: 'inline-block', padding: '6px 12px', background: canPay ? '#1B4F8A' : '#F1F5F9', color: canPay ? '#fff' : '#475569', borderRadius: 7, fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}
                         >
-                          {canPay ? 'Pay now' : inv.status === 'paid' ? 'Receipt' : 'View'}
+                          {inv.status === 'paid' ? 'Receipt' : 'View'}
                         </a>
                       </div>
                     </td>

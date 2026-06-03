@@ -147,6 +147,7 @@ export default function CampaignPlanPage() {
 
   const [marketRate, setMarketRate] = useState<MarketRate | null>(null);
   const [marketRateLoading, setMarketRateLoading] = useState(false);
+  const [reportCopied, setReportCopied] = useState(false);
 
   // Add board form state
   const [addForm, setAddForm] = useState({
@@ -164,6 +165,15 @@ export default function CampaignPlanPage() {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   }, []);
+
+  function shareReport() {
+    const url = `${window.location.origin}/report/${id}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setReportCopied(true);
+      showToast('Report link copied — share it with your client');
+      setTimeout(() => setReportCopied(false), 2500);
+    });
+  }
 
   useEffect(() => {
     if (id) fetchData();
@@ -402,6 +412,25 @@ export default function CampaignPlanPage() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={shareReport}
+              title="Copy shareable report link"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: reportCopied ? '#ECFDF5' : '#F8FAFC',
+                color: reportCopied ? '#065F46' : '#374151',
+                border: `1px solid ${reportCopied ? '#6EE7B7' : '#E2E8F0'}`,
+                padding: '9px 16px', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s'
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                {reportCopied
+                  ? <polyline points="20 6 9 17 4 12"/>
+                  : <><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></>
+                }
+              </svg>
+              {reportCopied ? 'Link copied!' : 'Share Report'}
+            </button>
             {planItems.length > 0 && campaign.status !== 'pending' && (
               <button
                 onClick={openSendToClient}

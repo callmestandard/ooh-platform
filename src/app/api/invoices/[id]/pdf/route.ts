@@ -83,7 +83,8 @@ export async function GET(
     const metaItems = [
       { label: 'Invoice Date', value: fmtDate(invoice.created_at) },
       { label: 'Due Date',     value: fmtDate(invoice.due_date) },
-      { label: 'Status',       value: invoice.status.toUpperCase() },
+      { label: 'Our Ref.',     value: invoice.invoice_number },
+      ...(invoice.client_invoice_number ? [{ label: 'Client Ref. (Oracle)', value: invoice.client_invoice_number }] : []),
       ...(invoice.campaign ? [{ label: 'Campaign', value: invoice.campaign.name }] : []),
     ];
 
@@ -221,7 +222,8 @@ export async function GET(
       { label: 'Bank',       value: process.env.BANK_NAME || 'Guaranty Trust Bank (GTB)' },
       { label: 'Account No', value: process.env.BANK_ACCOUNT || '0123456789' },
       { label: 'Account Name', value: process.env.BANK_ACCOUNT_NAME || 'OOH Platform Limited' },
-      { label: 'Reference',  value: invoice.invoice_number },
+      { label: 'Our Ref.',   value: invoice.invoice_number },
+      ...(invoice.client_invoice_number ? [{ label: 'Client Ref. (Oracle)', value: invoice.client_invoice_number }] : []),
     ];
 
     const detailColW = contentW / bankDetails.length;
