@@ -581,6 +581,7 @@ function OwnerContent() {
   const [form, setForm] = useState<BoardForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [copiedBoardId, setCopiedBoardId] = useState<string | null>(null);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -919,6 +920,19 @@ function OwnerContent() {
                     </td>
                     <td style={{ padding: '13px 16px' }}>
                       <div className="row-actions" style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          onClick={() => {
+                            const url = `${window.location.origin}/boards/${board.id}`;
+                            navigator.clipboard.writeText(url).then(() => {
+                              setCopiedBoardId(board.id);
+                              setTimeout(() => setCopiedBoardId(null), 2000);
+                            });
+                          }}
+                          title="Copy shareable link"
+                          style={{ background: copiedBoardId === board.id ? '#ECFDF5' : '#F1F5F9', border: 'none', cursor: 'pointer', padding: '5px 8px', borderRadius: '6px', fontSize: '0.6875rem', fontWeight: 600, color: copiedBoardId === board.id ? '#065F46' : '#475569', fontFamily: 'inherit', transition: 'all 0.2s' }}
+                        >
+                          {copiedBoardId === board.id ? '✓ Copied' : 'Share'}
+                        </button>
                         <button
                           onClick={() => openEdit(board)}
                           title="Edit board"
