@@ -6,6 +6,7 @@ import { ROLE_STORAGE_KEY, type DemoRole } from "@/lib/constants";
 import { useRouter, usePathname } from "next/navigation";
 import { Suspense, createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
+import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 
 const DashboardRoleContext = createContext<DemoRole | null>(null);
 export function useDashboardRole() { return useContext(DashboardRoleContext); }
@@ -154,6 +155,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <main className="ooh-main" style={{ flex: 1, overflowY: "auto", background: "#F8FAFC", padding: "28px 32px" }}>
             {children}
           </main>
+          <OnboardingWizard role={role} userName={userName} />
         </div>
       </div>
     </DashboardRoleContext.Provider>
