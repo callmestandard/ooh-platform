@@ -135,7 +135,7 @@ export function Sidebar({ role, userName, roleLabel, onLogout, isOpen, onClose }
   return (
     <aside className={`ooh-sidebar${isOpen ? ' sidebar-open' : ''}`} style={{
       width: 240,
-      background: "#0F172A",
+      background: "linear-gradient(180deg, #0A1628 0%, #0D1B2E 60%, #0A1628 100%)",
       display: "flex",
       flexDirection: "column",
       height: "100vh",
@@ -143,6 +143,12 @@ export function Sidebar({ role, userName, roleLabel, onLogout, isOpen, onClose }
       overflow: "hidden",
       position: "relative",
     }}>
+      {/* Ambient glow orb top-right */}
+      <div style={{
+        position: "absolute", top: -60, right: -60, width: 200, height: 200,
+        background: "radial-gradient(circle, rgba(27,79,138,0.18) 0%, transparent 70%)",
+        pointerEvents: "none",
+      }} />
       {/* Mobile close button */}
       <button
         className="sidebar-close-btn"
@@ -174,29 +180,35 @@ export function Sidebar({ role, userName, roleLabel, onLogout, isOpen, onClose }
                 display: "flex",
                 alignItems: "center",
                 gap: "10px",
-                padding: "9px 10px",
-                borderRadius: "8px",
+                padding: "9px 10px 9px 12px",
+                borderRadius: "9px",
                 marginBottom: "2px",
                 textDecoration: "none",
-                background: active ? "rgba(27,79,138,0.45)" : "transparent",
-                transition: "background 0.15s",
+                background: active
+                  ? "linear-gradient(90deg, rgba(27,79,138,0.55) 0%, rgba(27,79,138,0.28) 100%)"
+                  : "transparent",
+                borderLeft: active ? "2px solid #3B82F6" : "2px solid transparent",
+                boxShadow: active ? "0 2px 12px rgba(27,79,138,0.25), inset 0 0 12px rgba(59,130,246,0.06)" : "none",
+                transition: "all 0.18s ease",
+                backdropFilter: active ? "blur(8px)" : "none",
               }}
-              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; }}
-              onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+              onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; (e.currentTarget as HTMLElement).style.borderLeft = "2px solid rgba(255,255,255,0.1)"; } }}
+              onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.borderLeft = "2px solid transparent"; } }}
             >
-              <span style={{ color: active ? "#60A5FA" : "rgba(255,255,255,0.4)", flexShrink: 0, display: "flex" }}>
+              <span style={{ color: active ? "#60A5FA" : "rgba(255,255,255,0.38)", flexShrink: 0, display: "flex", filter: active ? "drop-shadow(0 0 6px rgba(96,165,250,0.6))" : "none", transition: "filter 0.2s" }}>
                 {item.icon}
               </span>
               <span style={{
                 fontSize: "0.8125rem",
                 fontWeight: active ? 600 : 400,
-                color: active ? "#F8FAFC" : "rgba(255,255,255,0.55)",
+                color: active ? "#F8FAFC" : "rgba(255,255,255,0.5)",
                 flex: 1,
+                letterSpacing: active ? "-0.01em" : "0",
               }}>
                 {item.label}
               </span>
               {active && (
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#F59E0B", flexShrink: 0 }} />
+                <span className="pulse-glow" style={{ width: 6, height: 6, borderRadius: "50%", background: "#F59E0B", flexShrink: 0, boxShadow: "0 0 6px rgba(245,158,11,0.6)" }} />
               )}
             </Link>
           );
@@ -211,10 +223,11 @@ export function Sidebar({ role, userName, roleLabel, onLogout, isOpen, onClose }
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <div style={{
             width: 32, height: 32, borderRadius: "50%",
-            background: "#1B4F8A", display: "flex",
-            alignItems: "center", justifyContent: "center",
+            background: "linear-gradient(135deg, #1B4F8A, #2563EB)",
+            display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: "11px", fontWeight: 700, color: "#fff",
             flexShrink: 0,
+            boxShadow: "0 0 0 2px rgba(59,130,246,0.3), 0 0 12px rgba(27,79,138,0.4)",
           }}>
             {initials}
           </div>
