@@ -83,6 +83,43 @@ export default function OwnerNegotiationDetailPage() {
   const [messageText, setMessageText] = useState('');
   const [counterRate, setCounterRate] = useState('');
   const [sending, setSending] = useState(false);
+  const [exportingContract, setExportingContract] = useState(false);
+
+  async function handleDownloadContract() {
+    if (!booking) return;
+    setExportingContract(true);
+    try {
+      const res = await fetch('/api/contract-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id:    booking.id,
+          agency_name:   booking.campaigns?.client_name || 'Agency',
+          owner_name:    'Board Owner',
+          board_name:    booking.boards?.name || '',
+          board_address: booking.boards?.address || '',
+          board_city:    booking.boards?.city || '',
+          board_state:   booking.boards?.state || '',
+          board_format:  booking.boards?.format || 'billboard',
+          board_width:   booking.boards?.width,
+          board_height:  booking.boards?.height,
+          campaign_name: booking.campaigns?.name || 'Campaign',
+          client_name:   booking.campaigns?.client_name || '',
+          start_date:    booking.start_date,
+          end_date:      booking.end_date,
+          agreed_rate:   booking.agreed_rate || booking.offered_rate,
+        }),
+      });
+      if (!res.ok) throw new Error('PDF failed');
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `Contract-${booking.boards?.name?.replace(/\s+/g, '-') || booking.id}.pdf`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch { /* silent */ } finally { setExportingContract(false); }
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -329,6 +366,30 @@ export default function OwnerNegotiationDetailPage() {
                 <p style={{ fontSize: '0.625rem', fontWeight: 700, color: '#92400E', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Agency notes</p>
                 <p style={{ fontSize: '0.8125rem', color: '#92400E', margin: 0, lineHeight: 1.5 }}>"{booking.notes}"</p>
               </div>
+            )}
+
+            {/* Download contract — visible once deal is agreed */}
+            {['agreed', 'signed', 'live'].includes(booking.status) && (
+              <button
+                onClick={handleDownloadContract}
+                disabled={exportingContract}
+                style={{
+                  width: '100%', padding: '11px 16px',
+                  background: exportingContract ? '#F1F5F9' : '#F5F3FF',
+                  color: exportingContract ? '#94A3B8' : '#5B21B6',
+                  border: '1px solid #DDD6FE', borderRadius: '10px',
+                  fontSize: '0.8125rem', fontWeight: 700,
+                  cursor: exportingContract ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit', transition: 'all 0.15s',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                }}
+              >
+                {exportingContract ? (
+                  <><span style={{ width: 13, height: 13, border: '2px solid #DDD6FE', borderTopColor: '#7C3AED', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />Generating…</>
+                ) : (
+                  <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>Download contract</>
+                )}
+              </button>
             )}
           </div>
 
