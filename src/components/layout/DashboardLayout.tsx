@@ -74,7 +74,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       }
 
       // ── 3. No auth at all → back to login ─────────────────────────────────
-      if (!cancelled) router.replace("/");
+      if (!cancelled) router.replace("/auth/login");
     }
 
     init();
