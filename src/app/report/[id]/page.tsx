@@ -50,6 +50,14 @@ type ComplianceCheck = {
   submitted_by: string | null;
 };
 
+type TrackingLink = {
+  id: string;
+  booking_id: string;
+  short_code: string;
+  target_url: string;
+  stats: { total: number; today: number; week: number; mobile: number };
+};
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function formatNaira(n: number) {
@@ -146,6 +154,7 @@ export default function CampaignReportPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [compliance, setCompliance] = useState<ComplianceCheck[]>([]);
+  const [trackingLinks, setTrackingLinks] = useState<TrackingLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -174,11 +183,12 @@ export default function CampaignReportPage() {
     setBookings(bks);
 
     if (bks.length > 0) {
-      const { data: compData } = await supabase
-        .from('compliance_checks')
-        .select('*')
-        .in('booking_id', bks.map(b => b.id));
-      setCompliance((compData as ComplianceCheck[]) || []);
+      const [compRes, trackRes] = await Promise.all([
+        supabase.from('compliance_checks').select('*').in('booking_id', bks.map(b => b.id)),
+        fetch(`/api/tracking?campaign_id=${id}`).then(r => r.ok ? r.json() : []),
+      ]);
+      setCompliance((compRes.data as ComplianceCheck[]) || []);
+      setTrackingLinks((trackRes as TrackingLink[]) || []);
     }
 
     setLoading(false);
@@ -195,6 +205,12 @@ export default function CampaignReportPage() {
 
   const complianceMap: Record<string, ComplianceCheck> = {};
   compliance.forEach(c => { if (!complianceMap[c.booking_id]) complianceMap[c.booking_id] = c; });
+
+  const trackingMap: Record<string, TrackingLink> = {};
+  trackingLinks.forEach(l => { trackingMap[l.booking_id] = l; });
+  const totalScans = trackingLinks.reduce((s, l) => s + l.stats.total, 0);
+  const mobileScans = trackingLinks.reduce((s, l) => s + l.stats.mobile, 0);
+  const mobilePct = totalScans > 0 ? Math.round((mobileScans / totalScans) * 100) : 0;
 
   const activeBookings = bookings.filter(b => !['declined'].includes(b.status));
   const verifiedCount = compliance.filter(c => c.status === 'verified').length;
@@ -342,8 +358,16 @@ export default function CampaignReportPage() {
         </div>
 
         {/* ── KPI Grid ── */}
-        <div className="fade" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+        <div className="fade" style={{ display: 'grid', gridTemplateColumns: `repeat(${totalScans > 0 ? 5 : 4}, 1fr)`, gap: 12, marginBottom: 20 }}>
           <KPICard label="Boards in plan" value={String(activeBookings.length)} sub={`${bookings.filter(b => b.status === 'live').length} currently live`} color="#1B4F8A" />
+          {totalScans > 0 && (
+            <KPICard
+              label="QR scans"
+              value={totalScans >= 1000 ? `${(totalScans / 1000).toFixed(1)}K` : String(totalScans)}
+              sub={`${mobilePct}% mobile · ${trackingLinks.filter(l => l.stats.total > 0).length} board${trackingLinks.filter(l => l.stats.total > 0).length !== 1 ? 's' : ''} tracked`}
+              color="#F59E0B"
+            />
+          )}
           <KPICard
             label="Compliance rate"
             value={`${compRate}%`}
@@ -423,7 +447,7 @@ export default function CampaignReportPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#F8FAFC' }}>
-                    {['#', 'Board / Location', 'Format', 'Status', 'Rate', 'Compliance'].map(h => (
+                    {['#', 'Board / Location', 'Format', 'Status', 'Rate', 'Compliance', ...(totalScans > 0 ? ['Scans'] : [])].map(h => (
                       <th key={h} style={{ padding: '10px 16px', fontSize: '0.625rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -457,6 +481,23 @@ export default function CampaignReportPage() {
                         <td style={{ padding: '12px 16px' }}>
                           <ComplianceBadge status={check ? check.status : 'none'} />
                         </td>
+                        {totalScans > 0 && (() => {
+                          const link = trackingMap[b.id];
+                          return (
+                            <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                              {link && link.stats.total > 0 ? (
+                                <div>
+                                  <span style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#F59E0B', fontFamily: 'monospace' }}>{link.stats.total.toLocaleString()}</span>
+                                  {link.stats.mobile > 0 && (
+                                    <span style={{ fontSize: '0.625rem', color: '#94A3B8', marginLeft: 5 }}>{Math.round((link.stats.mobile / link.stats.total) * 100)}% mobile</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: '0.75rem', color: '#CBD5E1' }}>—</span>
+                              )}
+                            </td>
+                          );
+                        })()}
                       </tr>
                     );
                   })}
@@ -509,6 +550,52 @@ export default function CampaignReportPage() {
                   );
                 })}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── QR Scan breakdown ── */}
+        {totalScans > 0 && (
+          <div className="fade" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 14, overflow: 'hidden', marginBottom: 20 }}>
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid #F1F5F9' }}>
+              <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>QR Code Scan Attribution</p>
+              <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>Every scan tracked by board, with device breakdown — proving real audience engagement</p>
+            </div>
+            <div style={{ padding: '20px 24px' }}>
+              {/* Summary row */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+                {[
+                  { label: 'Total scans', value: totalScans.toLocaleString(), color: '#F59E0B' },
+                  { label: 'Mobile scans', value: `${mobileScans.toLocaleString()} (${mobilePct}%)`, color: '#7C3AED' },
+                  { label: 'Boards with scans', value: `${trackingLinks.filter(l => l.stats.total > 0).length} of ${trackingLinks.length}`, color: '#1B4F8A' },
+                ].map(s => (
+                  <div key={s.label} style={{ background: '#F8FAFC', borderRadius: 10, padding: '14px 16px' }}>
+                    <p style={{ fontSize: '0.625rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 6px' }}>{s.label}</p>
+                    <p style={{ fontSize: '1.375rem', fontWeight: 800, color: s.color, fontFamily: 'monospace', margin: 0, letterSpacing: '-0.02em' }}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Per-board bars */}
+              {trackingLinks.filter(l => l.stats.total > 0).sort((a, b) => b.stats.total - a.stats.total).map(link => {
+                const booking = bookings.find(b => b.id === link.booking_id);
+                const pct = totalScans > 0 ? Math.round((link.stats.total / totalScans) * 100) : 0;
+                const mobilePctBoard = link.stats.total > 0 ? Math.round((link.stats.mobile / link.stats.total) * 100) : 0;
+                return (
+                  <div key={link.id} style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>{booking?.boards?.name || 'Board'}</span>
+                      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>{mobilePctBoard}% mobile</span>
+                        <span style={{ fontSize: '0.875rem', fontWeight: 800, color: '#F59E0B', fontFamily: 'monospace' }}>{link.stats.total.toLocaleString()}</span>
+                      </div>
+                    </div>
+                    <div style={{ height: 8, background: '#F1F5F9', borderRadius: 999, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', borderRadius: 999, background: 'linear-gradient(90deg, #F59E0B, #FBBF24)', width: `${pct}%`, transition: 'width 0.8s ease' }} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
