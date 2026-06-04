@@ -137,7 +137,7 @@ export default function CampaignPlanPage() {
   const [planItems, setPlanItems] = useState<PlanItem[]>([]);
   const [allBoards, setAllBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'plan' | 'boards' | 'summary' | 'arcon'>('plan');
+  const [activeTab, setActiveTab] = useState<'plan' | 'boards' | 'summary' | 'arcon' | 'attribution'>('plan');
   const [showAddBoard, setShowAddBoard] = useState(false);
   const [boardSearch, setBoardSearch] = useState('');
   const [editingItem, setEditingItem] = useState<string | null>(null);
@@ -165,6 +165,18 @@ export default function CampaignPlanPage() {
     arcon_notes: '',
   });
   const [savingArcon, setSavingArcon] = useState(false);
+
+  // Attribution tracking
+  type TrackingLink = {
+    id: string; booking_id: string; short_code: string;
+    target_url: string; label: string | null;
+    stats: { total: number; today: number; week: number; mobile: number };
+  };
+  const [trackingLinks, setTrackingLinks] = useState<TrackingLink[]>([]);
+  const [trackingLoaded, setTrackingLoaded] = useState(false);
+  const [creatingLinkFor, setCreatingLinkFor] = useState<string | null>(null);
+  const [targetUrlInput, setTargetUrlInput] = useState<Record<string, string>>({});
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   // Add board form state
   const [addForm, setAddForm] = useState({
@@ -201,6 +213,46 @@ export default function CampaignPlanPage() {
       showToast('Failed to save', 'error');
     }
     setSavingArcon(false);
+  }
+
+  async function loadTracking() {
+    if (!campaign || trackingLoaded) return;
+    const res = await fetch(`/api/tracking?campaign_id=${campaign.id}`);
+    if (res.ok) setTrackingLinks(await res.json());
+    setTrackingLoaded(true);
+  }
+
+  async function createTrackingLink(bookingId: string, boardName: string) {
+    const url = (targetUrlInput[bookingId] || '').trim();
+    if (!url) return;
+    setCreatingLinkFor(bookingId);
+    const res = await fetch('/api/tracking', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        booking_id: bookingId,
+        campaign_id: campaign?.id,
+        target_url: url,
+        label: `${boardName} — ${campaign?.name}`,
+      }),
+    });
+    if (res.ok) {
+      const link = await res.json();
+      setTrackingLinks(prev => {
+        const without = prev.filter(l => l.booking_id !== bookingId);
+        return [...without, { ...link, stats: { total: 0, today: 0, week: 0, mobile: 0 } }];
+      });
+      setTargetUrlInput(prev => ({ ...prev, [bookingId]: '' }));
+    }
+    setCreatingLinkFor(null);
+  }
+
+  function copyTrackingUrl(code: string) {
+    const url = `${window.location.origin}/t/${code}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedCode(code);
+      setTimeout(() => setCopiedCode(null), 2000);
+    });
   }
 
   function shareReport() {
@@ -568,11 +620,12 @@ export default function CampaignPlanPage() {
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: 4, borderRadius: 10, width: 'fit-content', marginBottom: '1.25rem' }}>
           {[
-            { key: 'plan',    label: `Plan (${planItems.length})` },
-            { key: 'summary', label: 'Plan summary' },
-            { key: 'arcon',   label: 'ARCON', badge: !campaign.arcon_status || campaign.arcon_status === 'not_submitted' || campaign.arcon_status === 'rejected' || campaign.arcon_status === 'expired' },
+            { key: 'plan',        label: `Plan (${planItems.length})` },
+            { key: 'summary',     label: 'Plan summary' },
+            { key: 'arcon',       label: 'ARCON', badge: !campaign.arcon_status || campaign.arcon_status === 'not_submitted' || campaign.arcon_status === 'rejected' || campaign.arcon_status === 'expired' },
+            { key: 'attribution', label: 'Attribution', badge: false },
           ].map(tab => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key as any)} style={{
+            <button key={tab.key} onClick={() => { setActiveTab(tab.key as any); if (tab.key === 'attribution') loadTracking(); }} style={{
               padding: '6px 16px', borderRadius: 7, border: 'none',
               background: activeTab === tab.key ? '#fff' : 'transparent',
               color: activeTab === tab.key ? '#0F172A' : '#64748B',
@@ -841,6 +894,142 @@ export default function CampaignPlanPage() {
             </div>
           </div>
         )}
+
+        {/* ── Attribution Tab ── */}
+        {activeTab === 'attribution' && (() => {
+          const totalScans = trackingLinks.reduce((s, l) => s + l.stats.total, 0);
+          const weekScans  = trackingLinks.reduce((s, l) => s + l.stats.week, 0);
+          const inputSt: React.CSSProperties = { flex: 1, padding: '7px 10px', border: '1px solid #E2E8F0', borderRadius: 7, fontSize: '0.8125rem', color: '#0F172A', outline: 'none', fontFamily: 'inherit', background: '#fff' };
+
+          return (
+            <div>
+              {/* KPI strip */}
+              {trackingLinks.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+                  {[
+                    { label: 'Total scans', value: String(totalScans), color: '#1B4F8A' },
+                    { label: 'Last 7 days', value: String(weekScans), color: '#7C3AED' },
+                    { label: 'Boards tracked', value: `${trackingLinks.length} / ${planItems.length}`, color: '#10B981' },
+                  ].map(k => (
+                    <div key={k.label} style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '16px 20px' }}>
+                      <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>{k.label}</p>
+                      <p style={{ fontSize: '2rem', fontWeight: 800, color: k.color, fontFamily: 'monospace', letterSpacing: '-0.04em', margin: 0 }}>{k.value}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Board cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {planItems.map(item => {
+                  const link = trackingLinks.find(l => l.booking_id === item.id);
+                  const trackUrl = link ? `${window.location.origin}/t/${link.short_code}` : null;
+                  const qrUrl = trackUrl ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(trackUrl)}&size=160x160&margin=6&color=0F172A` : null;
+
+                  return (
+                    <div key={item.id} style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, overflow: 'hidden' }}>
+                      {/* Board header */}
+                      <div style={{ padding: '14px 18px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                        <div>
+                          <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>{item.boards?.name}</p>
+                          <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>
+                            {item.boards?.city} · {item.boards?.format?.replace('_', ' ')}
+                          </p>
+                        </div>
+                        {link && (
+                          <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
+                            {[
+                              { label: 'Total', value: link.stats.total },
+                              { label: 'This week', value: link.stats.week },
+                              { label: 'Today', value: link.stats.today },
+                              { label: 'Mobile', value: link.stats.mobile > 0 ? `${Math.round((link.stats.mobile / Math.max(1, link.stats.total)) * 100)}%` : '—' },
+                            ].map(s => (
+                              <div key={s.label} style={{ textAlign: 'center' }}>
+                                <p style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0F172A', fontFamily: 'monospace', margin: '0 0 1px', letterSpacing: '-0.02em' }}>{s.value}</p>
+                                <p style={{ fontSize: '0.5625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ padding: '16px 18px' }}>
+                        {link ? (
+                          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+                            {/* QR code */}
+                            <div style={{ flexShrink: 0, textAlign: 'center' }}>
+                              <div style={{ width: 100, height: 100, border: '1px solid #E8EDF2', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
+                                <img src={qrUrl!} style={{ width: '100%', height: '100%' }} alt="QR code" />
+                              </div>
+                              <a
+                                href={qrUrl!}
+                                download={`QR-${item.boards?.name?.replace(/\s+/g, '-')}.png`}
+                                style={{ display: 'block', marginTop: 5, fontSize: '0.6875rem', color: '#1B4F8A', fontWeight: 600, textDecoration: 'none' }}
+                              >
+                                Download QR
+                              </a>
+                            </div>
+
+                            {/* Link info */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>Tracking URL</p>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                                <code style={{ flex: 1, fontSize: '0.8125rem', color: '#1B4F8A', fontFamily: 'monospace', background: '#EFF6FF', padding: '5px 10px', borderRadius: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {trackUrl}
+                                </code>
+                                <button
+                                  onClick={() => copyTrackingUrl(link.short_code)}
+                                  style={{ background: copiedCode === link.short_code ? '#10B981' : '#1B4F8A', color: '#fff', border: 'none', borderRadius: 7, padding: '6px 12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, transition: 'background 0.2s' }}
+                                >
+                                  {copiedCode === link.short_code ? '✓ Copied' : 'Copy'}
+                                </button>
+                              </div>
+
+                              <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>Destination URL</p>
+                              <p style={{ fontSize: '0.8125rem', color: '#475569', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.target_url}</p>
+
+                              <div style={{ marginTop: 10, background: '#F8FAFC', borderRadius: 6, padding: '8px 10px' }}>
+                                <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: 0 }}>
+                                  Print or display this QR code on billboard mockups, media proposals, and POE decks. Every scan is logged with device type and timestamp.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', margin: '0 0 4px' }}>Set up tracking for this board</p>
+                            <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '0 0 12px' }}>Enter the brand's destination URL — every QR code scan will be logged and attributed to this board.</p>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <input
+                                value={targetUrlInput[item.id] || ''}
+                                onChange={e => setTargetUrlInput(prev => ({ ...prev, [item.id]: e.target.value }))}
+                                placeholder="https://mtn.ng/fastlink"
+                                style={inputSt}
+                              />
+                              <button
+                                onClick={() => createTrackingLink(item.id, item.boards?.name || 'Board')}
+                                disabled={creatingLinkFor === item.id || !(targetUrlInput[item.id] || '').trim()}
+                                style={{ background: creatingLinkFor === item.id || !(targetUrlInput[item.id] || '').trim() ? '#94A3B8' : '#1B4F8A', color: '#fff', border: 'none', borderRadius: 7, padding: '7px 16px', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                              >
+                                {creatingLinkFor === item.id ? 'Creating…' : 'Generate QR'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {planItems.length === 0 && (
+                  <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '4rem', textAlign: 'center' }}>
+                    <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>Add boards to the plan first, then set up tracking links for each site.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── ARCON Compliance Tab ── */}
         {activeTab === 'arcon' && (() => {
