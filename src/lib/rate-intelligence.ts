@@ -113,6 +113,70 @@ export async function getRateTrend(format: string, city: string, months = 12): P
   }));
 }
 
+export async function getPlatformStats(): Promise<{
+  totalDeals: number;
+  uniqueCities: number;
+  uniqueFormats: number;
+  uniqueAgencies: number;
+}> {
+  const { data } = await supabase
+    .from('bookings')
+    .select('boards!inner(format, city), campaigns!inner(agency_id)')
+    .not('agreed_rate', 'is', null)
+    .in('status', CLOSED_STATUSES);
+
+  if (!data?.length) return { totalDeals: 0, uniqueCities: 0, uniqueFormats: 0, uniqueAgencies: 0 };
+
+  const rows = data as unknown as { boards: { format: string; city: string }; campaigns: { agency_id: string | null } }[];
+  return {
+    totalDeals: rows.length,
+    uniqueCities: new Set(rows.map(r => r.boards?.city).filter(Boolean)).size,
+    uniqueFormats: new Set(rows.map(r => r.boards?.format).filter(Boolean)).size,
+    uniqueAgencies: new Set(rows.map(r => r.campaigns?.agency_id).filter(Boolean)).size,
+  };
+}
+
+export type NegotiationSpread = {
+  format: string;
+  city: string;
+  avg_offered: number;
+  avg_agreed: number;
+  spread_pct: number; // negative = agreed below offered
+  count: number;
+};
+
+export async function getNegotiationSpreads(): Promise<NegotiationSpread[]> {
+  const { data } = await supabase
+    .from('bookings')
+    .select('offered_rate, agreed_rate, boards!inner(format, city)')
+    .not('agreed_rate', 'is', null)
+    .not('offered_rate', 'is', null)
+    .in('status', CLOSED_STATUSES);
+
+  if (!data?.length) return [];
+
+  const groups: Record<string, { offered: number[]; agreed: number[] }> = {};
+  for (const row of data as unknown as { offered_rate: number; agreed_rate: number; boards: { format: string; city: string } }[]) {
+    const key = `${row.boards?.format}||${row.boards?.city}`;
+    if (!groups[key]) groups[key] = { offered: [], agreed: [] };
+    if (row.offered_rate > 0 && row.agreed_rate > 0) {
+      groups[key].offered.push(row.offered_rate);
+      groups[key].agreed.push(row.agreed_rate);
+    }
+  }
+
+  return Object.entries(groups)
+    .filter(([, g]) => g.offered.length >= 2)
+    .map(([key, g]) => {
+      const [format, city] = key.split('||');
+      const avg_offered = Math.round(g.offered.reduce((a, b) => a + b, 0) / g.offered.length);
+      const avg_agreed  = Math.round(g.agreed.reduce((a, b) => a + b, 0) / g.agreed.length);
+      const spread_pct  = Math.round(((avg_agreed - avg_offered) / avg_offered) * 100);
+      return { format, city, avg_offered, avg_agreed, spread_pct, count: g.offered.length };
+    })
+    .sort((a, b) => a.spread_pct - b.spread_pct);
+}
+
 export async function getAllMarketRates(): Promise<
   { format: string; city: string; avg: number; min: number; max: number; median: number; count: number }[]
 > {
