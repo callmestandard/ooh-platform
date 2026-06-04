@@ -43,6 +43,13 @@ BEGIN
   ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS agency_id UUID;
   ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS objective TEXT;
   ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS target_cities TEXT;
+  ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS arcon_status TEXT DEFAULT 'not_submitted'
+    CHECK (arcon_status IN ('not_submitted','pending','approved','rejected','expired'));
+  ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS arcon_ref TEXT;
+  ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS arcon_submitted_at TIMESTAMPTZ;
+  ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS arcon_approved_at TIMESTAMPTZ;
+  ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS arcon_expiry_date DATE;
+  ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS arcon_notes TEXT;
   ALTER TABLE invoices  ADD COLUMN IF NOT EXISTS invoice_type TEXT NOT NULL DEFAULT 'client' CHECK (invoice_type IN ('media_partner','client'));
   ALTER TABLE invoices  ADD COLUMN IF NOT EXISTS owner_id UUID;
   ALTER TABLE invoices  ADD COLUMN IF NOT EXISTS agency_id UUID;
@@ -84,10 +91,10 @@ BEGIN
   (v_board6,'Abuja Airport Road Unipole','unipole','Airport Road, by Nnamdi Azikiwe','Abuja','FCT - Abuja',14,8,1,true,950000,9.0082,7.4634,'available',v_agency_id,'First impression for all arriving travellers');
 
   -- 5. Campaigns
-  INSERT INTO campaigns (id, name, client_name, status, start_date, end_date, total_budget, objective, target_cities, plan_notes, agency_id) VALUES
-  (v_camp1,'MTN Fastlink — Q3 Push','MTN Nigeria','active','2026-06-01','2026-08-31',15000000,'brand_awareness','Lagos, Abuja','Focus on high-traffic Lagos corridors. Prioritise illuminated formats for night visibility. MTN Fastlink 5G launch targeting commuter and business audiences.',v_agency_id),
-  (v_camp2,'Guinness Black Campaign','Diageo Nigeria','active','2026-06-15','2026-07-31',8500000,'brand_reminder','Lagos','Premium placement only. VI and Lekki exclusively. Match brand dark aesthetic. Night illumination mandatory for all sites.',v_agency_id),
-  (v_camp3,'Access Bank — Digital Push','Access Bank','draft','2026-07-01','2026-09-30',6000000,'product_launch','Abuja, Lagos','Target business districts. Abuja and Lagos. Decision pending client sign-off.',v_agency_id);
+  INSERT INTO campaigns (id, name, client_name, status, start_date, end_date, total_budget, objective, target_cities, plan_notes, agency_id, arcon_status, arcon_ref, arcon_submitted_at, arcon_approved_at, arcon_expiry_date) VALUES
+  (v_camp1,'MTN Fastlink — Q3 Push','MTN Nigeria','active','2026-06-01','2026-08-31',15000000,'brand_awareness','Lagos, Abuja','Focus on high-traffic Lagos corridors. Prioritise illuminated formats for night visibility. MTN Fastlink 5G launch targeting commuter and business audiences.',v_agency_id,'approved','ARCON/2026/05/01847',NOW()-INTERVAL '18 days',NOW()-INTERVAL '12 days','2026-08-31'),
+  (v_camp2,'Guinness Black Campaign','Diageo Nigeria','active','2026-06-15','2026-07-31',8500000,'brand_reminder','Lagos','Premium placement only. VI and Lekki exclusively. Match brand dark aesthetic. Night illumination mandatory for all sites.',v_agency_id,'pending','ARCON/2026/05/02103',NOW()-INTERVAL '6 days',NULL,NULL),
+  (v_camp3,'Access Bank — Digital Push','Access Bank','draft','2026-07-01','2026-09-30',6000000,'product_launch','Abuja, Lagos','Target business districts. Abuja and Lagos. Decision pending client sign-off.',v_agency_id,'not_submitted',NULL,NULL,NULL,NULL);
 
   -- 6. Bookings
   INSERT INTO bookings (id, campaign_id, board_id, offered_rate, agreed_rate, status, start_date, end_date, duration_months, creative_type, print_required, mpo_number, mpo_issued_at, mpo_agency_name) VALUES

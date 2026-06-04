@@ -10,19 +10,27 @@ export interface User {
 
 export interface Campaign {
   id: string
-  agency_id?: string
-  client_id?: string
+  agency_id?: string | null
+  client_id?: string | null
   name: string
-  client_name?: string
+  client_name?: string | null
   start_date: string
   end_date: string
   total_budget: number
-  status: 'draft' | 'active' | 'completed' | 'cancelled' | 'pending'
-  boards_count?: number        // computed client-side, not from DB
-  compliance_rate?: number     // computed client-side, not from DB
+  status: string
+  boards_count?: number
+  compliance_rate?: number
   plan_notes?: string | null
+  objective?: string | null
+  target_cities?: string | null
   approved_at?: string | null
   approved_by?: string | null
+  arcon_status?: 'not_submitted' | 'pending' | 'approved' | 'rejected' | 'expired' | null
+  arcon_ref?: string | null
+  arcon_submitted_at?: string | null
+  arcon_approved_at?: string | null
+  arcon_expiry_date?: string | null
+  arcon_notes?: string | null
   created_at: string
 }
 

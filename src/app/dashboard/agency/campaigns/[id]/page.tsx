@@ -23,6 +23,12 @@ type Campaign = {
   plan_notes: string | null;
   approved_at: string | null;
   approved_by: string | null;
+  arcon_status: 'not_submitted' | 'pending' | 'approved' | 'rejected' | 'expired' | null;
+  arcon_ref: string | null;
+  arcon_submitted_at: string | null;
+  arcon_approved_at: string | null;
+  arcon_expiry_date: string | null;
+  arcon_notes: string | null;
 };
 
 type ClientProfile = {
@@ -131,7 +137,7 @@ export default function CampaignPlanPage() {
   const [planItems, setPlanItems] = useState<PlanItem[]>([]);
   const [allBoards, setAllBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'plan' | 'boards' | 'summary'>('plan');
+  const [activeTab, setActiveTab] = useState<'plan' | 'boards' | 'summary' | 'arcon'>('plan');
   const [showAddBoard, setShowAddBoard] = useState(false);
   const [boardSearch, setBoardSearch] = useState('');
   const [editingItem, setEditingItem] = useState<string | null>(null);
@@ -149,6 +155,17 @@ export default function CampaignPlanPage() {
   const [marketRateLoading, setMarketRateLoading] = useState(false);
   const [reportCopied, setReportCopied] = useState(false);
 
+  // ARCON form state
+  const [arconForm, setArconForm] = useState({
+    arcon_status: 'not_submitted' as Campaign['arcon_status'],
+    arcon_ref: '',
+    arcon_submitted_at: '',
+    arcon_approved_at: '',
+    arcon_expiry_date: '',
+    arcon_notes: '',
+  });
+  const [savingArcon, setSavingArcon] = useState(false);
+
   // Add board form state
   const [addForm, setAddForm] = useState({
     boardId: '',
@@ -165,6 +182,26 @@ export default function CampaignPlanPage() {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   }, []);
+
+  async function saveArcon() {
+    if (!campaign) return;
+    setSavingArcon(true);
+    const { error } = await supabase.from('campaigns').update({
+      arcon_status: arconForm.arcon_status,
+      arcon_ref: arconForm.arcon_ref.trim() || null,
+      arcon_submitted_at: arconForm.arcon_submitted_at || null,
+      arcon_approved_at: arconForm.arcon_approved_at || null,
+      arcon_expiry_date: arconForm.arcon_expiry_date || null,
+      arcon_notes: arconForm.arcon_notes.trim() || null,
+    }).eq('id', campaign.id);
+    if (!error) {
+      setCampaign(prev => prev ? { ...prev, ...arconForm, arcon_ref: arconForm.arcon_ref || null, arcon_notes: arconForm.arcon_notes || null } : prev);
+      showToast('ARCON compliance saved');
+    } else {
+      showToast('Failed to save', 'error');
+    }
+    setSavingArcon(false);
+  }
 
   function shareReport() {
     const url = `${window.location.origin}/report/${id}`;
@@ -197,7 +234,18 @@ export default function CampaignPlanPage() {
       supabase.from('bookings').select('*, boards(*)').eq('campaign_id', id).order('created_at'),
       supabase.from('boards').select('*').eq('status', 'available').order('name'),
     ]);
-    if (campRes.data) setCampaign(campRes.data as Campaign);
+    if (campRes.data) {
+      const c = campRes.data as Campaign;
+      setCampaign(c);
+      setArconForm({
+        arcon_status: c.arcon_status || 'not_submitted',
+        arcon_ref: c.arcon_ref || '',
+        arcon_submitted_at: c.arcon_submitted_at ? c.arcon_submitted_at.slice(0, 10) : '',
+        arcon_approved_at: c.arcon_approved_at ? c.arcon_approved_at.slice(0, 10) : '',
+        arcon_expiry_date: c.arcon_expiry_date || '',
+        arcon_notes: c.arcon_notes || '',
+      });
+    }
     if (itemsRes.data) {
       const items = itemsRes.data as unknown as PlanItem[];
       setPlanItems(items);
@@ -520,8 +568,9 @@ export default function CampaignPlanPage() {
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: 4, borderRadius: 10, width: 'fit-content', marginBottom: '1.25rem' }}>
           {[
-            { key: 'plan', label: `Plan (${planItems.length})` },
+            { key: 'plan',    label: `Plan (${planItems.length})` },
             { key: 'summary', label: 'Plan summary' },
+            { key: 'arcon',   label: 'ARCON', badge: !campaign.arcon_status || campaign.arcon_status === 'not_submitted' || campaign.arcon_status === 'rejected' || campaign.arcon_status === 'expired' },
           ].map(tab => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key as any)} style={{
               padding: '6px 16px', borderRadius: 7, border: 'none',
@@ -530,8 +579,12 @@ export default function CampaignPlanPage() {
               fontSize: '0.8125rem', fontWeight: activeTab === tab.key ? 600 : 400,
               cursor: 'pointer', fontFamily: 'inherit',
               boxShadow: activeTab === tab.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              display: 'flex', alignItems: 'center', gap: 5,
             }}>
               {tab.label}
+              {(tab as any).badge && (
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#F59E0B', flexShrink: 0 }} />
+              )}
             </button>
           ))}
         </div>
@@ -788,6 +841,158 @@ export default function CampaignPlanPage() {
             </div>
           </div>
         )}
+
+        {/* ── ARCON Compliance Tab ── */}
+        {activeTab === 'arcon' && (() => {
+          const statusCfg: Record<string, { label: string; bg: string; color: string; dot: string; desc: string }> = {
+            not_submitted: { label: 'Not submitted',  bg: '#F1F5F9', color: '#475569', dot: '#94A3B8', desc: 'Creative has not yet been submitted to ARCON for pre-vetting.' },
+            pending:       { label: 'Pending review', bg: '#FFFBEB', color: '#92400E', dot: '#F59E0B', desc: 'Submission sent — awaiting ARCON approval.' },
+            approved:      { label: 'Approved',       bg: '#ECFDF5', color: '#065F46', dot: '#10B981', desc: 'ARCON has approved this campaign. It may now go live.' },
+            rejected:      { label: 'Rejected',       bg: '#FEF2F2', color: '#7F1D1D', dot: '#EF4444', desc: 'ARCON has rejected this submission. Revise the creative and re-submit.' },
+            expired:       { label: 'Expired',        bg: '#FEF3C7', color: '#92400E', dot: '#F59E0B', desc: 'Approval has expired. You must renew with ARCON before continuing.' },
+          };
+          const current = statusCfg[arconForm.arcon_status || 'not_submitted'];
+          const isApproved = arconForm.arcon_status === 'approved';
+          const inputSt: React.CSSProperties = { width: '100%', padding: '8px 11px', border: '1px solid #E2E8F0', borderRadius: 7, fontSize: '0.875rem', color: '#0F172A', outline: 'none', fontFamily: 'inherit', background: '#fff', boxSizing: 'border-box' };
+
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, alignItems: 'start' }}>
+
+              {/* Left — form */}
+              <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '22px 24px' }}>
+                <h2 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px' }}>ARCON Compliance Record</h2>
+                <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '0 0 22px' }}>
+                  Under the Advertising Industry Act 2022, all creatives must be pre-vetted and approved by ARCON before going live.
+                </p>
+
+                {/* Status select */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#374151', marginBottom: 5 }}>Approval status</label>
+                  <select
+                    value={arconForm.arcon_status || 'not_submitted'}
+                    onChange={e => setArconForm(f => ({ ...f, arcon_status: e.target.value as Campaign['arcon_status'] }))}
+                    style={{ ...inputSt, cursor: 'pointer' }}
+                  >
+                    <option value="not_submitted">Not submitted</option>
+                    <option value="pending">Pending — submitted, awaiting response</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="expired">Expired</option>
+                  </select>
+                </div>
+
+                {/* ARCON reference */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#374151', marginBottom: 5 }}>
+                    ARCON reference number
+                    <span style={{ fontWeight: 400, color: '#94A3B8', marginLeft: 4 }}>(from submission receipt or approval letter)</span>
+                  </label>
+                  <input value={arconForm.arcon_ref} onChange={e => setArconForm(f => ({ ...f, arcon_ref: e.target.value }))} placeholder="e.g. ARCON/2026/04/00291" style={inputSt} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#374151', marginBottom: 5 }}>Date submitted to ARCON</label>
+                    <input type="date" value={arconForm.arcon_submitted_at} onChange={e => setArconForm(f => ({ ...f, arcon_submitted_at: e.target.value }))} style={inputSt} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#374151', marginBottom: 5 }}>Date approved</label>
+                    <input type="date" value={arconForm.arcon_approved_at} onChange={e => setArconForm(f => ({ ...f, arcon_approved_at: e.target.value }))} style={inputSt} />
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#374151', marginBottom: 5 }}>
+                    Approval expiry date
+                    <span style={{ fontWeight: 400, color: '#94A3B8', marginLeft: 4 }}>(typically matches campaign end date)</span>
+                  </label>
+                  <input type="date" value={arconForm.arcon_expiry_date} onChange={e => setArconForm(f => ({ ...f, arcon_expiry_date: e.target.value }))} style={inputSt} />
+                </div>
+
+                <div style={{ marginBottom: 22 }}>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#374151', marginBottom: 5 }}>Notes <span style={{ fontWeight: 400, color: '#94A3B8' }}>(rejection reason, conditions, etc.)</span></label>
+                  <textarea value={arconForm.arcon_notes} onChange={e => setArconForm(f => ({ ...f, arcon_notes: e.target.value }))} rows={3} placeholder="e.g. ARCON requested font size adjustment on creative before approval" style={{ ...inputSt, resize: 'vertical' }} />
+                </div>
+
+                <button
+                  onClick={saveArcon}
+                  disabled={savingArcon}
+                  style={{ background: savingArcon ? '#94A3B8' : '#1B4F8A', color: '#fff', border: 'none', padding: '10px 22px', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: savingArcon ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
+                >
+                  {savingArcon ? 'Saving…' : 'Save ARCON record'}
+                </button>
+              </div>
+
+              {/* Right — status + checklist */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                {/* Current status card */}
+                <div style={{ background: current.bg, border: `1px solid ${current.dot}30`, borderRadius: 12, padding: '18px 20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: current.dot, flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.875rem', fontWeight: 700, color: current.color }}>{current.label}</span>
+                  </div>
+                  <p style={{ fontSize: '0.8125rem', color: current.color, margin: 0, lineHeight: 1.5, opacity: 0.8 }}>{current.desc}</p>
+                  {arconForm.arcon_ref && (
+                    <p style={{ fontSize: '0.75rem', fontWeight: 700, color: current.color, margin: '10px 0 0', fontFamily: 'monospace' }}>
+                      Ref: {arconForm.arcon_ref}
+                    </p>
+                  )}
+                  {arconForm.arcon_expiry_date && isApproved && (
+                    <p style={{ fontSize: '0.6875rem', color: current.color, margin: '4px 0 0', opacity: 0.7 }}>
+                      Valid until {new Date(arconForm.arcon_expiry_date).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  )}
+                </div>
+
+                {/* Pre-launch gate */}
+                {!isApproved && campaign.status === 'active' && (
+                  <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '12px 14px' }}>
+                    <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#991B1B', margin: '0 0 4px' }}>⚠ Campaign active without approval</p>
+                    <p style={{ fontSize: '0.75rem', color: '#B91C1C', margin: 0, lineHeight: 1.5 }}>This campaign is showing as active but does not have ARCON approval on record. Under the Advertising Industry Act 2022, running unapproved ads carries criminal liability.</p>
+                  </div>
+                )}
+
+                {/* ARCON checklist */}
+                <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '16px 18px' }}>
+                  <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 12px' }}>Submission checklist</p>
+                  {[
+                    { done: !!campaign.client_name,                        label: 'Advertiser/brand name confirmed' },
+                    { done: planItems.length > 0,                          label: `Media plan complete (${planItems.length} board${planItems.length !== 1 ? 's' : ''})` },
+                    { done: planItems.some(i => i.creative_type != null),  label: 'Creative type specified on all boards' },
+                    { done: !!arconForm.arcon_submitted_at,                label: 'Submitted to ARCON for pre-vetting' },
+                    { done: !!arconForm.arcon_ref,                         label: 'ARCON reference number recorded' },
+                    { done: isApproved,                                    label: 'ARCON approval received' },
+                    { done: !!arconForm.arcon_expiry_date,                 label: 'Approval expiry date logged' },
+                  ].map(({ done, label }) => (
+                    <div key={label} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginBottom: 9 }}>
+                      <div style={{ width: 16, height: 16, borderRadius: 4, background: done ? '#10B981' : '#F1F5F9', border: `1px solid ${done ? '#10B981' : '#E2E8F0'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>
+                        {done && <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><polyline points="2 6 5 9 10 3" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: done ? '#374151' : '#94A3B8', lineHeight: 1.4 }}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ARCON contact info */}
+                <div style={{ background: '#F8FAFC', border: '1px solid #E8EDF2', borderRadius: 10, padding: '12px 14px' }}>
+                  <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>ARCON contact</p>
+                  {[
+                    { label: 'Website',  value: 'arcon.gov.ng' },
+                    { label: 'Email',    value: 'info@arcon.gov.ng' },
+                    { label: 'Address',  value: '3 Banjul Street, Wuse Zone 4, Abuja' },
+                    { label: 'Act',      value: 'Advertising Industry Act 2022' },
+                  ].map(({ label, value }) => (
+                    <div key={label} style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: '0.6875rem', color: '#94A3B8', width: 52, flexShrink: 0 }}>{label}</span>
+                      <span style={{ fontSize: '0.6875rem', color: '#475569', fontWeight: 500 }}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Send to client modal */}

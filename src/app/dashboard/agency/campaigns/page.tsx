@@ -415,6 +415,25 @@ export default function CampaignsPage() {
                         {campaign.status === 'pending' && (
                           <span style={{ fontSize: '0.625rem', fontWeight: 600, color: '#D97706' }}>Awaiting client approval</span>
                         )}
+                        {(() => {
+                          const as = campaign.arcon_status;
+                          if (!as || as === 'not_submitted') return (
+                            <span style={{ fontSize: '0.625rem', fontWeight: 700, color: '#92400E', background: '#FEF3C7', padding: '1px 6px', borderRadius: 4 }}>ARCON: Not submitted</span>
+                          );
+                          if (as === 'pending') return (
+                            <span style={{ fontSize: '0.625rem', fontWeight: 700, color: '#1D4ED8', background: '#DBEAFE', padding: '1px 6px', borderRadius: 4 }}>ARCON: Pending</span>
+                          );
+                          if (as === 'approved') return (
+                            <span style={{ fontSize: '0.625rem', fontWeight: 700, color: '#065F46', background: '#D1FAE5', padding: '1px 6px', borderRadius: 4 }}>ARCON: Approved</span>
+                          );
+                          if (as === 'rejected') return (
+                            <span style={{ fontSize: '0.625rem', fontWeight: 700, color: '#991B1B', background: '#FEE2E2', padding: '1px 6px', borderRadius: 4 }}>ARCON: Rejected</span>
+                          );
+                          if (as === 'expired') return (
+                            <span style={{ fontSize: '0.625rem', fontWeight: 700, color: '#92400E', background: '#FEF3C7', padding: '1px 6px', borderRadius: 4 }}>ARCON: Expired</span>
+                          );
+                          return null;
+                        })()}
                       </div>
                     </td>
                     <td style={{ padding: '13px 16px' }}>
