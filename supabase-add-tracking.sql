@@ -31,14 +31,19 @@ CREATE INDEX IF NOT EXISTS idx_tracking_events_scanned_at ON public.tracking_eve
 ALTER TABLE public.tracking_links  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tracking_events ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "tracking_links_anon_read"
+DROP POLICY IF EXISTS "tracking_links_anon_read"     ON public.tracking_links;
+DROP POLICY IF EXISTS "tracking_links_auth_all"      ON public.tracking_links;
+DROP POLICY IF EXISTS "tracking_events_service_insert" ON public.tracking_events;
+DROP POLICY IF EXISTS "tracking_events_auth_read"    ON public.tracking_events;
+
+CREATE POLICY "tracking_links_anon_read"
   ON public.tracking_links FOR SELECT USING (true);
 
-CREATE POLICY IF NOT EXISTS "tracking_events_service_insert"
+CREATE POLICY "tracking_events_service_insert"
   ON public.tracking_events FOR INSERT WITH CHECK (true);
 
-CREATE POLICY IF NOT EXISTS "tracking_links_auth_all"
+CREATE POLICY "tracking_links_auth_all"
   ON public.tracking_links FOR ALL USING (true);
 
-CREATE POLICY IF NOT EXISTS "tracking_events_auth_read"
+CREATE POLICY "tracking_events_auth_read"
   ON public.tracking_events FOR SELECT USING (true);
