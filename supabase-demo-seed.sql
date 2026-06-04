@@ -57,7 +57,20 @@ BEGIN
   ALTER TABLE invoices  DROP CONSTRAINT IF EXISTS invoices_status_check;
   ALTER TABLE invoices  ADD  CONSTRAINT invoices_status_check CHECK (status IN ('draft','sent','acknowledged','paid','overdue','cancelled'));
   ALTER TABLE compliance_checks ADD COLUMN IF NOT EXISTS submitted_by TEXT;
-  ALTER TABLE notifications     ADD COLUMN IF NOT EXISTS body TEXT;
+
+  -- Ensure notifications table exists (create if missing, add columns if already there)
+  CREATE TABLE IF NOT EXISTS public.notifications (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    recipient_role TEXT NOT NULL,
+    type           TEXT NOT NULL,
+    title          TEXT NOT NULL,
+    body           TEXT,
+    link           TEXT,
+    read           BOOLEAN DEFAULT false,
+    created_at     TIMESTAMPTZ DEFAULT NOW()
+  );
+  ALTER TABLE notifications ADD COLUMN IF NOT EXISTS body TEXT;
+  ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link TEXT;
 
   CREATE INDEX IF NOT EXISTS idx_boards_owner_id     ON boards(owner_id);
   CREATE INDEX IF NOT EXISTS idx_campaigns_agency_id ON campaigns(agency_id);
