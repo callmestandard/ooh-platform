@@ -101,6 +101,11 @@ export default function AgencyInvoicesPage() {
   const [editingRef, setEditingRef] = useState<string | null>(null); // invoice id
   const [refValue, setRefValue] = useState('');
 
+  // Mark as paid modal
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [paidForm, setPaidForm] = useState({ paid_date: new Date().toISOString().slice(0, 10), payment_ref: '' });
+  const [savingPaid, setSavingPaid] = useState(false);
+
   // Filter
   const [filterCampaign, setFilterCampaign] = useState('');
 
@@ -108,6 +113,40 @@ export default function AgencyInvoicesPage() {
     setToast(msg); setToastErr(err);
     setTimeout(() => setToast(''), 3500);
   }, []);
+
+  async function markAsPaid() {
+    if (!markingPaidId) return;
+    setSavingPaid(true);
+    const inv = clientInvoices.find(i => i.id === markingPaidId);
+    const res = await fetch(`/api/invoices/${markingPaidId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'paid',
+        paid_at: new Date(paidForm.paid_date).toISOString(),
+        payment_ref: paidForm.payment_ref.trim() || null,
+      }),
+    });
+    if (res.ok) {
+      setClientInvoices(prev => prev.map(i =>
+        i.id === markingPaidId ? { ...i, status: 'paid' } : i
+      ));
+      showToast(`${inv?.invoice_number || 'Invoice'} marked as paid`);
+      await createNotification({
+        recipientRole: 'client',
+        type: 'invoice_paid',
+        title: 'Invoice settled',
+        body: inv
+          ? `${inv.invoice_number} (${fmtNaira(inv.total_amount)}) has been marked as paid by your agency`
+          : 'Your invoice has been marked as paid',
+        link: '/dashboard/client?tab=billing',
+      });
+      setMarkingPaidId(null);
+    } else {
+      showToast('Failed to update invoice', true);
+    }
+    setSavingPaid(false);
+  }
 
   async function saveClientRef(invoiceId: string) {
     const trimmed = refValue.trim();
@@ -583,6 +622,14 @@ export default function AgencyInvoicesPage() {
                                 Send to Client
                               </button>
                             )}
+                            {(inv.status === 'sent' || inv.status === 'overdue') && (
+                              <button
+                                onClick={() => { setMarkingPaidId(inv.id); setPaidForm({ paid_date: new Date().toISOString().slice(0, 10), payment_ref: '' }); }}
+                                style={{ fontSize: '0.75rem', fontWeight: 600, color: '#fff', background: '#1B4F8A', border: 'none', padding: '5px 10px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                              >
+                                ✓ Mark paid
+                              </button>
+                            )}
                             <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/invoice/${inv.id}`); showToast('Link copied'); }}
                               style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', background: '#F1F5F9', border: 'none', padding: '5px 10px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit' }}>
                               Copy link
@@ -746,6 +793,74 @@ export default function AgencyInvoicesPage() {
           </div>
         </div>
       )}
+
+      {/* ── Mark as Paid Modal ── */}
+      {markingPaidId && (() => {
+        const inv = clientInvoices.find(i => i.id === markingPaidId);
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+            onClick={e => { if (e.target === e.currentTarget) setMarkingPaidId(null); }}>
+            <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420, padding: 28 }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div>
+                  <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>Mark invoice as paid</h3>
+                  <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>{inv?.invoice_number} · {inv ? fmtNaira(inv.total_amount) : ''}</p>
+                </div>
+                <button onClick={() => setMarkingPaidId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '1.125rem', padding: 4 }}>✕</button>
+              </div>
+
+              {/* Client info strip */}
+              <div style={{ background: '#F8FAFC', border: '1px solid #E8EDF2', borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
+                <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>Client</p>
+                <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: 0 }}>{inv?.client_name}</p>
+                {inv?.client_invoice_number && (
+                  <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0' }}>Oracle ref: {inv.client_invoice_number}</p>
+                )}
+              </div>
+
+              {/* Form */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#374151', marginBottom: 5 }}>
+                  Payment date <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <input
+                  type="date"
+                  value={paidForm.paid_date}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={e => setPaidForm(f => ({ ...f, paid_date: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 11px', border: '1px solid #E2E8F0', borderRadius: 7, fontSize: '0.875rem', color: '#0F172A', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ marginBottom: 22 }}>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#374151', marginBottom: 5 }}>
+                  Bank / payment reference <span style={{ fontSize: '0.6875rem', color: '#94A3B8', fontWeight: 400 }}>(optional)</span>
+                </label>
+                <input
+                  value={paidForm.payment_ref}
+                  onChange={e => setPaidForm(f => ({ ...f, payment_ref: e.target.value }))}
+                  placeholder="e.g. GTB transfer ref, cheque no."
+                  style={{ width: '100%', padding: '8px 11px', border: '1px solid #E2E8F0', borderRadius: 7, fontSize: '0.875rem', color: '#0F172A', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setMarkingPaidId(null)}
+                  style={{ flex: 1, padding: '10px 0', borderRadius: 9, background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#64748B', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Cancel
+                </button>
+                <button
+                  onClick={markAsPaid}
+                  disabled={savingPaid || !paidForm.paid_date}
+                  style={{ flex: 2, padding: '10px 0', borderRadius: 9, background: savingPaid || !paidForm.paid_date ? '#94A3B8' : '#10B981', color: '#fff', fontWeight: 700, fontSize: '0.875rem', border: 'none', cursor: savingPaid || !paidForm.paid_date ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
+                >
+                  {savingPaid ? 'Saving…' : '✓ Confirm payment received'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Direct New Invoice Modal ── */}
       {showNewInvoice && (

@@ -166,6 +166,11 @@ export function ClientBillingTab({ campaignId, clientName }: Props) {
                           + Add Oracle ref
                         </button>
                       )}
+                      {inv.status === 'paid' && inv.paid_at && (
+                        <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#065F46', background: '#D1FAE5', display: 'inline-block', padding: '1px 7px', borderRadius: 4, margin: '3px 0 0' }}>
+                          Paid {new Date(inv.paid_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
+                      )}
                       {inv.notes && (
                         <p style={{ fontSize: '0.6875rem', color: '#7C3AED', margin: '4px 0 0', fontStyle: 'italic' }}>{inv.notes.slice(0, 60)}{inv.notes.length > 60 ? '…' : ''}</p>
                       )}
