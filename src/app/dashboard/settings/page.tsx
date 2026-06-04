@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDashboardRole } from '@/components/layout/DashboardLayout';
 import { ROLE_STORAGE_KEY, type DemoRole } from '@/lib/constants';
 import type { NotificationType } from '@/lib/notifications';
+import { supabase } from '@/lib/supabase';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ type BrandingData = {
   accentColor: string;
   companyWebsite: string;
   tagline: string;
+  logoUrl: string;
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -240,7 +242,10 @@ export default function SettingsPage() {
   const [inviting, setInviting] = useState(false);
 
   // Branding (agency only)
-  const [branding, setBranding] = useState<BrandingData>({ accentColor: '#1B4F8A', companyWebsite: '', tagline: '' });
+  const [branding, setBranding] = useState<BrandingData>({ accentColor: '#1B4F8A', companyWebsite: '', tagline: '', logoUrl: '' });
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [agencyProfileId, setAgencyProfileId] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -256,7 +261,25 @@ export default function SettingsPage() {
     setProfile(storedProfile);
     setNotifPrefs(loadJSON<NotifPrefs>(getStorageKey(role, 'notif_prefs'), notifPrefs));
     if (role === 'owner') setPayout(loadJSON<PayoutData>(getStorageKey(role, 'payout'), payout));
-    if (role === 'agency') setBranding(loadJSON<BrandingData>(getStorageKey(role, 'branding'), branding));
+    if (role === 'agency') {
+      setBranding(loadJSON<BrandingData>(getStorageKey(role, 'branding'), branding));
+      // Also load from Supabase as source of truth
+      supabase.auth.getUser().then(({ data: { user } }) => {
+        if (!user) return;
+        setAgencyProfileId(user.id);
+        supabase.from('profiles').select('brand_accent_color, brand_tagline, brand_website, brand_logo_url').eq('id', user.id).single().then(({ data }) => {
+          if (data) {
+            setBranding(prev => ({
+              ...prev,
+              accentColor: data.brand_accent_color || prev.accentColor,
+              tagline: data.brand_tagline || prev.tagline,
+              companyWebsite: data.brand_website || prev.companyWebsite,
+              logoUrl: data.brand_logo_url || prev.logoUrl,
+            }));
+          }
+        });
+      });
+    }
   }, [role]); // eslint-disable-line
 
   function showToast(msg: string) {
@@ -267,15 +290,38 @@ export default function SettingsPage() {
   async function handleSave() {
     if (!role) return;
     setSaving(true);
-    await new Promise(r => setTimeout(r, 600)); // simulate async
     saveJSON(getStorageKey(role, 'profile'), profile);
     saveJSON(getStorageKey(role, 'notif_prefs'), notifPrefs);
     if (role === 'owner') saveJSON(getStorageKey(role, 'payout'), payout);
-    if (role === 'agency') saveJSON(getStorageKey(role, 'branding'), branding);
+    if (role === 'agency') {
+      saveJSON(getStorageKey(role, 'branding'), branding);
+      // Persist to Supabase
+      if (agencyProfileId) {
+        await supabase.from('profiles').update({
+          brand_accent_color: branding.accentColor,
+          brand_tagline: branding.tagline || null,
+          brand_website: branding.companyWebsite || null,
+          brand_logo_url: branding.logoUrl || null,
+        }).eq('id', agencyProfileId);
+      }
+    }
     setSaving(false);
     setSaved(true);
     showToast('Settings saved successfully');
     setTimeout(() => setSaved(false), 3000);
+  }
+
+  async function uploadLogo(file: File) {
+    if (!agencyProfileId) return;
+    setUploadingLogo(true);
+    const ext = file.name.split('.').pop();
+    const path = `${agencyProfileId}/logo.${ext}`;
+    const { error } = await supabase.storage.from('agency-logos').upload(path, file, { upsert: true, contentType: file.type });
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage.from('agency-logos').getPublicUrl(path);
+      setBranding(b => ({ ...b, logoUrl: publicUrl }));
+    }
+    setUploadingLogo(false);
   }
 
   async function handleInvite() {
@@ -653,12 +699,42 @@ export default function SettingsPage() {
           {/* ── BRANDING (agency only) ── */}
           {activeTab === 'branding' && role === 'agency' && (
             <div style={{ animation: 'slideIn 0.2s ease' }}>
-              <SectionCard title="Agency branding" subtitle="Customise how your agency appears on POE decks, reports, and client-facing documents.">
+              <SectionCard title="Agency branding" subtitle="Customise how your agency appears on client reports, POE decks, and campaign exports.">
+                {/* Logo upload */}
+                <Field label="Agency logo" hint="Shown in the header of all client-facing reports. PNG or JPG, max 2MB.">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{ width: 72, height: 48, background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                      {branding.logoUrl ? (
+                        <img src={branding.logoUrl} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} alt="Logo" />
+                      ) : (
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: 'none' }}
+                        onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f); }} />
+                      <button onClick={() => logoInputRef.current?.click()} disabled={uploadingLogo}
+                        style={{ background: uploadingLogo ? '#F1F5F9' : '#fff', border: '1px solid #E2E8F0', borderRadius: 7, padding: '7px 14px', fontSize: '0.8125rem', fontWeight: 600, color: uploadingLogo ? '#94A3B8' : '#374151', cursor: uploadingLogo ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                        {uploadingLogo ? 'Uploading…' : branding.logoUrl ? 'Replace logo' : 'Upload logo'}
+                      </button>
+                      {branding.logoUrl && (
+                        <button onClick={() => setBranding(b => ({ ...b, logoUrl: '' }))}
+                          style={{ background: 'none', border: '1px solid #FECACA', borderRadius: 7, padding: '7px 12px', fontSize: '0.8125rem', color: '#DC2626', cursor: 'pointer', fontFamily: 'inherit' }}>
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <Input value={branding.logoUrl} onChange={v => setBranding(b => ({ ...b, logoUrl: v }))} placeholder="Or paste a logo URL" />
+                    </div>
+                  </div>
+                </Field>
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <Field label="Company website">
                     <Input value={branding.companyWebsite} onChange={v => setBranding(b => ({ ...b, companyWebsite: v }))} placeholder="https://youragency.ng" />
                   </Field>
-                  <Field label="Tagline" hint="Short phrase shown on POE decks and reports.">
+                  <Field label="Tagline" hint="Short phrase shown on reports and POE decks.">
                     <Input value={branding.tagline} onChange={v => setBranding(b => ({ ...b, tagline: v }))} placeholder="e.g. Nigeria's Premium OOH Partner" />
                   </Field>
                 </div>
@@ -703,18 +779,20 @@ export default function SettingsPage() {
                     <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: 0 }}>Preview — POE deck header</p>
                   </div>
                   <div style={{ padding: '20px 24px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      {branding.logoUrl ? (
+                        <img src={branding.logoUrl} style={{ height: 36, maxWidth: 120, objectFit: 'contain' }} alt="Logo preview" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      ) : (
                         <div style={{ width: 8, height: 32, background: branding.accentColor, borderRadius: 2 }} />
-                        <div>
-                          <p style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>{profile.company || 'Your Agency'}</p>
-                          <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>{branding.tagline || 'Proof of Execution Report'}</p>
-                        </div>
+                      )}
+                      <div>
+                        <p style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>{profile.company || 'Your Agency'}</p>
+                        <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>{branding.tagline || 'Campaign Performance Report'}</p>
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '0 0 2px', fontWeight: 600 }}>OOH Platform Nigeria</p>
-                      <p style={{ fontSize: '0.6875rem', color: '#CBD5E1', margin: 0 }}>{branding.companyWebsite || 'www.oohplatform.ng'}</p>
+                      <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '0 0 2px' }}>{branding.companyWebsite || 'www.youragency.ng'}</p>
+                      <p style={{ fontSize: '0.625rem', color: '#CBD5E1', margin: 0 }}>Powered by OOH Platform</p>
                     </div>
                   </div>
                   <div style={{ height: 4, background: branding.accentColor }} />
