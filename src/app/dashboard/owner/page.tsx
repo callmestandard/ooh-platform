@@ -23,6 +23,7 @@ type Board = {
   latitude: number | null;
   longitude: number | null;
   status: 'available' | 'booked' | 'maintenance';
+  rate_card: RateCardData | null;
   created_at: string;
 };
 
@@ -219,16 +220,20 @@ const DEFAULT_DURATIONS = [
   { months: 12, label: '12 months',discount: 0.15 },
 ];
 
-function loadRateCard(boardId: string, askingRate: number): RateCardData {
+function loadRateCard(board: Board): RateCardData {
+  // Supabase is the source of truth; fall back to localStorage cache, then defaults
+  if (board.rate_card) return board.rate_card;
   try {
-    const raw = localStorage.getItem(`ooh_rate_card_${boardId}`);
+    const raw = localStorage.getItem(`ooh_rate_card_${board.id}`);
     if (raw) return JSON.parse(raw) as RateCardData;
   } catch {}
-  return { baseRate: askingRate, seasons: DEFAULT_SEASONS.map(s => ({ ...s })), durations: DEFAULT_DURATIONS.map(d => ({ ...d })) };
+  return { baseRate: board.asking_rate, seasons: DEFAULT_SEASONS.map(s => ({ ...s })), durations: DEFAULT_DURATIONS.map(d => ({ ...d })) };
 }
 
-function saveRateCard(boardId: string, card: RateCardData) {
+async function saveRateCard(boardId: string, card: RateCardData) {
+  // Persist to both Supabase and localStorage
   localStorage.setItem(`ooh_rate_card_${boardId}`, JSON.stringify(card));
+  await supabase.from('boards').update({ rate_card: card }).eq('id', boardId);
 }
 
 function RateCardTab({ boards, formatNaira, onSave }: { boards: Board[]; formatNaira: (n: number) => string; onSave: () => void }) {
@@ -236,12 +241,13 @@ function RateCardTab({ boards, formatNaira, onSave }: { boards: Board[]; formatN
   const [card, setCard] = useState<RateCardData | null>(null);
   const [previewSeason, setPreviewSeason] = useState<string>('regular');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const selectedBoard = boards.find(b => b.id === selectedBoardId);
 
   useEffect(() => {
     if (selectedBoardId && selectedBoard) {
-      setCard(loadRateCard(selectedBoardId, selectedBoard.asking_rate));
+      setCard(loadRateCard(selectedBoard));
     }
   }, [selectedBoardId]);
 
@@ -263,9 +269,11 @@ function RateCardTab({ boards, formatNaira, onSave }: { boards: Board[]; formatN
     setCard(prev => prev ? ({ ...prev, durations: prev.durations.map(d => d.months === months ? { ...d, discount } : d) }) : prev);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!card) return;
-    saveRateCard(selectedBoardId, card);
+    setSaving(true);
+    await saveRateCard(selectedBoardId, card);
+    setSaving(false);
     setSaved(true);
     onSave();
     setTimeout(() => setSaved(false), 2000);
@@ -286,9 +294,10 @@ function RateCardTab({ boards, formatNaira, onSave }: { boards: Board[]; formatN
         </div>
         <button
           onClick={handleSave}
-          style={{ padding: '9px 20px', background: saved ? '#10B981' : '#7C3AED', color: '#fff', border: 'none', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.3s' }}
+          disabled={saving}
+          style={{ padding: '9px 20px', background: saved ? '#10B981' : saving ? '#A78BFA' : '#7C3AED', color: '#fff', border: 'none', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', transition: 'background 0.3s' }}
         >
-          {saved ? '✓ Saved' : 'Save rate card'}
+          {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save rate card'}
         </button>
       </div>
 
@@ -591,7 +600,7 @@ function OwnerContent() {
     if (!uid) { setBoards([]); setBookings([]); return; }
 
     const [boardsRes, bookingsRes, msgRes] = await Promise.all([
-      supabase.from('boards').select('*').eq('owner_id', uid).order('created_at', { ascending: false }),
+      supabase.from('boards').select('*, rate_card').eq('owner_id', uid).order('created_at', { ascending: false }),
       supabase
         .from('bookings')
         .select('*, boards!inner(name, city, format, owner_id), campaigns(name, client_name)')

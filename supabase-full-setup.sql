@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS public.boards (
   contact_phone  TEXT,
   photo_urls     TEXT[],
   notes          TEXT,
+  rate_card      JSONB,         -- owner's seasonal multipliers and duration discounts
   created_at     TIMESTAMPTZ DEFAULT NOW()
 );
 

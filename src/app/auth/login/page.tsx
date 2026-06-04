@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signInWithEmail, getSession, getCurrentProfile, DEMO_CREDENTIALS } from '@/lib/auth';
 import { ROLE_STORAGE_KEY, type DemoRole } from '@/lib/constants';
 import { supabase } from '@/lib/supabase';
@@ -33,8 +33,17 @@ const DEMO_ROLES: { role: DemoRole; label: string; sub: string; color: string; b
   { role: 'owner',  label: 'Board Owner',  sub: 'Board & earnings view',    color: '#7C3AED', bg: '#F5F3FF' },
 ];
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromParam = searchParams.get('from');
+
+  // Resolve where to send the user after login
+  function postLoginRedirect(role: string) {
+    if (fromParam === 'marketplace') return '/marketplace';
+    return `/dashboard/${role}`;
+  }
+
   const [email, setEmail]               = useState('');
   const [password, setPassword]         = useState('');
   const [loading, setLoading]           = useState(false);
@@ -50,10 +59,10 @@ export default function LoginPage() {
     getSession().then(session => {
       if (!session) return;
       getCurrentProfile().then(profile => {
-        if (profile) router.replace(`/dashboard/${profile.role}`);
+        if (profile) router.replace(postLoginRedirect(profile.role));
       });
     });
-  }, [router]);
+  }, [router]); // eslint-disable-line
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -77,7 +86,7 @@ export default function LoginPage() {
     const profile = await getCurrentProfile();
     setLoading(false);
     if (profile) {
-      router.push(`/dashboard/${profile.role}`);
+      router.push(postLoginRedirect(profile.role));
     } else {
       setError('Account found but no role assigned. Contact your administrator.');
     }
@@ -104,7 +113,7 @@ export default function LoginPage() {
       const profile = await getCurrentProfile();
       setDemoLoading(null);
       if (profile) {
-        router.push(`/dashboard/${profile.role}`);
+        router.push(postLoginRedirect(profile.role));
         return;
       }
     }
@@ -112,7 +121,7 @@ export default function LoginPage() {
     // Graceful fallback: demo accounts not in Supabase yet — use localStorage
     setDemoLoading(null);
     localStorage.setItem(ROLE_STORAGE_KEY, role);
-    router.push(`/dashboard/${role}`);
+    router.push(postLoginRedirect(role));
   }
 
   return (
@@ -419,5 +428,13 @@ export default function LoginPage() {
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
   );
 }
