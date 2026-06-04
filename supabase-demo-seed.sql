@@ -130,9 +130,9 @@ BEGIN
   (v_inv1,v_book2,'Victoria Island Gantry — 2 months','Victoria Island Gantry','gantry','Victoria Island, Lagos','2026-06-01','2026-07-31',2,1050000,2100000),
   (v_inv2,v_book1,'Lekki-Epe Expressway Unipole — 3 months','Lekki-Epe Expressway Unipole','unipole','Lekki, Lagos','2026-06-01','2026-08-31',3,765000,2295000),
   (v_inv2,v_book2,'Victoria Island Gantry — 2 months','Victoria Island Gantry','gantry','Victoria Island, Lagos','2026-06-01','2026-07-31',2,1050000,2100000),
-  (v_inv2,NULL,'Agency management fee (10%)','','','','','',1,439500,439500),
+  (v_inv2,NULL,'Agency management fee (10%)',NULL,NULL,NULL,NULL,NULL,1,439500,439500),
   (v_inv3,v_book5,'Ikorodu Road Bridge Panel — 2 months','Ikorodu Road Bridge Panel','bridge_panel','Lagos, Lagos','2026-06-15','2026-07-31',2,380000,760000),
-  (v_inv3,NULL,'Agency management fee (10%)','','','','','',1,76000,76000);
+  (v_inv3,NULL,'Agency management fee (10%)',NULL,NULL,NULL,NULL,NULL,1,76000,76000);
 
   -- 10. Notifications (with body text for rich display in the bell dropdown)
   INSERT INTO notifications (recipient_role, type, title, body, read, created_at, link) VALUES
