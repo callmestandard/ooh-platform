@@ -37,20 +37,6 @@ const NIGERIAN_STATES = [
   'Enugu', 'Kaduna', 'Kwara', 'Cross River',
 ];
 
-const MOCK_BOARDS: Board[] = [
-  { id: 'm1', name: 'Lekki Expressway Mega Billboard', address: 'Lekki-Epe Expressway, Lekki Phase 1', city: 'Lagos', state: 'Lagos', format: 'billboard', asking_rate: 1800000, width: 12, height: 5, illuminated: true,  face_count: 2, status: 'available' },
-  { id: 'm2', name: 'Victoria Island Junction Unipole', address: 'Ozumba Mbadiwe Ave, Victoria Island', city: 'Lagos', state: 'Lagos', format: 'unipole',   asking_rate: 2400000, width: 6,  height: 9, illuminated: true,  face_count: 1, status: 'available' },
-  { id: 'm3', name: 'Wuse 2 Bridge Panel', address: 'Aminu Kano Crescent, Wuse 2', city: 'Abuja', state: 'Abuja', format: 'bridge_panel', asking_rate: 1200000, width: 8, height: 3, illuminated: false, face_count: 2, status: 'available' },
-  { id: 'm4', name: 'Maitama CBD Gantry', address: 'Adetokunbo Ademola Crescent, Maitama', city: 'Abuja', state: 'Abuja', format: 'gantry', asking_rate: 3200000, width: 14, height: 4, illuminated: true, face_count: 2, status: 'booked' },
-  { id: 'm5', name: 'Port Harcourt GRA Wall Drape', address: 'Peter Odili Road, GRA Phase 2', city: 'Port Harcourt', state: 'Rivers', format: 'wall_drape', asking_rate: 950000, width: 10, height: 6, illuminated: false, face_count: 1, status: 'available' },
-  { id: 'm6', name: 'Oshodi Eko Bridge LED', address: 'Eko Bridge Approach, Oshodi', city: 'Lagos', state: 'Lagos', format: 'led', asking_rate: 4500000, width: 8, height: 5, illuminated: true, face_count: 1, status: 'available' },
-  { id: 'm7', name: 'Ikeja Along Billboard', address: 'International Airport Road, Ikeja', city: 'Lagos', state: 'Lagos', format: 'billboard', asking_rate: 1500000, width: 12, height: 5, illuminated: true, face_count: 2, status: 'available' },
-  { id: 'm8', name: 'Kano City Gate Unipole', address: 'Zoo Road, Nasarawa GRA', city: 'Kano', state: 'Kano', format: 'unipole', asking_rate: 700000, width: 6, height: 9, illuminated: false, face_count: 1, status: 'available' },
-  { id: 'm9', name: 'Ibadan Ring Road Gantry', address: 'Ring Road, Challenge', city: 'Ibadan', state: 'Oyo', format: 'gantry', asking_rate: 850000, width: 14, height: 4, illuminated: false, face_count: 2, status: 'maintenance' },
-  { id: 'm10', name: 'Onikan Stadium Billboard', address: 'Alfred Rewane Road, Onikan', city: 'Lagos', state: 'Lagos', format: 'billboard', asking_rate: 2100000, width: 12, height: 5, illuminated: true, face_count: 1, status: 'available' },
-  { id: 'm11', name: 'Garki Area 11 Bridge Panel', address: 'Moshood Abiola Way, Garki', city: 'Abuja', state: 'Abuja', format: 'bridge_panel', asking_rate: 1100000, width: 8, height: 3, illuminated: true, face_count: 2, status: 'available' },
-  { id: 'm12', name: 'Warri Effurun Roundabout', address: 'Effurun Roundabout, Warri', city: 'Warri', state: 'Delta', format: 'billboard', asking_rate: 620000, width: 10, height: 4, illuminated: false, face_count: 1, status: 'available' },
-];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -290,7 +276,7 @@ export default function MarketplacePage() {
         .select('id, name, address, city, state, format, asking_rate, width, height, illuminated, face_count, status')
         .order('created_at', { ascending: false });
 
-      setBoards(data && data.length > 0 ? data : MOCK_BOARDS);
+      setBoards((data as Board[]) || []);
       setLoading(false);
     }
     load();
@@ -316,7 +302,7 @@ export default function MarketplacePage() {
 
   function handleQuote() {
     setSelected(null);
-    router.push('/?from=marketplace');
+    router.push('/auth/login?from=marketplace');
   }
 
   return (
@@ -511,14 +497,33 @@ export default function MarketplacePage() {
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg>
             </div>
-            <p style={{ fontSize: '1rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No boards match your filters</p>
-            <p style={{ fontSize: '0.875rem', color: '#64748B', margin: '0 0 20px' }}>Try adjusting your search or clearing filters</p>
-            <button
-              onClick={() => { setSearch(''); setStateFilter('all'); setFormatFilter('all'); setStatusFilter('available'); }}
-              style={{ padding: '8px 18px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-            >
-              Clear all filters
-            </button>
+            {boards.length === 0 ? (
+              <>
+                <p style={{ fontSize: '1rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No boards listed yet</p>
+                <p style={{ fontSize: '0.875rem', color: '#64748B', margin: '0 0 24px', maxWidth: 360, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
+                  OOH Platform is Nigeria's billboard marketplace. Board owners list their inventory here; agencies browse and make offers.
+                </p>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <a href="/auth/login" style={{ padding: '10px 22px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>
+                    Sign in as agency →
+                  </a>
+                  <a href="/auth/login?role=owner" style={{ padding: '10px 22px', background: '#fff', color: '#1B4F8A', border: '1.5px solid #1B4F8A', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>
+                    List your board
+                  </a>
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: '1rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No boards match your filters</p>
+                <p style={{ fontSize: '0.875rem', color: '#64748B', margin: '0 0 20px' }}>Try adjusting your search or clearing filters</p>
+                <button
+                  onClick={() => { setSearch(''); setStateFilter('all'); setFormatFilter('all'); setStatusFilter('available'); }}
+                  style={{ padding: '8px 18px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  Clear all filters
+                </button>
+              </>
+            )}
           </div>
         )}
 
