@@ -15,6 +15,10 @@ type ComplianceCheck = {
   submitted_by: string | null;
   status: 'submitted' | 'verified' | 'flagged';
   notes: string | null;
+  ai_verdict: 'verified' | 'review' | 'flagged' | null;
+  ai_confidence: number | null;
+  ai_notes: string | null;
+  ai_verified_at: string | null;
   bookings: {
     id: string;
     start_date: string;
@@ -62,6 +66,8 @@ export default function CompliancePage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'upload' | 'history'>('overview');
   const [selectedCheck, setSelectedCheck] = useState<ComplianceCheck | null>(null);
   const [filterStatus, setFilterStatus] = useState('all');
+
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
   // Upload state
   const [uploadBookingId, setUploadBookingId] = useState('');
@@ -167,6 +173,38 @@ export default function CompliancePage() {
         : `${boardName} has been flagged — please review`,
       link: '/dashboard/client?tab=compliance',
     });
+  }
+
+  async function aiVerify(checkId: string) {
+    setVerifyingId(checkId);
+    try {
+      const res = await fetch('/api/compliance/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ compliance_check_id: checkId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Verification failed');
+      setChecks(prev => prev.map(c => c.id === checkId ? {
+        ...c,
+        ai_verdict: data.verdict,
+        ai_confidence: data.confidence,
+        ai_notes: data.summary,
+        ai_verified_at: new Date().toISOString(),
+      } : c));
+      if (selectedCheck?.id === checkId) {
+        setSelectedCheck(prev => prev ? {
+          ...prev,
+          ai_verdict: data.verdict,
+          ai_confidence: data.confidence,
+          ai_notes: data.summary,
+          ai_verified_at: new Date().toISOString(),
+        } : null);
+      }
+    } catch (err) {
+      console.error('AI verify:', err);
+    }
+    setVerifyingId(null);
   }
 
   const filtered = filterStatus === 'all' ? checks : checks.filter(c => c.status === filterStatus);
@@ -340,14 +378,25 @@ export default function CompliancePage() {
                         {check.submitted_by && ` · ${check.submitted_by}`}
                       </p>
                     </div>
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', gap: '5px',
-                      background: cfg.bg, color: cfg.text, padding: '4px 10px',
-                      borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, flexShrink: 0
-                    }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.dot }} />
-                      {cfg.label}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '5px',
+                        background: cfg.bg, color: cfg.text, padding: '4px 10px',
+                        borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, flexShrink: 0
+                      }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.dot }} />
+                        {cfg.label}
+                      </span>
+                      {check.ai_verdict && (
+                        <span style={{
+                          fontSize: '0.625rem', fontWeight: 700, padding: '2px 7px', borderRadius: 999, flexShrink: 0,
+                          background: check.ai_verdict === 'verified' ? '#D1FAE5' : check.ai_verdict === 'flagged' ? '#FEE2E2' : '#FEF3C7',
+                          color: check.ai_verdict === 'verified' ? '#065F46' : check.ai_verdict === 'flagged' ? '#991B1B' : '#92400E',
+                        }}>
+                          AI: {check.ai_verdict} {check.ai_confidence != null ? `${Math.round(check.ai_confidence * 100)}%` : ''}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {check.notes && (
                     <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '8px 0 0', fontStyle: 'italic' }}>
@@ -409,8 +458,58 @@ export default function CompliancePage() {
                   </div>
                 )}
 
+                {/* AI Verification section */}
+                {selectedCheck.photo_url && (
+                  <div style={{ marginTop: 12, background: '#F8FAFC', borderRadius: 8, padding: '10px 12px', border: '1px solid #E8EDF2' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: selectedCheck.ai_verdict ? 8 : 0 }}>
+                      <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em' }}>AI Verification</span>
+                      <button
+                        onClick={() => aiVerify(selectedCheck.id)}
+                        disabled={verifyingId === selectedCheck.id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 5,
+                          background: verifyingId === selectedCheck.id ? '#F1F5F9' : '#7C3AED',
+                          color: verifyingId === selectedCheck.id ? '#94A3B8' : '#fff',
+                          border: 'none', borderRadius: 6, padding: '5px 10px',
+                          fontSize: '0.6875rem', fontWeight: 700, cursor: verifyingId === selectedCheck.id ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        {verifyingId === selectedCheck.id ? (
+                          <>
+                            <span style={{ width: 10, height: 10, border: '1.5px solid #CBD5E1', borderTopColor: '#7C3AED', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                            Analysing…
+                          </>
+                        ) : (
+                          <>✦ {selectedCheck.ai_verdict ? 'Re-run AI' : 'Run AI check'}</>
+                        )}
+                      </button>
+                    </div>
+                    {selectedCheck.ai_verdict && (
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                          <span style={{
+                            fontSize: '0.6875rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                            background: selectedCheck.ai_verdict === 'verified' ? '#D1FAE5' : selectedCheck.ai_verdict === 'flagged' ? '#FEE2E2' : '#FEF3C7',
+                            color: selectedCheck.ai_verdict === 'verified' ? '#065F46' : selectedCheck.ai_verdict === 'flagged' ? '#991B1B' : '#92400E',
+                          }}>
+                            {selectedCheck.ai_verdict === 'verified' ? '✓ Verified' : selectedCheck.ai_verdict === 'flagged' ? '✕ Flagged' : '⚠ Needs review'}
+                          </span>
+                          {selectedCheck.ai_confidence != null && (
+                            <span style={{ fontSize: '0.625rem', color: '#94A3B8', fontWeight: 600 }}>
+                              {Math.round(selectedCheck.ai_confidence * 100)}% confidence
+                            </span>
+                          )}
+                        </div>
+                        {selectedCheck.ai_notes && (
+                          <p style={{ fontSize: '0.6875rem', color: '#475569', margin: 0, lineHeight: 1.5 }}>{selectedCheck.ai_notes}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {selectedCheck.status === 'submitted' && (
-                  <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
+                  <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
                     <button
                       onClick={() => updateStatus(selectedCheck.id, 'verified')}
                       style={{ flex: 1, background: '#ECFDF5', color: '#059669', border: '1px solid #A7F3D0', borderRadius: '8px', padding: '8px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
