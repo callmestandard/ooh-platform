@@ -35,6 +35,18 @@ function formatDate(d: string) {
   return new Date(d).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+async function fetchImageBuffer(url: string): Promise<{ buffer: Buffer; mime: string } | null> {
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (!resp.ok) return null;
+    const mime = resp.headers.get('content-type')?.split(';')[0] ?? 'image/jpeg';
+    const ab = await resp.arrayBuffer();
+    return { buffer: Buffer.from(ab), mime };
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { campaignId, format } = await req.json();
@@ -69,8 +81,18 @@ export async function POST(req: NextRequest) {
     const brand = getBrand(campaign.client_name || '');
     const generatedAt = new Date().toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' });
 
+    // Pre-fetch all compliance photos so generators can embed them synchronously
+    const photoBuffers: Record<string, { buffer: Buffer; mime: string } | null> = {};
+    await Promise.all(
+      Object.entries(compByBooking).map(async ([bookingId, comp]: [string, any]) => {
+        if (comp?.photo_url) {
+          photoBuffers[bookingId] = await fetchImageBuffer(comp.photo_url);
+        }
+      })
+    );
+
     if (format === 'pdf') {
-      const pdfBuffer = await generatePDF(campaign, bookings || [], compByBooking, brand, generatedAt);
+      const pdfBuffer = await generatePDF(campaign, bookings || [], compByBooking, brand, generatedAt, photoBuffers);
       return new NextResponse(pdfBuffer as unknown as BodyInit, {
         headers: {
           'Content-Type': 'application/pdf',
@@ -80,7 +102,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (format === 'pptx') {
-      const pptxBuffer = await generatePPTX(campaign, bookings || [], compByBooking, brand, generatedAt);
+      const pptxBuffer = await generatePPTX(campaign, bookings || [], compByBooking, brand, generatedAt, photoBuffers);
       return new NextResponse(pptxBuffer as unknown as BodyInit, {
         headers: {
           'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
@@ -98,7 +120,7 @@ export async function POST(req: NextRequest) {
 }
 
 // ── PDF Generation ──────────────────────────────────────────────────────────
-async function generatePDF(campaign: any, bookings: any[], compByBooking: Record<string, any>, brand: any, generatedAt: string): Promise<Buffer> {
+async function generatePDF(campaign: any, bookings: any[], compByBooking: Record<string, any>, brand: any, generatedAt: string, photoBuffers: Record<string, { buffer: Buffer; mime: string } | null> = {}): Promise<Buffer> {
   const PDFDocument = (await import('pdfkit')).default;
   const chunks: Buffer[] = [];
 
@@ -203,21 +225,26 @@ async function generatePDF(campaign: any, bookings: any[], compByBooking: Record
       const photoY = 90;
       const photoH = 340;
 
-      if (comp?.photo_url) {
+      const imgData = photoBuffers[booking.id];
+      if (comp?.photo_url && imgData) {
         try {
-          // Draw photo placeholder with URL note
-          // In production, you'd fetch the image buffer and use doc.image()
-          // For now draw a styled placeholder
-          doc.rect(40, photoY, W - 80, photoH).fill('#F1F5F9').fillOpacity(1)
-            .rect(40, photoY, W - 80, photoH).stroke('#E2E8F0').strokeOpacity(1).lineWidth(1);
-
-          doc.fontSize(11).font('Helvetica').fillColor('#94A3B8').fillOpacity(1)
-            .text('📸 Photo submitted', 40, photoY + photoH / 2 - 20, { width: W - 80, align: 'center' });
-          doc.fontSize(9).font('Helvetica').fillColor('#CBD5E1').fillOpacity(1)
-            .text(comp.photo_url, 40, photoY + photoH / 2 + 4, { width: W - 80, align: 'center' });
+          doc.image(imgData.buffer, 40, photoY, {
+            fit: [W - 80, photoH],
+            align: 'center',
+            valign: 'center',
+          });
         } catch {
+          // Fallback if image decode fails
           doc.rect(40, photoY, W - 80, photoH).fill('#F1F5F9').fillOpacity(1);
+          doc.fontSize(10).font('Helvetica').fillColor('#94A3B8').fillOpacity(1)
+            .text('Photo could not be loaded', 40, photoY + photoH / 2 - 10, { width: W - 80, align: 'center' });
         }
+      } else if (comp?.photo_url) {
+        // URL exists but fetch failed
+        doc.rect(40, photoY, W - 80, photoH).fill('#FEF9C3').fillOpacity(1)
+          .rect(40, photoY, W - 80, photoH).stroke('#FDE68A').strokeOpacity(1).lineWidth(1);
+        doc.fontSize(10).font('Helvetica').fillColor('#92400E').fillOpacity(1)
+          .text('Photo submitted — could not load for PDF', 40, photoY + photoH / 2 - 10, { width: W - 80, align: 'center' });
       } else {
         doc.rect(40, photoY, W - 80, photoH).fill('#F8FAFC').fillOpacity(1)
           .rect(40, photoY, W - 80, photoH).stroke('#E2E8F0').strokeOpacity(1).lineWidth(1);
@@ -268,7 +295,7 @@ async function generatePDF(campaign: any, bookings: any[], compByBooking: Record
 }
 
 // ── PPTX Generation ─────────────────────────────────────────────────────────
-async function generatePPTX(campaign: any, bookings: any[], compByBooking: Record<string, any>, brand: any, generatedAt: string): Promise<Buffer> {
+async function generatePPTX(campaign: any, bookings: any[], compByBooking: Record<string, any>, brand: any, generatedAt: string, photoBuffers: Record<string, { buffer: Buffer; mime: string } | null> = {}): Promise<Buffer> {
   const PptxGenJS = (await import('pptxgenjs')).default;
   const pptx = new PptxGenJS();
 
@@ -409,16 +436,34 @@ async function generatePPTX(campaign: any, bookings: any[], compByBooking: Recor
     const photoW = 7.8;
     const photoH = 4.2;
 
-    if (hasPhoto) {
-      // Photo placeholder — in production fetch image and use addImage
+    const imgData = photoBuffers[booking.id];
+    if (hasPhoto && imgData) {
+      try {
+        const dataUrl = `data:${imgData.mime};base64,${imgData.buffer.toString('base64')}`;
+        slide.addImage({
+          data: dataUrl,
+          x: photoX, y: photoY, w: photoW, h: photoH,
+          sizing: { type: 'contain', w: photoW, h: photoH },
+        });
+      } catch {
+        slide.addShape(pptx.ShapeType.rect, {
+          x: photoX, y: photoY, w: photoW, h: photoH,
+          fill: { color: 'F1F5F9' }, line: { color: 'E2E8F0', width: 1 },
+        });
+        slide.addText('Photo could not be embedded', {
+          x: photoX, y: photoY + photoH / 2 - 0.2, w: photoW, h: 0.4,
+          fontSize: 11, color: '94A3B8', align: 'center', fontFace: 'Calibri',
+        });
+      }
+    } else if (hasPhoto) {
+      // URL exists but fetch failed
       slide.addShape(pptx.ShapeType.rect, {
         x: photoX, y: photoY, w: photoW, h: photoH,
-        fill: { color: 'E2E8F0' },
-        line: { color: 'CBD5E1', width: 1 },
+        fill: { color: 'FEF9C3' }, line: { color: 'FDE68A', width: 1 },
       });
-      slide.addText('📸 Photo on file\n' + (comp?.photo_url?.slice(0, 60) + '...'), {
-        x: photoX, y: photoY + photoH / 2 - 0.4, w: photoW, h: 0.8,
-        fontSize: 11, color: '94A3B8', align: 'center', fontFace: 'Calibri',
+      slide.addText('📸 Photo on file — could not load for slide', {
+        x: photoX, y: photoY + photoH / 2 - 0.2, w: photoW, h: 0.4,
+        fontSize: 11, color: '92400E', align: 'center', fontFace: 'Calibri',
       });
     } else {
       slide.addShape(pptx.ShapeType.rect, {
