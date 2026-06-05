@@ -183,30 +183,56 @@ function SaveButton({ onClick, saving, saved }: { onClick: () => void; saving: b
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
 
-function Avatar({ name, role }: { name: string; role: DemoRole }) {
+function Avatar({ name, role, avatarUrl, onUpload, uploading }: {
+  name: string; role: DemoRole;
+  avatarUrl?: string | null;
+  onUpload?: () => void;
+  uploading?: boolean;
+}) {
   const roleColors: Record<DemoRole, string> = {
     agency: '#1B4F8A', client: '#059669', owner: '#7C3AED', admin: '#DC2626',
   };
   const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-      <div style={{
-        width: 72, height: 72, borderRadius: '50%',
-        background: roleColors[role], display: 'flex', alignItems: 'center',
-        justifyContent: 'center', fontSize: '1.5rem', fontWeight: 700, color: '#fff',
-        flexShrink: 0, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-      }}>
-        {initials || '??'}
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        {avatarUrl ? (
+          <img
+            src={avatarUrl}
+            alt={name}
+            style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}
+          />
+        ) : (
+          <div style={{
+            width: 72, height: 72, borderRadius: '50%',
+            background: roleColors[role], display: 'flex', alignItems: 'center',
+            justifyContent: 'center', fontSize: '1.5rem', fontWeight: 700, color: '#fff',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          }}>
+            {initials || '??'}
+          </div>
+        )}
+        {uploading && (
+          <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 20, height: 20, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+          </div>
+        )}
       </div>
       <div>
         <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>Profile photo</p>
-        <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '0 0 10px' }}>Avatar auto-generated from your name</p>
-        <button
-          disabled
-          style={{ fontSize: '0.75rem', fontWeight: 600, color: '#94A3B8', background: '#F1F5F9', border: 'none', padding: '6px 12px', borderRadius: 6, cursor: 'not-allowed', fontFamily: 'inherit' }}
-        >
-          Upload photo (coming soon)
-        </button>
+        <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '0 0 10px' }}>
+          {avatarUrl ? 'Your photo is shown across the platform.' : 'Auto-generated from your name — upload a photo to personalise.'}
+        </p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={onUpload}
+            disabled={uploading}
+            style={{ fontSize: '0.75rem', fontWeight: 600, color: uploading ? '#94A3B8' : '#1B4F8A', background: uploading ? '#F1F5F9' : '#EFF6FF', border: 'none', padding: '6px 12px', borderRadius: 6, cursor: uploading ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
+          >
+            {uploading ? 'Uploading…' : avatarUrl ? 'Change photo' : 'Upload photo'}
+          </button>
+          <p style={{ fontSize: '0.6875rem', color: '#CBD5E1', margin: '6px 0 0' }}>JPG, PNG or WebP · max 5 MB</p>
+        </div>
       </div>
     </div>
   );
@@ -256,6 +282,12 @@ export default function SettingsPage() {
   const [pwError, setPwError]       = useState('');
   const [pwSuccess, setPwSuccess]   = useState(false);
 
+  // Avatar
+  const [avatarUrl, setAvatarUrl]         = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
   // Load from localStorage on mount
   useEffect(() => {
     if (!role) return;
@@ -271,25 +303,42 @@ export default function SettingsPage() {
     setProfile(storedProfile);
     setNotifPrefs(loadJSON<NotifPrefs>(getStorageKey(role, 'notif_prefs'), notifPrefs));
     if (role === 'owner') setPayout(loadJSON<PayoutData>(getStorageKey(role, 'payout'), payout));
-    if (role === 'agency') {
-      setBranding(loadJSON<BrandingData>(getStorageKey(role, 'branding'), branding));
-      // Also load from Supabase as source of truth
-      supabase.auth.getUser().then(({ data: { user } }) => {
-        if (!user) return;
-        setAgencyProfileId(user.id);
-        supabase.from('profiles').select('brand_accent_color, brand_tagline, brand_website, brand_logo_url, erp_vendor_code').eq('id', user.id).single().then(({ data }) => {
-          if (data) {
-            setProfile(p => ({ ...p, erpVendorCode: data.erp_vendor_code || '' }));
+    // Load avatar + agency branding from Supabase for all roles
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      setProfileUserId(user.id);
+      supabase
+        .from('profiles')
+        .select('avatar_url, brand_accent_color, brand_tagline, brand_website, brand_logo_url, erp_vendor_code')
+        .eq('id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (!data) return;
+          const row = data as {
+            avatar_url?: string | null;
+            brand_accent_color?: string | null;
+            brand_tagline?: string | null;
+            brand_website?: string | null;
+            brand_logo_url?: string | null;
+            erp_vendor_code?: string | null;
+          };
+          if (row.avatar_url) setAvatarUrl(row.avatar_url);
+          if (role === 'agency') {
+            setAgencyProfileId(user.id);
+            setProfile(p => ({ ...p, erpVendorCode: row.erp_vendor_code || '' }));
             setBranding(prev => ({
               ...prev,
-              accentColor: data.brand_accent_color || prev.accentColor,
-              tagline: data.brand_tagline || prev.tagline,
-              companyWebsite: data.brand_website || prev.companyWebsite,
-              logoUrl: data.brand_logo_url || prev.logoUrl,
+              accentColor: row.brand_accent_color || prev.accentColor,
+              tagline: row.brand_tagline || prev.tagline,
+              companyWebsite: row.brand_website || prev.companyWebsite,
+              logoUrl: row.brand_logo_url || prev.logoUrl,
             }));
           }
         });
-      });
+    });
+
+    if (role === 'agency') {
+      setBranding(loadJSON<BrandingData>(getStorageKey(role, 'branding'), branding));
     }
   }, [role]); // eslint-disable-line
 
@@ -334,6 +383,31 @@ export default function SettingsPage() {
       setBranding(b => ({ ...b, logoUrl: publicUrl }));
     }
     setUploadingLogo(false);
+  }
+
+  async function uploadAvatar(file: File) {
+    if (!profileUserId) { showToast('Sign in to upload a photo'); return; }
+    if (file.size > 5 * 1024 * 1024) { showToast('Photo must be under 5 MB'); return; }
+    if (!file.type.startsWith('image/')) { showToast('Only image files allowed'); return; }
+
+    setUploadingAvatar(true);
+    const ext = file.name.split('.').pop() ?? 'jpg';
+    const path = `${profileUserId}/avatar.${ext}`;
+    const { error } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true, contentType: file.type });
+
+    if (error) {
+      showToast(`Upload failed: ${error.message}`);
+    } else {
+      const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+      // Cache-bust so the new image loads immediately
+      const busted = `${publicUrl}?t=${Date.now()}`;
+      setAvatarUrl(busted);
+      await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', profileUserId);
+      showToast('Profile photo updated');
+    }
+    setUploadingAvatar(false);
   }
 
   async function handleChangePassword() {
@@ -487,7 +561,20 @@ export default function SettingsPage() {
           {activeTab === 'profile' && (
             <div style={{ animation: 'slideIn 0.2s ease' }}>
               <SectionCard title="Your profile" subtitle="This information is visible to other users on the platform.">
-                <Avatar name={profile.displayName} role={role} />
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) uploadAvatar(f); e.target.value = ''; }}
+                />
+                <Avatar
+                  name={profile.displayName}
+                  role={role}
+                  avatarUrl={avatarUrl}
+                  onUpload={() => avatarInputRef.current?.click()}
+                  uploading={uploadingAvatar}
+                />
                 <div style={{ height: 1, background: '#F1F5F9', margin: '20px 0' }} />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <Field label="Display name">

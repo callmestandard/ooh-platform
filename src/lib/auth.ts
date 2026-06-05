@@ -64,6 +64,7 @@ export type UserProfile = {
   company_name: string | null;
   email: string;
   is_suspended?: boolean;
+  avatar_url?: string | null;
 };
 
 /** Credentials for the seeded demo accounts. */
@@ -94,7 +95,7 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
 
   const { data } = await supabase
     .from('profiles')
-    .select('id, role, full_name, company_name, is_suspended')
+    .select('id, role, full_name, company_name, is_suspended, avatar_url')
     .eq('id', session.user.id)
     .single();
 
@@ -115,7 +116,7 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
   }
 
   return {
-    ...(data as { id: string; role: DemoRole; full_name: string | null; company_name: string | null; is_suspended?: boolean }),
+    ...(data as { id: string; role: DemoRole; full_name: string | null; company_name: string | null; is_suspended?: boolean; avatar_url?: string | null }),
     email: session.user.email ?? '',
   };
 }
