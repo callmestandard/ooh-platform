@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signInWithEmail, getSession, getCurrentProfile, DEMO_CREDENTIALS } from '@/lib/auth';
+import { signInWithEmail, getSession, getCurrentProfile, signOut, DEMO_CREDENTIALS } from '@/lib/auth';
 import { ROLE_STORAGE_KEY, type DemoRole } from '@/lib/constants';
 import { supabase } from '@/lib/supabase';
 
@@ -37,6 +37,7 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromParam = searchParams.get('from');
+  const errorParam = searchParams.get('error');
 
   // Resolve where to send the user after login
   function postLoginRedirect(role: string) {
@@ -86,6 +87,11 @@ function LoginContent() {
     const profile = await getCurrentProfile();
     setLoading(false);
     if (profile) {
+      if (profile.is_suspended) {
+        await signOut();
+        setError('Your account has been suspended. Contact support to regain access.');
+        return;
+      }
       router.push(postLoginRedirect(profile.role));
     } else {
       setError('Account found but no role assigned. Contact your administrator.');
@@ -215,6 +221,16 @@ function LoginContent() {
               Enter your credentials to access your workspace
             </p>
           </div>
+
+          {errorParam === 'suspended' && (
+            <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '10px', padding: '12px 16px', marginBottom: '20px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <div>
+                <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#991B1B', margin: '0 0 2px' }}>Account suspended</p>
+                <p style={{ fontSize: '0.75rem', color: '#7F1D1D', margin: 0 }}>Your account has been suspended by an administrator. Contact support to regain access.</p>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSignIn} style={{ marginBottom: '24px' }}>
             <div style={{ marginBottom: '14px' }}>

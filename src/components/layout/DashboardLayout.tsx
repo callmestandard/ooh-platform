@@ -54,6 +54,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       if (session) {
         const profile = await getCurrentProfile();
         if (!cancelled && profile) {
+          if (profile.is_suspended) {
+            await signOut();
+            localStorage.removeItem(ROLE_STORAGE_KEY);
+            router.replace('/auth/login?error=suspended');
+            return;
+          }
           setRole(profile.role);
           setUserName(profile.full_name || profile.email);
           setRoleLabel(roleLabelMap[profile.role]);

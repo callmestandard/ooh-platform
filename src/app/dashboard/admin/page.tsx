@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { supabase } from '@/lib/supabase';
 import { formatNaira, formatDate } from '@/lib/utils';
+import type { ActivityEvent } from '@/lib/activity-log';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -19,6 +20,7 @@ type Board = {
   status: 'available' | 'booked' | 'maintenance';
   illuminated: boolean;
   face_count: number;
+  owner_id: string | null;
   created_at: string;
 };
 
@@ -43,6 +45,7 @@ type Campaign = {
   total_budget: number | null;
   start_date: string;
   end_date: string;
+  agency_id: string | null;
   created_at: string;
 };
 
@@ -62,6 +65,7 @@ type Profile = {
   role: string;
   company_name: string | null;
   created_at: string;
+  is_suspended?: boolean;
 };
 
 type AdminSettings = {
@@ -166,7 +170,9 @@ function AdminContent() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [compliance, setCompliance] = useState<ComplianceCheck[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [togglingUser, setTogglingUser] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
 
   // inventory filter
@@ -204,19 +210,36 @@ function AdminContent() {
   useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
-    const [bRes, bookRes, campRes, compRes, profRes] = await Promise.all([
+    const [bRes, bookRes, campRes, compRes, profRes, actRes] = await Promise.all([
       supabase.from('boards').select('*').order('created_at', { ascending: false }),
       supabase.from('bookings').select('*, boards(name, city, format), campaigns(name, client_name)').order('created_at', { ascending: false }),
       supabase.from('campaigns').select('*').order('created_at', { ascending: false }),
       supabase.from('compliance_checks').select('*').order('submitted_at', { ascending: false }),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+      supabase.from('activity_events').select('*').order('created_at', { ascending: false }).limit(50),
     ]);
     if (bRes.data) setBoards(bRes.data as Board[]);
     if (bookRes.data) setBookings(bookRes.data as unknown as Booking[]);
     if (campRes.data) setCampaigns(campRes.data as Campaign[]);
     if (compRes.data) setCompliance(compRes.data as ComplianceCheck[]);
     if (profRes.data && profRes.data.length > 0) setProfiles(profRes.data as Profile[]);
+    if (actRes.data) setActivityEvents(actRes.data as ActivityEvent[]);
     setLoading(false);
+  }
+
+  async function toggleUserSuspension(profileId: string, currentlySuspended: boolean) {
+    setTogglingUser(profileId);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_suspended: !currentlySuspended })
+      .eq('id', profileId);
+    if (error) {
+      showToast('Failed to update user', 'error');
+    } else {
+      setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, is_suspended: !currentlySuspended } : p));
+      showToast(!currentlySuspended ? 'User suspended' : 'User reactivated');
+    }
+    setTogglingUser(null);
   }
 
   async function verifyCompliance(id: string) {
@@ -267,23 +290,25 @@ function AdminContent() {
   bookings.forEach(b => { bookingByStatus[b.status] = (bookingByStatus[b.status] || 0) + 1; });
 
   // Users: real profiles + demo fallback
-  const displayUsers: { name: string; role: string; company: string; status: string; count: number; lastActive: string; email: string }[] =
+  const displayUsers: { id: string; name: string; role: string; company: string; status: string; count: number; lastActive: string; email: string; is_suspended: boolean }[] =
     profiles.length > 0
       ? profiles.map(p => ({
+          id: p.id,
           name: p.full_name || p.email || 'Unknown',
           role: p.role,
           company: p.company_name || '—',
-          status: 'active',
-          count: p.role === 'owner' ? boards.length : campaigns.length,
+          status: p.is_suspended ? 'suspended' : 'active',
+          count: p.role === 'owner' ? boards.filter(b => b.owner_id === p.id).length : campaigns.filter(c => c.agency_id === p.id).length,
           lastActive: timeAgo(p.created_at),
           email: p.email || '—',
+          is_suspended: !!p.is_suspended,
         }))
       : [
-          { name: 'Alex Okonkwo',  role: 'agency', company: 'MediaPro Lagos',    status: 'active',   count: campaigns.length, lastActive: '2h ago',  email: 'alex@mediapro.ng' },
-          { name: 'MTN Nigeria',   role: 'client', company: 'MTN Nigeria',        status: 'active',   count: campaigns.filter(c => c.status === 'active').length, lastActive: '1d ago', email: 'marketing@mtn.ng' },
-          { name: 'Alhaji Sule',   role: 'owner',  company: 'Sule Outdoor',       status: 'active',   count: boards.length,    lastActive: '3h ago',  email: 'sule@outdoor.ng' },
-          { name: 'Bola Adeyemi',  role: 'owner',  company: 'Adeyemi Signs',      status: 'active',   count: 0,                lastActive: '5d ago',  email: 'bola@adeyemi.ng' },
-          { name: 'Kemi Ade',      role: 'agency', company: 'Ade Media',          status: 'inactive', count: 0,                lastActive: '12d ago', email: 'kemi@ademedia.ng' },
+          { id: 'demo-1', name: 'Alex Okonkwo',  role: 'agency', company: 'MediaPro Lagos',    status: 'active',    count: campaigns.length, lastActive: '2h ago',  email: 'alex@mediapro.ng',    is_suspended: false },
+          { id: 'demo-2', name: 'MTN Nigeria',   role: 'client', company: 'MTN Nigeria',        status: 'active',    count: campaigns.filter(c => c.status === 'active').length, lastActive: '1d ago', email: 'marketing@mtn.ng', is_suspended: false },
+          { id: 'demo-3', name: 'Alhaji Sule',   role: 'owner',  company: 'Sule Outdoor',       status: 'active',    count: boards.length,    lastActive: '3h ago',  email: 'sule@outdoor.ng',     is_suspended: false },
+          { id: 'demo-4', name: 'Bola Adeyemi',  role: 'owner',  company: 'Adeyemi Signs',      status: 'active',    count: 0,                lastActive: '5d ago',  email: 'bola@adeyemi.ng',     is_suspended: false },
+          { id: 'demo-5', name: 'Kemi Ade',      role: 'agency', company: 'Ade Media',          status: 'suspended', count: 0,                lastActive: '12d ago', email: 'kemi@ademedia.ng',    is_suspended: true  },
         ];
 
   const filteredUsers = userRoleFilter === 'all' ? displayUsers : displayUsers.filter(u => u.role === userRoleFilter);
@@ -343,30 +368,43 @@ function AdminContent() {
     return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value: Math.round(value / 1000) }));
   })();
 
-  // Activity feed: merge bookings + campaigns + compliance sorted by date
-  const activityFeed = [
-    ...bookings.slice(0, 8).map(b => ({
-      type: 'booking' as const,
-      title: `Booking — ${b.boards?.name || 'Board'}`,
-      sub: `${b.campaigns?.name || 'Unknown campaign'} · ${b.status}`,
-      time: b.created_at,
-      dot: BOOKING_STATUS_CONFIG[b.status]?.dot || '#94A3B8',
-    })),
-    ...campaigns.slice(0, 5).map(c => ({
-      type: 'campaign' as const,
-      title: `Campaign — ${c.name}`,
-      sub: `${c.client_name || 'Unknown client'} · ${c.status}`,
-      time: c.created_at,
-      dot: '#1B4F8A',
-    })),
-    ...compliance.slice(0, 5).map(c => ({
-      type: 'compliance' as const,
-      title: `POE ${c.status === 'flagged' ? 'flagged' : c.status === 'verified' ? 'verified' : 'submitted'}`,
-      sub: `Booking ${c.booking_id.slice(0, 8)}...`,
-      time: c.submitted_at,
-      dot: c.status === 'flagged' ? '#EF4444' : c.status === 'verified' ? '#10B981' : '#F59E0B',
-    })),
-  ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 12);
+  const ACTION_DOT: Record<string, string> = {
+    'invoice.paid': '#10B981', 'invoice.compiled': '#8B5CF6', 'invoice.created': '#3B82F6',
+    'booking.requested': '#F59E0B', 'booking.mpo_raised': '#7C3AED', 'booking.status_changed': '#64748B',
+    'booking.approved_by_client': '#10B981', 'booking.declined_by_client': '#EF4444',
+    'compliance.submitted': '#F59E0B', 'compliance.verified': '#10B981', 'compliance.flagged': '#EF4444',
+    'campaign.sent_for_approval': '#1B4F8A', 'campaign.status_changed': '#64748B',
+    'invoice.erp_exported': '#7C3AED',
+  };
+
+  // Activity feed: real audit events if available, fall back to raw table derivation
+  const activityFeed = activityEvents.length > 0
+    ? activityEvents.slice(0, 12).map(ev => ({
+        title: ev.summary,
+        sub: [ev.actor_name || ev.actor_role || 'System', ev.entity_type].filter(Boolean).join(' · '),
+        time: ev.created_at,
+        dot: ACTION_DOT[ev.action] || '#94A3B8',
+      }))
+    : [
+        ...bookings.slice(0, 6).map(b => ({
+          title: `Booking — ${b.boards?.name || 'Board'}`,
+          sub: `${b.campaigns?.name || 'Unknown campaign'} · ${b.status}`,
+          time: b.created_at,
+          dot: BOOKING_STATUS_CONFIG[b.status]?.dot || '#94A3B8',
+        })),
+        ...campaigns.slice(0, 4).map(c => ({
+          title: `Campaign — ${c.name}`,
+          sub: `${c.client_name || 'Unknown client'} · ${c.status}`,
+          time: c.created_at,
+          dot: '#1B4F8A',
+        })),
+        ...compliance.slice(0, 4).map(c => ({
+          title: `POE ${c.status === 'flagged' ? 'flagged' : c.status === 'verified' ? 'verified' : 'submitted'}`,
+          sub: `Booking ${c.booking_id.slice(0, 8)}…`,
+          time: c.submitted_at,
+          dot: c.status === 'flagged' ? '#EF4444' : c.status === 'verified' ? '#10B981' : '#F59E0B',
+        })),
+      ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 12);
 
   // Filtered inventory
   const filteredBoards = invFilter === 'all' ? boards : boards.filter(b => b.status === invFilter);
@@ -889,17 +927,25 @@ function AdminContent() {
                     </td>
                     <td style={{ padding: '12px 16px', fontSize: '0.8125rem', color: '#475569' }}>{user.lastActive}</td>
                     <td style={{ padding: '12px 16px' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: user.status === 'active' ? '#ECFDF5' : '#F1F5F9', color: user.status === 'active' ? '#065F46' : '#475569', padding: '3px 9px', borderRadius: 999, fontSize: '0.6875rem', fontWeight: 600 }}>
-                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: user.status === 'active' ? '#10B981' : '#94A3B8' }} />
-                        {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: user.is_suspended ? '#FEF2F2' : '#ECFDF5', color: user.is_suspended ? '#991B1B' : '#065F46', padding: '3px 9px', borderRadius: 999, fontSize: '0.6875rem', fontWeight: 600 }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: user.is_suspended ? '#EF4444' : '#10B981' }} />
+                        {user.is_suspended ? 'Suspended' : 'Active'}
                       </span>
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        <button style={{ background: '#F1F5F9', color: '#475569', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit' }}>View</button>
-                        <button style={{ background: user.status === 'active' ? '#FEF2F2' : '#ECFDF5', color: user.status === 'active' ? '#991B1B' : '#065F46', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit' }}>
-                          {user.status === 'active' ? 'Suspend' : 'Activate'}
-                        </button>
+                        {!user.id.startsWith('demo-') && (
+                          <button
+                            onClick={() => toggleUserSuspension(user.id, user.is_suspended)}
+                            disabled={togglingUser === user.id}
+                            style={{ background: user.is_suspended ? '#ECFDF5' : '#FEF2F2', color: user.is_suspended ? '#065F46' : '#991B1B', border: 'none', cursor: togglingUser === user.id ? 'not-allowed' : 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit', opacity: togglingUser === user.id ? 0.6 : 1 }}
+                          >
+                            {togglingUser === user.id ? '…' : user.is_suspended ? 'Activate' : 'Suspend'}
+                          </button>
+                        )}
+                        {user.id.startsWith('demo-') && (
+                          <span style={{ fontSize: '0.6875rem', color: '#CBD5E1' }}>Demo user</span>
+                        )}
                       </div>
                     </td>
                   </tr>
