@@ -61,7 +61,7 @@ export async function POST(
   const email      = invoice.client_email || `invoice+${invoice.id.slice(0, 8)}@oohplatform.com`;
   const reference  = `${invoice.invoice_number}-${Date.now()}`;
   const baseUrl    = process.env.NEXT_PUBLIC_APP_URL || req.headers.get('origin') || 'http://localhost:3000';
-  const callbackUrl = `${baseUrl}/invoice/${invoice.id}?payment=done`;
+  const callbackUrl = `${baseUrl}/api/paystack/callback/${invoice.id}`;
 
   try {
     const psRes = await fetch('https://api.paystack.co/transaction/initialize', {

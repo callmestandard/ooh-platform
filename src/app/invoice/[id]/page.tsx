@@ -40,9 +40,10 @@ export default function PublicInvoicePage({ params, searchParams }: {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ payment?: string }>;
 }) {
-  const { id }      = use(params);
-  const sp          = use(searchParams);
-  const paymentDone = sp.payment === 'done';
+  const { id }        = use(params);
+  const sp            = use(searchParams);
+  const paymentDone   = sp.payment === 'done';
+  const paymentFailed = sp.payment === 'failed';
 
   const [invoice, setInvoice]   = useState<FullInvoice | null>(null);
   const [loading, setLoading]   = useState(true);
@@ -72,7 +73,7 @@ export default function PublicInvoicePage({ params, searchParams }: {
         if (data.mode === 'invoice_page') {
           showToast('This is the invoice page — share the URL with your client.');
         } else {
-          window.open(data.authorization_url, '_blank');
+          window.location.href = data.authorization_url;
         }
       }
     } catch (err) {
@@ -165,6 +166,17 @@ export default function PublicInvoicePage({ params, searchParams }: {
               {invoice.paid_at ? `Paid on ${fmtDate(invoice.paid_at)}` : 'Your payment has been confirmed.'}
               {invoice.payment_ref ? ` · Ref: ${invoice.payment_ref}` : ''}
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Payment failed banner ── */}
+      {paymentFailed && (
+        <div style={{ background: '#DC2626', padding: '14px 24px', display: 'flex', alignItems: 'center', gap: 12, animation: 'slideDown 0.3s both' }}>
+          <span style={{ fontSize: '1.25rem' }}>❌</span>
+          <div>
+            <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#fff', margin: 0 }}>Payment was not completed</p>
+            <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.8)', margin: 0 }}>Your card was not charged. Please try again or use a different payment method.</p>
           </div>
         </div>
       )}
