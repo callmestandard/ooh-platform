@@ -244,3 +244,87 @@ export async function emailNewBookingRequest(params: {
 
   await sendEmail(params.to, `Booking request from ${params.agencyName} — ${params.boardName}`, html);
 }
+
+export async function emailBookingAccepted(params: {
+  to: string;
+  agencyName: string;
+  ownerName: string;
+  boardName: string;
+  agreedRate: number;
+  bookingId: string;
+}) {
+  const amount = '₦' + Number(params.agreedRate).toLocaleString('en-NG');
+  const link   = `${APP_URL}/dashboard/agency/negotiations/${params.bookingId}`;
+
+  const html = emailWrap(
+    `Your booking for ${params.boardName} has been accepted`,
+    `<h1 style="font-size:22px;font-weight:800;color:#0F172A;margin:0 0 8px;">Booking accepted!</h1>
+     <p style="font-size:14px;color:#64748B;margin:0 0 24px;line-height:1.6;">Hi ${params.agencyName}, <strong>${params.ownerName}</strong> has accepted your booking request. The deal is agreed.</p>
+     <table cellpadding="0" cellspacing="0" style="width:100%;background:#ECFDF5;border-radius:10px;padding:16px 20px;margin:0 0 8px;border:1px solid #A7F3D0;">
+       <tbody>
+         ${metaRow('Board', params.boardName)}
+         ${metaRow('Owner', params.ownerName)}
+         ${metaRow('Agreed rate', `<span style="font-family:monospace;font-weight:700;">${amount}/mo</span>`)}
+         ${metaRow('Status', '<span style="color:#065F46;font-weight:700;">✓ AGREED</span>')}
+       </tbody>
+     </table>
+     ${btn('View Booking', link, '#059669')}`
+  );
+
+  await sendEmail(params.to, `Booking accepted — ${params.boardName} at ${amount}/mo`, html);
+}
+
+export async function emailBookingDeclined(params: {
+  to: string;
+  agencyName: string;
+  ownerName: string;
+  boardName: string;
+  bookingId: string;
+}) {
+  const link = `${APP_URL}/dashboard/agency/negotiations/${params.bookingId}`;
+
+  const html = emailWrap(
+    `Your booking request for ${params.boardName} was declined`,
+    `<h1 style="font-size:22px;font-weight:800;color:#0F172A;margin:0 0 8px;">Booking declined</h1>
+     <p style="font-size:14px;color:#64748B;margin:0 0 24px;line-height:1.6;">Hi ${params.agencyName}, <strong>${params.ownerName}</strong> has declined your booking request for <strong>${params.boardName}</strong>.</p>
+     <table cellpadding="0" cellspacing="0" style="width:100%;background:#FEF2F2;border-radius:10px;padding:16px 20px;margin:0 0 8px;border:1px solid #FECACA;">
+       <tbody>
+         ${metaRow('Board', params.boardName)}
+         ${metaRow('Owner', params.ownerName)}
+         ${metaRow('Status', '<span style="color:#991B1B;font-weight:700;">✗ DECLINED</span>')}
+       </tbody>
+     </table>
+     <p style="font-size:13px;color:#64748B;margin:16px 0 0;line-height:1.6;">You can browse other available boards on the marketplace or reach out to the owner directly.</p>
+     ${btn('Browse Available Boards', `${APP_URL}/marketplace`, '#64748B')}`
+  );
+
+  await sendEmail(params.to, `Booking declined — ${params.boardName}`, html);
+}
+
+export async function emailBookingCounterOffer(params: {
+  to: string;
+  agencyName: string;
+  ownerName: string;
+  boardName: string;
+  counterRate: number;
+  bookingId: string;
+}) {
+  const amount = '₦' + Number(params.counterRate).toLocaleString('en-NG');
+  const link   = `${APP_URL}/dashboard/agency/negotiations/${params.bookingId}`;
+
+  const html = emailWrap(
+    `Counter offer on ${params.boardName} — ${amount}/mo`,
+    `<h1 style="font-size:22px;font-weight:800;color:#0F172A;margin:0 0 8px;">Counter offer received</h1>
+     <p style="font-size:14px;color:#64748B;margin:0 0 24px;line-height:1.6;">Hi ${params.agencyName}, <strong>${params.ownerName}</strong> has sent a counter offer for <strong>${params.boardName}</strong>.</p>
+     <table cellpadding="0" cellspacing="0" style="width:100%;background:#EFF6FF;border-radius:10px;padding:16px 20px;margin:0 0 8px;border:1px solid #BFDBFE;">
+       <tbody>
+         ${metaRow('Board', params.boardName)}
+         ${metaRow('Owner', params.ownerName)}
+         ${metaRow('Counter rate', `<span style="font-family:monospace;font-weight:700;color:#1D4ED8;">${amount}/mo</span>`)}
+       </tbody>
+     </table>
+     ${btn('Respond to Offer', link)}`
+  );
+
+  await sendEmail(params.to, `Counter offer from ${params.ownerName} — ${params.boardName} at ${amount}/mo`, html);
+}

@@ -31,6 +31,7 @@ type Booking = {
     id: string;
     name: string;
     client_name: string;
+    agency_id: string | null;
   };
 };
 
@@ -137,7 +138,7 @@ export default function OwnerNegotiationDetailPage() {
   async function fetchBooking() {
     const { data } = await supabase
       .from('bookings')
-      .select('*, boards!bookings_board_id_fkey(*), campaigns!bookings_campaign_id_fkey(id, name, client_name)')
+      .select('*, boards!bookings_board_id_fkey(*), campaigns!bookings_campaign_id_fkey(id, name, client_name, agency_id)')
       .eq('id', id)
       .single();
     if (data) setBooking(data as unknown as Booking);
@@ -239,7 +240,7 @@ export default function OwnerNegotiationDetailPage() {
       });
     }
 
-    // Notify the agency
+    // Notify the agency (in-app)
     if (actionMode === 'accept') {
       await createNotification({ recipientRole: 'agency', type: 'offer_accepted', title: `Owner accepted — deal agreed!`, body: `${boardName} at ${formatNaira(booking.offered_rate)}/month`, link: `/dashboard/agency/negotiations/${booking.id}` });
     } else if (actionMode === 'decline') {
@@ -248,6 +249,25 @@ export default function OwnerNegotiationDetailPage() {
       await createNotification({ recipientRole: 'agency', type: 'counter_offer', title: 'Owner sent a counter offer', body: `${formatNaira(parseFloat(counterRate))}/month for ${boardName}`, link: `/dashboard/agency/negotiations/${booking.id}` });
     } else {
       await createNotification({ recipientRole: 'agency', type: 'message', title: 'New message from board owner', body: content.slice(0, 80), link: `/dashboard/agency/negotiations/${booking.id}` });
+    }
+
+    // Email the agency (fire-and-forget)
+    const agencyId = booking.campaigns?.agency_id;
+    if (agencyId) {
+      const { actorId: ownerId } = await getActivityActor();
+      if (actionMode === 'accept') {
+        fetch('/api/notify/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'booking_accepted', agencyId, ownerId, boardName, agreedRate: booking.offered_rate, bookingId: booking.id }),
+        }).catch(() => {});
+      } else if (actionMode === 'decline') {
+        fetch('/api/notify/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'booking_declined', agencyId, ownerId, boardName, bookingId: booking.id }),
+        }).catch(() => {});
+      } else if (actionMode === 'counter') {
+        fetch('/api/notify/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'booking_counter_offer', agencyId, ownerId, boardName, counterRate: parseFloat(counterRate), bookingId: booking.id }),
+        }).catch(() => {});
+      }
     }
 
     await fetchBooking();

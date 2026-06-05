@@ -4,6 +4,9 @@ import {
   emailPlanSentForApproval,
   emailPlanApproved,
   emailNewBookingRequest,
+  emailBookingAccepted,
+  emailBookingDeclined,
+  emailBookingCounterOffer,
 } from '@/lib/email';
 
 export const runtime = 'nodejs';
@@ -85,6 +88,57 @@ export async function POST(req: NextRequest) {
         ]);
         if (ownerEmail) {
           await emailNewBookingRequest({ to: ownerEmail, ownerName, boardName, agencyName, campaignName, rate, bookingId });
+        }
+        break;
+      }
+
+      case 'booking_accepted': {
+        // Owner accepted agency's booking request
+        // body: { type, agencyId, ownerId, boardName, agreedRate, bookingId }
+        const { agencyId, ownerId, boardName, agreedRate, bookingId } = body as unknown as {
+          agencyId: string; ownerId: string; boardName: string; agreedRate: number; bookingId: string;
+        };
+        const [agencyEmail, agencyName, ownerName] = await Promise.all([
+          getUserEmail(agencyId),
+          getProfileName(agencyId),
+          getProfileName(ownerId),
+        ]);
+        if (agencyEmail) {
+          await emailBookingAccepted({ to: agencyEmail, agencyName, ownerName, boardName, agreedRate, bookingId });
+        }
+        break;
+      }
+
+      case 'booking_declined': {
+        // Owner declined agency's booking request
+        // body: { type, agencyId, ownerId, boardName, bookingId }
+        const { agencyId, ownerId, boardName, bookingId } = body as unknown as {
+          agencyId: string; ownerId: string; boardName: string; bookingId: string;
+        };
+        const [agencyEmail, agencyName, ownerName] = await Promise.all([
+          getUserEmail(agencyId),
+          getProfileName(agencyId),
+          getProfileName(ownerId),
+        ]);
+        if (agencyEmail) {
+          await emailBookingDeclined({ to: agencyEmail, agencyName, ownerName, boardName, bookingId });
+        }
+        break;
+      }
+
+      case 'booking_counter_offer': {
+        // Owner sent a counter offer to agency
+        // body: { type, agencyId, ownerId, boardName, counterRate, bookingId }
+        const { agencyId, ownerId, boardName, counterRate, bookingId } = body as unknown as {
+          agencyId: string; ownerId: string; boardName: string; counterRate: number; bookingId: string;
+        };
+        const [agencyEmail, agencyName, ownerName] = await Promise.all([
+          getUserEmail(agencyId),
+          getProfileName(agencyId),
+          getProfileName(ownerId),
+        ]);
+        if (agencyEmail) {
+          await emailBookingCounterOffer({ to: agencyEmail, agencyName, ownerName, boardName, counterRate, bookingId });
         }
         break;
       }
