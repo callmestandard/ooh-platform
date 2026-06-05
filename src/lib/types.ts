@@ -103,10 +103,19 @@ export interface Invoice {
   payment_ref?: string
   payment_url?: string
   client_invoice_number?: string | null
+  wht_rate?: number
+  currency?: string
   notes?: string
   created_at: string
   // joined
-  campaign?: { id: string; name: string }
+  campaign?: {
+    id: string
+    name: string
+    erp_system?: string | null
+    client_cost_centre?: string | null
+    payment_terms?: string | null
+    agency_id?: string | null
+  }
   items?: InvoiceItem[]
 }
 

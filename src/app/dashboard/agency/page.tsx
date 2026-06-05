@@ -23,6 +23,16 @@ type Booking = {
   campaigns: { name: string };
 };
 
+type InvoiceSummary = {
+  id: string;
+  invoice_number: string;
+  client_name: string;
+  status: string;
+  total_amount: number;
+  due_date: string | null;
+  paid_at: string | null;
+};
+
 function StatCard({ label, value, bar, sub }: { label: string; value: string; bar: string; sub?: string }) {
   return (
     <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', padding: '18px 20px' }}>
@@ -60,6 +70,7 @@ export default function AgencyDashboardPage() {
   const router = useRouter();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
   const [boardCount, setBoardCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -70,20 +81,35 @@ export default function AgencyDashboardPage() {
     const uid = session?.user?.id;
     if (!uid) { setLoading(false); return; }
 
-    const [campRes, bookRes, boardRes] = await Promise.all([
+    const [campRes, bookRes, boardRes, invRes] = await Promise.all([
       supabase.from('campaigns').select('*').eq('agency_id', uid).order('created_at', { ascending: false }),
       supabase.from('bookings').select('*, boards(name, city), campaigns!inner(name, agency_id)').eq('campaigns.agency_id', uid).order('created_at', { ascending: false }).limit(5),
       supabase.from('boards').select('id', { count: 'exact', head: true }),
+      supabase.from('invoices').select('id, invoice_number, client_name, status, total_amount, due_date, paid_at')
+        .eq('invoice_type', 'client').neq('status', 'cancelled').order('created_at', { ascending: false }).limit(50),
     ]);
     if (campRes.data) setCampaigns(campRes.data as Campaign[]);
     if (bookRes.data) setBookings(bookRes.data as unknown as Booking[]);
     if (boardRes.count !== null) setBoardCount(boardRes.count);
+    if (invRes.data) setInvoices(invRes.data as InvoiceSummary[]);
     setLoading(false);
   }
 
-  const activeCampaigns = campaigns.filter(c => c.status === 'active').length;
-  const totalBudget = campaigns.reduce((s, c) => s + (c.total_budget || 0), 0);
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  const activeCampaigns    = campaigns.filter(c => c.status === 'active').length;
   const pendingNegotiations = bookings.filter(b => b.status === 'pending').length;
+
+  const overdueInvoices    = invoices.filter(i =>
+    i.status !== 'paid' && i.due_date && new Date(i.due_date) < now
+  );
+  const unpaidInvoices     = invoices.filter(i => ['draft', 'sent', 'overdue'].includes(i.status));
+  const outstandingTotal   = unpaidInvoices.reduce((s, i) => s + i.total_amount, 0);
+  const paidThisMonth      = invoices
+    .filter(i => i.status === 'paid' && i.paid_at?.startsWith(thisMonth))
+    .reduce((s, i) => s + i.total_amount, 0);
+  const recentUnpaid       = unpaidInvoices.slice(0, 4);
 
   if (loading) {
     return (
@@ -143,13 +169,17 @@ export default function AgencyDashboardPage() {
             </div>
             <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
             <div style={{ textAlign: 'center' }}>
-              <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#10B981', fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em' }}>{boardCount}</p>
-              <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Boards</p>
+              <p style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em', color: pendingNegotiations > 0 ? '#F59E0B' : '#94A3B8' }}>{pendingNegotiations}</p>
+              <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pending</p>
             </div>
             <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
             <div style={{ textAlign: 'center' }}>
-              <p style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em', color: pendingNegotiations > 0 ? '#F59E0B' : '#94A3B8' }}>{pendingNegotiations}</p>
-              <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pending</p>
+              <p style={{ fontSize: '1.5rem', fontWeight: 800, fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em', color: overdueInvoices.length > 0 ? '#EF4444' : '#10B981' }}>
+                {overdueInvoices.length > 0 ? overdueInvoices.length : paidThisMonth > 0 ? formatNaira(paidThisMonth) : '—'}
+              </p>
+              <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                {overdueInvoices.length > 0 ? 'Overdue' : 'Paid / mo'}
+              </p>
             </div>
           </div>
           <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
@@ -169,12 +199,36 @@ export default function AgencyDashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.75rem' }}>
-        <StatCard label="Active campaigns" value={String(activeCampaigns)} bar="#1B4F8A" sub={`${campaigns.length} total`} />
-        <StatCard label="Boards in inventory" value={String(boardCount)} bar="#10B981" sub="Across Nigeria" />
-        <StatCard label="Pending negotiations" value={String(pendingNegotiations)} bar="#F59E0B" sub="Awaiting response" />
-        <StatCard label="Total budget" value={formatNaira(totalBudget)} bar="#8B5CF6" sub="All campaigns" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.75rem' }}>
+        <StatCard label="Active campaigns"      value={String(activeCampaigns)}        bar="#1B4F8A" sub={`${campaigns.length} total`} />
+        <StatCard label="Pending negotiations"  value={String(pendingNegotiations)}    bar="#F59E0B" sub="Awaiting response" />
+        <StatCard label="Outstanding invoices"  value={outstandingTotal > 0 ? formatNaira(outstandingTotal) : '₦0'} bar={overdueInvoices.length > 0 ? '#EF4444' : '#94A3B8'} sub={`${unpaidInvoices.length} unpaid`} />
+        <StatCard label="Collected this month"  value={paidThisMonth > 0 ? formatNaira(paidThisMonth) : '₦0'}      bar="#10B981" sub="Paid invoices" />
       </div>
+
+      {/* Overdue alert banner */}
+      {overdueInvoices.length > 0 && (
+        <div
+          onClick={() => router.push('/dashboard/agency/invoices')}
+          style={{
+            background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
+            padding: '11px 16px', marginBottom: '1.25rem',
+            display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
+          }}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <p style={{ fontSize: '0.8125rem', color: '#991B1B', margin: 0, fontWeight: 600 }}>
+            {overdueInvoices.length} invoice{overdueInvoices.length !== 1 ? 's' : ''} overdue —{' '}
+            <span style={{ fontWeight: 400 }}>
+              {formatNaira(overdueInvoices.reduce((s, i) => s + i.total_amount, 0))} outstanding
+            </span>
+          </p>
+          <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#EF4444', fontWeight: 600 }}>View →</span>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '16px' }}>
         {/* Campaigns table */}
@@ -279,35 +333,86 @@ export default function AgencyDashboardPage() {
             ))}
           </div>
 
+          {/* Invoice payments card */}
+          <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid #F1F5F9' }}>
+              <h2 style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: 0 }}>Invoices</h2>
+              <button onClick={() => router.push('/dashboard/agency/invoices')}
+                style={{ fontSize: '0.75rem', color: '#1B4F8A', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                View all →
+              </button>
+            </div>
+
+            {/* Financial summary strip */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid #F1F5F9' }}>
+              {[
+                { label: 'Outstanding', value: formatNaira(outstandingTotal), color: outstandingTotal > 0 ? '#1B4F8A' : '#94A3B8' },
+                { label: 'Overdue',     value: overdueInvoices.length > 0 ? formatNaira(overdueInvoices.reduce((s,i) => s + i.total_amount, 0)) : '—', color: overdueInvoices.length > 0 ? '#EF4444' : '#94A3B8' },
+                { label: 'This month',  value: paidThisMonth > 0 ? formatNaira(paidThisMonth) : '—', color: paidThisMonth > 0 ? '#10B981' : '#94A3B8' },
+              ].map((s, idx) => (
+                <div key={s.label} style={{ padding: '10px 12px', borderRight: idx < 2 ? '1px solid #F1F5F9' : 'none', textAlign: 'center' }}>
+                  <p style={{ fontSize: '0.5625rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 3px' }}>{s.label}</p>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 700, color: s.color, fontFamily: 'monospace', margin: 0, letterSpacing: '-0.02em' }}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Recent unpaid invoices */}
+            {recentUnpaid.length === 0 ? (
+              <div style={{ padding: '20px', textAlign: 'center' }}>
+                <p style={{ fontSize: '0.8125rem', color: '#10B981', fontWeight: 600, margin: 0 }}>All invoices settled</p>
+              </div>
+            ) : recentUnpaid.map((inv, i) => {
+              const isOver = inv.due_date && new Date(inv.due_date) < now && inv.status !== 'paid';
+              return (
+                <div key={inv.id}
+                  onClick={() => router.push(`/dashboard/agency/invoices/${inv.id}`)}
+                  style={{
+                    padding: '10px 14px', borderBottom: i < recentUnpaid.length - 1 ? '1px solid #F8FAFC' : 'none',
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                  }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#F5F8FF'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#0F172A', margin: '0 0 1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {inv.client_name}
+                    </p>
+                    <p style={{ fontSize: '0.6875rem', color: isOver ? '#EF4444' : '#94A3B8', margin: 0, fontWeight: isOver ? 600 : 400 }}>
+                      {inv.invoice_number}{inv.due_date ? ` · due ${new Date(inv.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}
+                      {isOver ? ' · OVERDUE' : ''}
+                    </p>
+                  </div>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', fontFamily: 'monospace', flexShrink: 0 }}>
+                    {formatNaira(inv.total_amount)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
           {/* Quick actions */}
           <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', padding: '14px 16px' }}>
-            <h2 style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 12px' }}>Quick actions</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <h2 style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 10px' }}>Quick actions</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               {[
-                { label: 'Browse boards map', sub: 'Find & book locations', path: '/dashboard/agency/boards-map', color: '#1B4F8A' },
-                { label: 'Invoice management', sub: 'Receive, compile & send invoices', path: '/dashboard/agency/invoices', color: '#F59E0B' },
-                { label: 'Upload compliance proof', sub: 'Submit proof of posting', path: '/dashboard/agency/compliance', color: '#10B981' },
-                { label: 'View reports', sub: 'Performance analytics', path: '/dashboard/agency/reports', color: '#8B5CF6' },
-              ].map(({ label, sub, path, color }) => (
-                <button
-                  key={path}
-                  onClick={() => router.push(path)}
+                { label: 'Browse boards map',     path: '/dashboard/agency/boards-map',  color: '#1B4F8A' },
+                { label: 'Upload compliance proof', path: '/dashboard/agency/compliance', color: '#10B981' },
+                { label: 'View reports',           path: '/dashboard/agency/reports',     color: '#8B5CF6' },
+              ].map(({ label, path, color }) => (
+                <button key={path} onClick={() => router.push(path)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '10px 12px', background: '#F8FAFC',
+                    padding: '9px 11px', background: '#F8FAFC',
                     border: '1px solid #F1F5F9', borderRadius: '8px',
-                    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-                    transition: 'all 0.15s',
+                    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', transition: 'all 0.15s',
                   }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = color; (e.currentTarget as HTMLElement).style.background = '#fff'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#F1F5F9'; (e.currentTarget as HTMLElement).style.background = '#F8FAFC'; }}
                 >
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                  <div>
-                    <p style={{ fontSize: '0.8125rem', fontWeight: 500, color: '#0F172A', margin: 0 }}>{label}</p>
-                    <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>{sub}</p>
-                  </div>
-                  <svg style={{ marginLeft: 'auto', color: '#CBD5E1' }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                  <p style={{ fontSize: '0.8125rem', fontWeight: 500, color: '#0F172A', margin: 0 }}>{label}</p>
+                  <svg style={{ marginLeft: 'auto', color: '#CBD5E1' }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6"/>
                   </svg>
                 </button>

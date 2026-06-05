@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { getActivityActor, logActivity } from '@/lib/activity-log';
 
 type Board = {
   id: string;
@@ -35,9 +36,49 @@ const FORMAT_LABELS: Record<string, string> = {
   bridge_panel: 'Bridge Panel', wall_drape: 'Wall Drape',
 };
 
+const MONO: React.CSSProperties = {
+  fontFamily: "'JetBrains Mono', monospace",
+  fontVariantNumeric: 'tabular-nums',
+};
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '9px 12px',
+  border: '1px solid #E2E8F0',
+  borderRadius: 8,
+  fontSize: '0.875rem',
+  color: '#0F172A',
+  outline: 'none',
+  fontFamily: 'inherit',
+  background: '#fff',
+  boxSizing: 'border-box',
+  transition: 'border-color 0.15s, box-shadow 0.15s',
+};
+
+function onInputFocus(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
+  e.currentTarget.style.borderColor = '#1B4F8A';
+  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(27, 79, 138, 0.08)';
+}
+
+function onInputBlur(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
+  e.currentTarget.style.borderColor = '#E2E8F0';
+  e.currentTarget.style.boxShadow = 'none';
+}
+
 function formatNaira(amount?: number | null) {
   if (!amount) return '—';
   return '₦' + Number(amount).toLocaleString('en-NG');
+}
+
+function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: 6 }}>
+        {label}{required && <span style={{ color: '#F87171', marginLeft: 2 }}>*</span>}
+      </label>
+      {children}
+    </div>
+  );
 }
 
 export default function BookingRequestPanel({ board, onClose, onSuccess }: Props) {
@@ -55,7 +96,6 @@ export default function BookingRequestPanel({ board, onClose, onSuccess }: Props
 
   useEffect(() => {
     fetchCampaigns();
-    // Default dates: 7 days from now, 37 days from now
     const start = new Date();
     start.setDate(start.getDate() + 7);
     const end = new Date();
@@ -83,7 +123,7 @@ export default function BookingRequestPanel({ board, onClose, onSuccess }: Props
 
     setSubmitting(true);
 
-    const { error: insertError } = await supabase.from('bookings').insert({
+    const { data: newBooking, error: insertError } = await supabase.from('bookings').insert({
       campaign_id: selectedCampaign,
       board_id: board.id,
       offered_rate: offeredRate,
@@ -91,7 +131,7 @@ export default function BookingRequestPanel({ board, onClose, onSuccess }: Props
       start_date: startDate,
       end_date: endDate,
       notes: notes || null,
-    });
+    }).select('id').single();
 
     if (insertError) {
       console.error(insertError);
@@ -100,6 +140,17 @@ export default function BookingRequestPanel({ board, onClose, onSuccess }: Props
       return;
     }
 
+    const actor = await getActivityActor();
+    await logActivity({
+      entityType: 'booking',
+      entityId: newBooking!.id,
+      campaignId: selectedCampaign,
+      action: 'booking.requested',
+      summary: `Booking request sent for ${board.name} at ₦${offeredRate.toLocaleString('en-NG')}/mo`,
+      ...actor,
+      metadata: { board_id: board.id, start_date: startDate, end_date: endDate },
+    });
+
     setSubmitted(true);
     setSubmitting(false);
     setTimeout(() => {
@@ -107,248 +158,387 @@ export default function BookingRequestPanel({ board, onClose, onSuccess }: Props
     }, 2000);
   }
 
-  const discount = board.asking_rate
+  const hasValidDates = startDate && endDate && new Date(endDate) > new Date(startDate);
+  const durationDays = hasValidDates
+    ? Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+  const durationMonths = hasValidDates
+    ? Math.ceil(durationDays / 30)
+    : 0;
+
+  const discountPct = board.asking_rate && offeredRate > 0
     ? Math.round(((board.asking_rate - offeredRate) / board.asking_rate) * 100)
     : 0;
 
+  const isBelowAsking = board.asking_rate ? offeredRate < board.asking_rate : false;
+  const isAtOrAboveAsking = board.asking_rate ? offeredRate >= board.asking_rate : false;
+
+  const showDealPreview = hasValidDates && offeredRate > 0;
+  const totalCost = offeredRate * durationMonths;
+  const askingTotal = board.asking_rate ? board.asking_rate * durationMonths : 0;
+  const savingsTotal = askingTotal > 0 ? askingTotal - totalCost : 0;
+
   if (submitted) {
     return (
-      <div className="w-80 flex-shrink-0 bg-white border-l border-gray-200 flex flex-col items-center justify-center gap-4 p-8 text-center">
-        <div className="w-14 h-14 bg-green-50 rounded-full flex items-center justify-center">
-          <svg className="w-7 h-7 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+      <div style={{
+        width: 320, flexShrink: 0, background: '#fff', borderLeft: '1px solid #E2E8F0',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 16, padding: '32px 24px', textAlign: 'center',
+        fontFamily: "'Inter', -apple-system, sans-serif",
+      }}>
+        <div style={{
+          width: 56, height: 56, background: '#ECFDF5', borderRadius: '50%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 13l4 4L19 7" />
           </svg>
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-900">Booking request sent!</p>
-          <p className="text-xs text-gray-500 mt-1">
+          <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: 0 }}>Booking request sent!</p>
+          <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '6px 0 0', lineHeight: 1.5 }}>
             The board owner will be notified. You can track this in Negotiations.
           </p>
         </div>
-        <div className="w-full bg-gray-100 rounded-full h-1 overflow-hidden">
-          <div className="bg-green-500 h-1 rounded-full animate-[width_2s_ease-in-out]" style={{ width: '100%', transition: 'width 2s' }} />
+        <div style={{ width: '100%', background: '#F1F5F9', borderRadius: 99, height: 4, overflow: 'hidden' }}>
+          <div style={{ background: '#10B981', height: '100%', width: '100%', borderRadius: 99, transition: 'width 2s' }} />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-80 flex-shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
+    <div style={{
+      width: 320, flexShrink: 0, background: '#fff', borderLeft: '1px solid #E2E8F0',
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      fontFamily: "'Inter', -apple-system, sans-serif",
+    }}>
+      <style>{`
+        .booking-rate-slider {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 100%;
+          height: 4px;
+          border-radius: 99px;
+          background: #E2E8F0;
+          outline: none;
+          cursor: pointer;
+        }
+        .booking-rate-slider::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          background: #1B4F8A;
+          border: 2px solid #fff;
+          box-shadow: 0 1px 4px rgba(27, 79, 138, 0.35);
+          cursor: pointer;
+        }
+        .booking-rate-slider::-moz-range-thumb {
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+          background: #1B4F8A;
+          border: 2px solid #fff;
+          box-shadow: 0 1px 4px rgba(27, 79, 138, 0.35);
+          cursor: pointer;
+        }
+        .booking-rate-slider::-moz-range-track {
+          height: 4px;
+          border-radius: 99px;
+          background: #1B4F8A;
+        }
+        .booking-rate-slider::-webkit-slider-runnable-track {
+          height: 4px;
+          border-radius: 99px;
+          background: linear-gradient(
+            to right,
+            #1B4F8A 0%,
+            #1B4F8A var(--pct, 50%),
+            #E2E8F0 var(--pct, 50%),
+            #E2E8F0 100%
+          );
+        }
+        .booking-panel-notes::placeholder { color: #CBD5E1; opacity: 1; }
+      `}</style>
+
       {/* Header */}
-      <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-[#1B4F8A] uppercase tracking-wider mb-1">
-            Booking request
-          </p>
-          <h3 className="text-sm font-semibold text-gray-900 leading-tight truncate">
-            {board.name}
-          </h3>
-          <p className="text-xs text-gray-400 mt-0.5 truncate">{board.address}</p>
+      <div style={{ padding: '20px 24px', borderBottom: '1px solid #F1F5F9', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p style={{
+              fontSize: '0.6875rem', fontWeight: 700, color: '#1B4F8A',
+              textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px',
+            }}>
+              Booking request
+            </p>
+            <h2 style={{
+              fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px',
+              letterSpacing: '-0.015em', lineHeight: 1.3,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {board.name}
+            </h2>
+            <p style={{
+              fontSize: '0.75rem', color: '#94A3B8', margin: 0,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {board.address}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#94A3B8', fontSize: '1.125rem', padding: 2,
+              display: 'flex', flexShrink: 0, lineHeight: 1,
+            }}
+            aria-label="Close"
+          >
+            ✕
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors text-sm"
-        >
-          ✕
-        </button>
       </div>
 
-      {/* Board summary */}
-      <div className="mx-4 mt-3 bg-gray-50 rounded-xl p-3 border border-gray-100">
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <div>
-            <p className="text-xs text-gray-400">Format</p>
-            <p className="text-xs font-semibold text-gray-800 mt-0.5">
-              {FORMAT_LABELS[board.format || ''] || board.format || '—'}
-            </p>
-          </div>
-          <div className="border-x border-gray-200">
-            <p className="text-xs text-gray-400">Location</p>
-            <p className="text-xs font-semibold text-gray-800 mt-0.5 truncate px-1">
-              {board.city || '—'}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-400">Asking rate</p>
-            <p className="text-xs font-semibold text-gray-800 mt-0.5">
-              {formatNaira(board.asking_rate)}
-            </p>
-          </div>
+      {/* Stat row */}
+      <div style={{ padding: '0 24px', marginTop: 16, flexShrink: 0 }}>
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+          border: '1px solid #E2E8F0', borderRadius: 8, overflow: 'hidden',
+        }}>
+          {[
+            { label: 'Format', value: FORMAT_LABELS[board.format || ''] || board.format || '—', mono: false },
+            { label: 'Location', value: board.city || board.state || '—', mono: false },
+            { label: 'Asking rate', value: formatNaira(board.asking_rate), mono: true },
+          ].map((cell, i) => (
+            <div
+              key={cell.label}
+              style={{
+                padding: '12px 10px', textAlign: 'center',
+                borderRight: i < 2 ? '1px solid #E2E8F0' : 'none',
+              }}
+            >
+              <p style={{
+                fontSize: '0.625rem', fontWeight: 700, color: '#94A3B8',
+                textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 5px',
+              }}>
+                {cell.label}
+              </p>
+              <p style={{
+                fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', margin: 0,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                ...(cell.mono ? MONO : {}),
+              }}>
+                {cell.value}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* Form */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
 
-        {/* Campaign selector */}
-        <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-            Link to campaign <span className="text-red-400">*</span>
-          </label>
+        <Field label="Link to campaign" required>
           {campaigns.length === 0 ? (
-            <div className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2 border border-red-100">
+            <div style={{
+              fontSize: '0.8125rem', color: '#DC2626', background: '#FEF2F2',
+              borderRadius: 8, padding: '10px 12px', border: '1px solid #FECACA',
+            }}>
               No active campaigns found. Create a campaign first.
             </div>
           ) : (
             <select
               value={selectedCampaign}
               onChange={e => setSelectedCampaign(e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-[#1B4F8A] transition-colors"
+              style={{ ...inputStyle, cursor: 'pointer' }}
+              onFocus={onInputFocus}
+              onBlur={onInputBlur}
             >
               {campaigns.map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.name} {c.client_name ? `— ${c.client_name}` : ''}
+                  {c.name}{c.client_name ? ` — ${c.client_name}` : ''}
                 </option>
               ))}
             </select>
           )}
-        </div>
+        </Field>
 
-        {/* Offered rate */}
-        <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-            Your offer (₦/month) <span className="text-red-400">*</span>
-          </label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">₦</span>
+        <Field label="Your offer (₦/month)" required>
+          <div style={{ position: 'relative' }}>
+            <span style={{
+              position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+              fontSize: '0.875rem', color: '#94A3B8', fontWeight: 500, ...MONO,
+            }}>
+              ₦
+            </span>
             <input
               type="number"
               value={offeredRate}
               onChange={e => setOfferedRate(Number(e.target.value))}
-              className="w-full text-sm border border-gray-200 rounded-lg pl-7 pr-3 py-2.5 focus:outline-none focus:border-[#1B4F8A] transition-colors"
+              style={{ ...inputStyle, paddingLeft: 28, ...MONO }}
               placeholder="Enter your offer"
+              onFocus={onInputFocus}
+              onBlur={onInputBlur}
             />
           </div>
+
           {board.asking_rate && offeredRate > 0 && (
-            <div className="flex items-center justify-between mt-1.5">
-              <span className="text-xs text-gray-400">
-                Asking: {formatNaira(board.asking_rate)}
-              </span>
-              {discount > 0 ? (
-                <span className="text-xs text-amber-600 font-medium">
-                  {discount}% below asking
+            <div style={{ margin: '12px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <span style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                  Asking: <span style={MONO}>{formatNaira(board.asking_rate)}</span>
                 </span>
-              ) : discount < 0 ? (
-                <span className="text-xs text-green-600 font-medium">
-                  Above asking rate
-                </span>
-              ) : (
-                <span className="text-xs text-blue-600 font-medium">
-                  Asking price
-                </span>
-              )}
+                {isBelowAsking && discountPct > 0 ? (
+                  <span style={{
+                    fontSize: '0.6875rem', fontWeight: 600, padding: '3px 10px', borderRadius: 999,
+                    background: '#ECFDF5', color: '#059669',
+                  }}>
+                    {discountPct}% below asking
+                  </span>
+                ) : isAtOrAboveAsking ? (
+                  <span style={{
+                    fontSize: '0.6875rem', fontWeight: 600, padding: '3px 10px', borderRadius: 999,
+                    background: '#FFFBEB', color: '#D97706',
+                  }}>
+                    {discountPct === 0 ? 'At asking' : `${Math.abs(discountPct)}% above asking`}
+                  </span>
+                ) : null}
+              </div>
+              <input
+                type="range"
+                className="booking-rate-slider"
+                min={Math.round(board.asking_rate * 0.5)}
+                max={Math.round(board.asking_rate * 1.2)}
+                value={offeredRate}
+                onChange={e => setOfferedRate(Number(e.target.value))}
+                style={{
+                  ['--pct' as string]: `${((offeredRate - board.asking_rate * 0.5) / (board.asking_rate * 0.7)) * 100}%`,
+                }}
+              />
             </div>
           )}
-          {/* Rate slider */}
-          {board.asking_rate && (
-            <input
-              type="range"
-              min={Math.round(board.asking_rate * 0.5)}
-              max={Math.round(board.asking_rate * 1.2)}
-              value={offeredRate}
-              onChange={e => setOfferedRate(Number(e.target.value))}
-              className="w-full mt-2 accent-[#1B4F8A]"
-            />
+        </Field>
+
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: 6 }}>
+                Start date<span style={{ color: '#F87171', marginLeft: 2 }}>*</span>
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                style={inputStyle}
+                onFocus={onInputFocus}
+                onBlur={onInputBlur}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: 6 }}>
+                End date<span style={{ color: '#F87171', marginLeft: 2 }}>*</span>
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                style={inputStyle}
+                onFocus={onInputFocus}
+                onBlur={onInputBlur}
+              />
+            </div>
+          </div>
+          {hasValidDates && (
+            <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '8px 0 0' }}>
+              Campaign duration: {durationDays} days
+            </p>
           )}
         </div>
 
-        {/* Dates */}
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-              Start date <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={e => setStartDate(e.target.value)}
-              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2.5 focus:outline-none focus:border-[#1B4F8A] transition-colors"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-              End date <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={e => setEndDate(e.target.value)}
-              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-2.5 focus:outline-none focus:border-[#1B4F8A] transition-colors"
-            />
-          </div>
-        </div>
-
-        {/* Duration display */}
-        {startDate && endDate && new Date(endDate) > new Date(startDate) && (
-          <div className="bg-blue-50 rounded-lg px-3 py-2 flex items-center justify-between">
-            <span className="text-xs text-blue-600">Campaign duration</span>
-            <span className="text-xs font-semibold text-blue-700">
-              {Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24))} days
-            </span>
-          </div>
-        )}
-
-        {/* Notes */}
-        <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1.5">
-            Notes to board owner
-          </label>
+        <Field label="Notes to board owner">
           <textarea
+            className="booking-panel-notes"
             value={notes}
             onChange={e => setNotes(e.target.value)}
             rows={3}
             placeholder="Explain your campaign goals, audience, any special requirements..."
-            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:border-[#1B4F8A] transition-colors"
+            style={{ ...inputStyle, resize: 'none', lineHeight: 1.5 }}
+            onFocus={onInputFocus}
+            onBlur={onInputBlur}
           />
-        </div>
+        </Field>
 
-        {/* Total cost preview */}
-        {startDate && endDate && offeredRate > 0 && new Date(endDate) > new Date(startDate) && (
-          <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-            <p className="text-xs font-semibold text-gray-500 mb-2">Deal preview</p>
-            <div className="space-y-1">
-              <div className="flex justify-between">
-                <span className="text-xs text-gray-500">Monthly rate</span>
-                <span className="text-xs font-semibold text-gray-800">{formatNaira(offeredRate)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-xs text-gray-500">Duration</span>
-                <span className="text-xs font-semibold text-gray-800">
-                  {Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24 * 30))} month(s)
-                </span>
-              </div>
-              <div className="flex justify-between pt-1 border-t border-gray-200">
-                <span className="text-xs font-semibold text-gray-600">Est. total</span>
-                <span className="text-sm font-bold text-gray-900">
-                  {formatNaira(
-                    offeredRate *
-                    Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24 * 30))
-                  )}
-                </span>
-              </div>
-            </div>
+        {showDealPreview && (
+          <div style={{
+            background: '#F8FAFC', borderRadius: 10, padding: '14px 16px',
+            border: '1px solid #F1F5F9', marginBottom: 14,
+          }}>
+            <p style={{
+              fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8',
+              textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px',
+            }}>
+              Deal preview
+            </p>
+            <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', margin: '0 0 8px' }}>
+              {board.name}
+            </p>
+            <p style={{ fontSize: '0.8125rem', color: '#475569', margin: '0 0 6px', lineHeight: 1.5 }}>
+              <span style={MONO}>{formatNaira(offeredRate)}</span>
+              <span style={{ color: '#94A3B8', margin: '0 4px' }}>×</span>
+              {durationMonths} mo
+              <span style={{ color: '#94A3B8', margin: '0 4px' }}>=</span>
+              <span style={{ ...MONO, fontWeight: 700, color: '#0F172A' }}>{formatNaira(totalCost)}</span>
+            </p>
+            {board.asking_rate && savingsTotal > 0 && (
+              <p style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, margin: 0 }}>
+                Saves <span style={MONO}>{formatNaira(savingsTotal)}</span> vs asking ({formatNaira(askingTotal)})
+              </p>
+            )}
+            {board.asking_rate && savingsTotal <= 0 && isAtOrAboveAsking && (
+              <p style={{ fontSize: '0.75rem', color: '#D97706', fontWeight: 600, margin: 0 }}>
+                {savingsTotal < 0
+                  ? <>+<span style={MONO}>{formatNaira(Math.abs(savingsTotal))}</span> vs asking total</>
+                  : 'Offer matches asking rate'}
+              </p>
+            )}
           </div>
         )}
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700">
+          <div style={{
+            background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8,
+            padding: '10px 12px', fontSize: '0.8125rem', color: '#DC2626', marginBottom: 14,
+          }}>
             {error}
           </div>
         )}
       </div>
 
-      {/* Submit */}
-      <div className="px-4 py-4 border-t border-gray-100 space-y-2">
+      {/* Footer buttons */}
+      <div style={{
+        padding: 16, borderTop: '1px solid #E2E8F0',
+        display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0,
+      }}>
         <button
           onClick={handleSubmit}
           disabled={submitting || campaigns.length === 0}
-          className="w-full bg-[#1B4F8A] hover:bg-[#163f6e] disabled:opacity-50 text-white text-sm font-semibold py-3 rounded-xl transition-colors"
+          style={{
+            width: '100%', padding: 11, background: submitting || campaigns.length === 0 ? '#94A3B8' : '#1B4F8A',
+            color: '#fff', border: 'none', borderRadius: 8,
+            fontSize: '0.875rem', fontWeight: 600, cursor: submitting || campaigns.length === 0 ? 'not-allowed' : 'pointer',
+            fontFamily: 'inherit', transition: 'background 0.15s',
+          }}
         >
           {submitting ? 'Sending request...' : 'Send booking request'}
         </button>
         <button
           onClick={onClose}
-          className="w-full text-gray-500 hover:text-gray-700 text-sm py-2 transition-colors"
+          style={{
+            width: '100%', padding: 11, background: 'transparent',
+            color: '#475569', border: '1px solid #E2E8F0', borderRadius: 8,
+            fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+          }}
         >
           Cancel
         </button>

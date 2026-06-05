@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { createNotification } from '@/lib/notifications';
+import { getActivityActor, logActivity } from '@/lib/activity-log';
 
 type Booking = {
   id: string;
@@ -206,10 +207,39 @@ export default function OwnerNegotiationDetailPage() {
     if (actionMode === 'accept') updateData.agreed_rate = booking.offered_rate;
     if (actionMode === 'counter' && rate) updateData.offered_rate = rate;
 
+    const prevStatus = booking.status;
     await supabase.from('bookings').update(updateData).eq('id', booking.id);
 
-    // Notify the agency
     const boardName = booking.boards?.name || 'a board';
+    const actor = await getActivityActor();
+    const campaignId = (booking.campaigns as { id?: string })?.id;
+
+    if (actionMode === 'accept' || actionMode === 'decline' || actionMode === 'counter') {
+      await logActivity({
+        entityType: 'booking',
+        entityId: booking.id,
+        campaignId,
+        action: 'booking.status_changed',
+        summary: actionMode === 'accept'
+          ? `Owner accepted — ${boardName} at ${formatNaira(booking.offered_rate)}/mo`
+          : actionMode === 'decline'
+            ? `Owner declined — ${boardName}`
+            : `Owner counter offer — ${formatNaira(parseFloat(counterRate))}/mo for ${boardName}`,
+        ...actor,
+        changes: { status: { from: prevStatus, to: newStatus } },
+      });
+    } else {
+      await logActivity({
+        entityType: 'booking',
+        entityId: booking.id,
+        campaignId,
+        action: 'booking.message_sent',
+        summary: `Message sent to agency re ${boardName}`,
+        ...actor,
+      });
+    }
+
+    // Notify the agency
     if (actionMode === 'accept') {
       await createNotification({ recipientRole: 'agency', type: 'offer_accepted', title: `Owner accepted — deal agreed!`, body: `${boardName} at ${formatNaira(booking.offered_rate)}/month`, link: `/dashboard/agency/negotiations/${booking.id}` });
     } else if (actionMode === 'decline') {

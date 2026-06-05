@@ -83,6 +83,8 @@ Run these in order in the Supabase SQL Editor before testing:
 3. `supabase-add-owner-id.sql` — adds `owner_id` to boards; clears boards without owner
 4. `supabase-invoice-media-partner.sql` — adds `owner_id`, `agency_id`, `invoice_type` to invoices
 5. `supabase-mpo-bookings.sql` — adds `mpo_number`, `mpo_issued_at`, `mpo_agency_name` to bookings
+6. `supabase-add-activity-events.sql` — append-only audit log (`activity_events` table)
+7. `supabase-add-erp-fields.sql` — ERP fields on campaigns/profiles/invoices + WHT/currency
 
 ---
 

@@ -7,6 +7,7 @@ import { RoleGuard } from '@/components/layout/RoleGuard';
 import { supabase } from '@/lib/supabase';
 import { getCurrentProfile } from '@/lib/auth';
 import { createNotification } from '@/lib/notifications';
+import { logActivity } from '@/lib/activity-log';
 import { CampaignJourneyStrip, buildCampaignJourney } from '@/components/client/CampaignJourneyStrip';
 import { ClientActionsPanel, type ClientAction } from '@/components/client/ClientActionsPanel';
 import { ClientBillingTab } from '@/components/client/ClientBillingTab';
@@ -493,6 +494,15 @@ function ClientContent() {
     if (error) showToast('Failed to approve', 'error');
     else {
       setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'agreed' } : b));
+      await logActivity({
+        entityType: 'booking',
+        entityId: bookingId,
+        campaignId: activeCampaign?.id,
+        action: 'booking.approved_by_client',
+        summary: `${brandName} approved ${booking?.boards?.name || 'board'}`,
+        actorRole: 'client',
+        actorName: brandName,
+      });
       await createNotification({
         recipientRole: 'agency',
         type: 'plan_approved',
@@ -512,6 +522,15 @@ function ClientContent() {
     if (error) showToast('Failed to decline', 'error');
     else {
       setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'declined' } : b));
+      await logActivity({
+        entityType: 'booking',
+        entityId: bookingId,
+        campaignId: activeCampaign?.id,
+        action: 'booking.declined_by_client',
+        summary: `${brandName} declined ${booking?.boards?.name || 'board'}`,
+        actorRole: 'client',
+        actorName: brandName,
+      });
       await createNotification({
         recipientRole: 'agency',
         type: 'plan_approved',
@@ -531,6 +550,28 @@ function ClientContent() {
     if (error) showToast('Failed to approve all', 'error');
     else {
       setBookings(prev => prev.map(b => pendingIds.includes(b.id) ? { ...b, status: 'agreed' } : b));
+      for (const bid of pendingIds) {
+        await logActivity({
+          entityType: 'booking',
+          entityId: bid,
+          campaignId: activeCampaign?.id,
+          action: 'booking.approved_by_client',
+          summary: `${brandName} approved board (bulk plan approval)`,
+          actorRole: 'client',
+          actorName: brandName,
+        });
+      }
+      if (activeCampaign?.id) {
+        await logActivity({
+          entityType: 'campaign',
+          entityId: activeCampaign.id,
+          campaignId: activeCampaign.id,
+          action: 'campaign.status_changed',
+          summary: `${brandName} approved full media plan (${pendingIds.length} boards)`,
+          actorRole: 'client',
+          actorName: brandName,
+        });
+      }
       await createNotification({
         recipientRole: 'agency',
         type: 'plan_approved',

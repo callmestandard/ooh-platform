@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { logActivity } from '@/lib/activity-log';
 
 export const runtime = 'nodejs';
 
@@ -88,6 +89,16 @@ export async function POST(req: NextRequest) {
       .from('invoice_items')
       .insert(items.map(i => ({ ...i, invoice_id: invoice.id })));
   }
+
+  await logActivity({
+    entityType: 'invoice',
+    entityId: invoice.id,
+    campaignId: campaign_id ?? null,
+    action: 'invoice.created',
+    summary: `Invoice ${invoice_number} created for ${client_name} — ₦${Number(total_amount).toLocaleString('en-NG')}`,
+    actorRole: 'agency',
+    metadata: { line_count: items.length, status: 'draft' },
+  }, supabase);
 
   return NextResponse.json(invoice, { status: 201 });
 }

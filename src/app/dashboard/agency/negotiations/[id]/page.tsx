@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { createNotification } from '@/lib/notifications';
+import { getActivityActor, logActivity } from '@/lib/activity-log';
+import ActivityTimeline from '@/components/activity/ActivityTimeline';
 
 type Booking = {
   id: string;
@@ -75,7 +77,8 @@ function formatDate(dateStr?: string | null) {
 type ActionMode = null | 'message' | 'counter' | 'accept' | 'decline';
 
 export default function NegotiationDetailPage() {
-  const { id } = useParams();
+  const { id: idParam } = useParams();
+  const id = typeof idParam === 'string' ? idParam : idParam?.[0] ?? '';
   const router = useRouter();
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -87,6 +90,7 @@ export default function NegotiationDetailPage() {
   const [counterRate, setCounterRate] = useState('');
   const [sending, setSending]       = useState(false);
   const [exportingMPO, setExportingMPO] = useState(false);
+  const [activityKey, setActivityKey] = useState(0);
   const [exportingContract, setExportingContract] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
 
@@ -176,9 +180,38 @@ export default function NegotiationDetailPage() {
     const updateData: Record<string, unknown> = { status: newStatus };
     if (actionMode === 'accept') updateData.agreed_rate = booking.offered_rate;
     if (actionMode === 'counter' && rate) updateData.offered_rate = rate;
+    const prevStatus = booking.status;
     await supabase.from('bookings').update(updateData).eq('id', booking.id);
 
     const boardName = booking.boards?.name || 'a board';
+    const actor = await getActivityActor();
+    const campaignId = (booking.campaigns as { id?: string })?.id;
+
+    if (actionMode === 'accept' || actionMode === 'decline' || actionMode === 'counter') {
+      await logActivity({
+        entityType: 'booking',
+        entityId: booking.id,
+        campaignId,
+        action: 'booking.status_changed',
+        summary: actionMode === 'accept'
+          ? `Agency accepted — ${boardName} at ${formatNaira(booking.offered_rate)}/mo`
+          : actionMode === 'decline'
+            ? `Agency declined — ${boardName}`
+            : `Agency counter offer — ${formatNaira(parseFloat(counterRate))}/mo for ${boardName}`,
+        ...actor,
+        changes: { status: { from: prevStatus, to: newStatus } },
+      });
+    } else {
+      await logActivity({
+        entityType: 'booking',
+        entityId: booking.id,
+        campaignId,
+        action: 'booking.message_sent',
+        summary: `Message sent to owner re ${boardName}`,
+        ...actor,
+      });
+    }
+
     if (actionMode === 'accept') {
       await createNotification({ recipientRole: 'owner', type: 'offer_accepted', title: 'Agency accepted your terms', body: `Deal confirmed for ${boardName}`, link: `/dashboard/owner/negotiations/${booking.id}` });
     } else if (actionMode === 'decline') {
@@ -194,6 +227,7 @@ export default function NegotiationDetailPage() {
     setCounterRate('');
     setActionMode(null);
     setSending(false);
+    setActivityKey(k => k + 1);
   }
 
   async function handleRaiseMPO() {
@@ -252,8 +286,19 @@ export default function NegotiationDetailPage() {
         link: '/dashboard/owner?tab=invoices',
       });
 
-      // Refresh local state
+      const actor = await getActivityActor();
+      await logActivity({
+        entityType: 'booking',
+        entityId: booking.id,
+        campaignId: (booking.campaigns as { id?: string })?.id,
+        action: 'booking.mpo_raised',
+        summary: `MPO ${mpoNum} raised for ${booking.boards?.name || 'board'}`,
+        ...actor,
+        metadata: { mpo_number: mpoNum, agreed_rate: booking.agreed_rate || booking.offered_rate },
+      });
+
       setBooking(prev => prev ? { ...prev, mpo_number: mpoNum, mpo_issued_at: new Date().toISOString(), mpo_agency_name: agencyName } : prev);
+      setActivityKey(k => k + 1);
     } catch {
       // silent — user will notice the download didn't happen
     } finally {
@@ -562,6 +607,13 @@ export default function NegotiationDetailPage() {
               ))}
             </div>
           </div>
+
+          <ActivityTimeline
+            entityType="booking"
+            entityId={id}
+            title="Audit trail"
+            refreshKey={activityKey}
+          />
 
           {booking.notes && (
             <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '14px', padding: '14px 16px' }}>

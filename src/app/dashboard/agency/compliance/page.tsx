@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { createNotification } from '@/lib/notifications';
+import { logActivity } from '@/lib/activity-log';
 import { formatDate } from '@/lib/utils';
 
 type ComplianceCheck = {
@@ -158,12 +159,26 @@ export default function CompliancePage() {
   }
 
   async function updateStatus(id: string, status: 'verified' | 'flagged') {
+    const check = checks.find(c => c.id === id);
+    const prevStatus = check?.status;
+
     await supabase.from('compliance_checks').update({ status }).eq('id', id);
     setChecks(prev => prev.map(c => c.id === id ? { ...c, status } : c));
     if (selectedCheck?.id === id) setSelectedCheck(prev => prev ? { ...prev, status } : null);
 
-    const check = checks.find(c => c.id === id);
     const boardName = check?.bookings?.boards?.name || 'a board';
+    const { data: { session } } = await supabase.auth.getSession();
+    await logActivity({
+      entityType: 'compliance_check',
+      entityId: id,
+      campaignId: null,
+      action: status === 'verified' ? 'compliance.verified' : 'compliance.flagged',
+      summary: `${boardName}: POE ${status}`,
+      actorId: session?.user?.id,
+      actorRole: 'agency',
+      changes: prevStatus ? { status: { from: prevStatus, to: status } } : undefined,
+      metadata: { booking_id: check?.booking_id },
+    });
     await createNotification({
       recipientRole: 'client',
       type: status === 'verified' ? 'poe_verified' : 'poe_flagged',

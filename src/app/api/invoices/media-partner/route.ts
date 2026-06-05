@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { diffFields, logActivity } from '@/lib/activity-log';
 
 export const runtime = 'nodejs';
 
@@ -153,6 +154,16 @@ export async function POST(req: NextRequest) {
       .insert(items.map(i => ({ ...i, invoice_id: invoice.id })));
   }
 
+  await logActivity({
+    entityType: 'invoice',
+    entityId: invoice.id,
+    campaignId: campaign_id ?? null,
+    action: 'invoice.mpi_created',
+    summary: `Media partner invoice ${invoice_number} raised — ₦${Number(total_amount).toLocaleString('en-NG')}`,
+    actorRole: 'owner',
+    metadata: { line_count: items.length },
+  }, supabase);
+
   return NextResponse.json(invoice, { status: 201 });
 }
 
@@ -191,6 +202,12 @@ export async function PATCH(req: NextRequest) {
   }
   if (status === 'paid') updates.paid_at = new Date().toISOString();
 
+  const { data: before } = await supabase
+    .from('invoices')
+    .select('id, status, invoice_number, campaign_id')
+    .eq('id', id)
+    .single();
+
   const { data, error } = await supabase
     .from('invoices')
     .update(updates)
@@ -200,5 +217,23 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if (before && data) {
+    const changes = diffFields(
+      before as Record<string, unknown>,
+      { status: data.status } as Record<string, unknown>,
+      ['status'],
+    );
+    await logActivity({
+      entityType: 'invoice',
+      entityId: id,
+      campaignId: data.campaign_id,
+      action: 'invoice.mpi_updated',
+      summary: `MPI ${data.invoice_number}: status → ${data.status}`,
+      actorRole: 'owner',
+      changes,
+    }, supabase);
+  }
+
   return NextResponse.json(data);
 }

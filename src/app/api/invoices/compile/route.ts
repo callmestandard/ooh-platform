@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { logActivity } from '@/lib/activity-log';
 
 export const runtime = 'nodejs';
 
@@ -169,6 +170,28 @@ export async function POST(req: NextRequest) {
     .from('invoices')
     .update({ compiled_invoice_id: invoice.id, status: 'acknowledged' })
     .in('id', mpi_ids);
+
+  await logActivity({
+    entityType: 'invoice',
+    entityId: invoice.id,
+    campaignId: campaign_id ?? null,
+    action: 'invoice.compiled',
+    summary: `Client invoice ${invoice_number} compiled from ${mpi_ids.length} media partner invoice(s) — ${total_amount.toLocaleString('en-NG')} NGN`,
+    actorRole: 'agency',
+    metadata: { mpi_ids, line_count: lineItems.length },
+  }, supabase);
+
+  for (const mpiId of mpi_ids) {
+    await logActivity({
+      entityType: 'invoice',
+      entityId: mpiId,
+      campaignId: campaign_id ?? null,
+      action: 'invoice.mpi_acknowledged',
+      summary: `Acknowledged and linked to ${invoice_number}`,
+      actorRole: 'agency',
+      metadata: { compiled_invoice_id: invoice.id },
+    }, supabase);
+  }
 
   return NextResponse.json(invoice, { status: 201 });
 }

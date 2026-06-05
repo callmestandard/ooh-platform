@@ -3,6 +3,8 @@
 import GeneratePOEDeck from '@/components/poe/GeneratePOEDeck';
 import SharePOELink from '@/components/poe/SharePOELink';
 import { createNotification } from '@/lib/notifications';
+import { getActivityActor, logActivity } from '@/lib/activity-log';
+import CampaignActivityTimeline from '@/components/activity/CampaignActivityTimeline';
 import CreativeUploadPanel, { type CreativeUpload } from '@/components/creatives/CreativeUploadPanel';
 import DownloadInvoice from '@/components/invoice/DownloadInvoice';
 import { useState, useEffect, useCallback } from 'react';
@@ -130,14 +132,16 @@ function BudgetBar({ used, total }: { used: number; total: number }) {
 }
 
 export default function CampaignPlanPage() {
-  const { id } = useParams();
+  const { id: idParam } = useParams();
+  const id = typeof idParam === 'string' ? idParam : idParam?.[0] ?? '';
   const router = useRouter();
 
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [planItems, setPlanItems] = useState<PlanItem[]>([]);
   const [allBoards, setAllBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'plan' | 'boards' | 'summary' | 'arcon' | 'attribution'>('plan');
+  const [activeTab, setActiveTab] = useState<'plan' | 'boards' | 'summary' | 'arcon' | 'attribution' | 'activity' | 'timeline'>('plan');
+  const [activityKey, setActivityKey] = useState(0);
   const [showAddBoard, setShowAddBoard] = useState(false);
   const [boardSearch, setBoardSearch] = useState('');
   const [editingItem, setEditingItem] = useState<string | null>(null);
@@ -208,6 +212,17 @@ export default function CampaignPlanPage() {
     }).eq('id', campaign.id);
     if (!error) {
       setCampaign(prev => prev ? { ...prev, ...arconForm, arcon_ref: arconForm.arcon_ref || null, arcon_notes: arconForm.arcon_notes || null } : prev);
+      const actor = await getActivityActor();
+      await logActivity({
+        entityType: 'campaign',
+        entityId: campaign.id,
+        campaignId: campaign.id,
+        action: 'campaign.arcon_updated',
+        summary: `ARCON status → ${arconForm.arcon_status}${arconForm.arcon_ref ? ` (ref ${arconForm.arcon_ref})` : ''}`,
+        ...actor,
+        changes: { arcon_status: { from: campaign.arcon_status, to: arconForm.arcon_status } },
+      });
+      setActivityKey(k => k + 1);
       showToast('ARCON compliance saved');
     } else {
       showToast('Failed to save', 'error');
@@ -366,6 +381,17 @@ export default function CampaignPlanPage() {
         link: '/dashboard/client?tab=plan',
       });
       setCampaign(prev => prev ? { ...prev, client_id: selectedClientId, status: 'pending' } : null);
+      const actor = await getActivityActor();
+      await logActivity({
+        entityType: 'campaign',
+        entityId: campaign.id,
+        campaignId: campaign.id,
+        action: 'campaign.sent_for_approval',
+        summary: `Media plan sent to ${client?.company_name || client?.full_name || 'client'} (${planItems.length} boards)`,
+        ...actor,
+        changes: { status: { from: campaign.status, to: 'pending' } },
+      });
+      setActivityKey(k => k + 1);
       setShowSendToClient(false);
       showToast(`Plan sent to ${client?.company_name || client?.full_name || 'client'} for approval`);
     } else {
@@ -390,7 +416,7 @@ export default function CampaignPlanPage() {
     const startDate = addForm.startDate || campaign?.start_date;
     const endDate = addForm.endDate || campaign?.end_date;
 
-    const { error } = await supabase.from('bookings').insert({
+    const { data: newItem, error } = await supabase.from('bookings').insert({
       campaign_id: id,
       board_id: addForm.boardId,
       offered_rate: parseFloat(addForm.rate),
@@ -402,9 +428,19 @@ export default function CampaignPlanPage() {
       print_required: addForm.printRequired,
       notes: addForm.notes || null,
       is_in_plan: true,
-    });
+    }).select('id').single();
 
-    if (!error) {
+    if (!error && newItem) {
+      const actor = await getActivityActor();
+      await logActivity({
+        entityType: 'booking',
+        entityId: newItem.id,
+        campaignId: id,
+        action: 'booking.added_to_plan',
+        summary: `${board?.name} added to plan at ${formatNaira(parseFloat(addForm.rate))}/mo`,
+        ...actor,
+      });
+      setActivityKey(k => k + 1);
       // Notify owner that a new booking request has arrived
       await createNotification({
         recipientRole: 'owner',
@@ -427,13 +463,35 @@ export default function CampaignPlanPage() {
     if (!confirm(`Remove ${boardName} from this plan?`)) return;
     const { error } = await supabase.from('bookings').delete().eq('id', itemId);
     if (!error) {
+      const actor = await getActivityActor();
+      await logActivity({
+        entityType: 'booking',
+        entityId: itemId,
+        campaignId: id,
+        action: 'booking.removed_from_plan',
+        summary: `${boardName} removed from plan`,
+        ...actor,
+      });
+      setActivityKey(k => k + 1);
       setPlanItems(prev => prev.filter(i => i.id !== itemId));
       showToast(`${boardName} removed from plan`);
     }
   }
 
   async function updateItemRate(itemId: string, newRate: number) {
+    const item = planItems.find(i => i.id === itemId);
     await supabase.from('bookings').update({ offered_rate: newRate }).eq('id', itemId);
+    const actor = await getActivityActor();
+    await logActivity({
+      entityType: 'booking',
+      entityId: itemId,
+      campaignId: id,
+      action: 'booking.rate_updated',
+      summary: `${item?.boards?.name || 'Board'} rate → ${formatNaira(newRate)}/mo`,
+      ...actor,
+      changes: { offered_rate: { from: item?.offered_rate, to: newRate } },
+    });
+    setActivityKey(k => k + 1);
     setPlanItems(prev => prev.map(i => i.id === itemId ? { ...i, offered_rate: newRate } : i));
     setEditingItem(null);
     showToast('Rate updated');
@@ -447,6 +505,17 @@ export default function CampaignPlanPage() {
       approved_by: 'Client approval',
     }).eq('id', id);
     if (!error) {
+      const actor = await getActivityActor();
+      await logActivity({
+        entityType: 'campaign',
+        entityId: id,
+        campaignId: id,
+        action: 'campaign.status_changed',
+        summary: 'Campaign marked active (client approval recorded)',
+        ...actor,
+        changes: { status: { from: campaign?.status, to: 'active' } },
+      });
+      setActivityKey(k => k + 1);
       setCampaign(prev => prev ? { ...prev, status: 'active', approved_at: new Date().toISOString() } : null);
       showToast('Plan approved! Campaign is now active.');
     }
@@ -621,9 +690,11 @@ export default function CampaignPlanPage() {
         <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: 4, borderRadius: 10, width: 'fit-content', marginBottom: '1.25rem' }}>
           {[
             { key: 'plan',        label: `Plan (${planItems.length})` },
+            { key: 'timeline',    label: 'Timeline' },
             { key: 'summary',     label: 'Plan summary' },
             { key: 'arcon',       label: 'ARCON', badge: !campaign.arcon_status || campaign.arcon_status === 'not_submitted' || campaign.arcon_status === 'rejected' || campaign.arcon_status === 'expired' },
             { key: 'attribution', label: 'Attribution', badge: false },
+            { key: 'activity', label: 'Activity', badge: false },
           ].map(tab => (
             <button key={tab.key} onClick={() => { setActiveTab(tab.key as any); if (tab.key === 'attribution') loadTracking(); }} style={{
               padding: '6px 16px', borderRadius: 7, border: 'none',
@@ -894,6 +965,193 @@ export default function CampaignPlanPage() {
             </div>
           </div>
         )}
+
+        {activeTab === 'activity' && (
+          <CampaignActivityTimeline campaignId={id} refreshKey={activityKey} />
+        )}
+
+        {/* ── Timeline Tab ── */}
+        {activeTab === 'timeline' && (() => {
+          if (planItems.length === 0) {
+            return (
+              <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '4rem', textAlign: 'center' }}>
+                <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>Add boards to the plan to see the timeline.</p>
+              </div>
+            );
+          }
+
+          const rawStart = campaign.start_date
+            ? new Date(campaign.start_date)
+            : new Date(Math.min(...planItems.map(i => new Date(i.start_date).getTime())));
+          const rawEnd = campaign.end_date
+            ? new Date(campaign.end_date)
+            : new Date(Math.max(...planItems.map(i => new Date(i.end_date).getTime())));
+
+          const rangeStart = new Date(rawStart.getFullYear(), rawStart.getMonth(), 1);
+          const rangeEnd   = new Date(rawEnd.getFullYear(),   rawEnd.getMonth() + 1, 1);
+          const totalMs    = rangeEnd.getTime() - rangeStart.getTime();
+
+          const todayMs       = Date.now();
+          const todayPct      = (todayMs - rangeStart.getTime()) / totalMs * 100;
+          const todayInRange  = todayMs >= rangeStart.getTime() && todayMs <= rangeEnd.getTime();
+
+          const months: { label: string; leftPct: number; widthPct: number }[] = [];
+          const cur = new Date(rangeStart);
+          while (cur < rangeEnd) {
+            const mStart = new Date(cur);
+            const mEnd   = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+            months.push({
+              label:    mStart.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
+              leftPct:  (mStart.getTime() - rangeStart.getTime()) / totalMs * 100,
+              widthPct: (Math.min(mEnd.getTime(), rangeEnd.getTime()) - mStart.getTime()) / totalMs * 100,
+            });
+            cur.setMonth(cur.getMonth() + 1);
+          }
+
+          const BAR_COLOR: Record<string, string> = {
+            pending:     '#F59E0B',
+            negotiating: '#3B82F6',
+            agreed:      '#10B981',
+            signed:      '#7C3AED',
+            declined:    '#EF4444',
+          };
+
+          const ROW_H    = 48;
+          const LABEL_W  = 192;
+          const HEADER_H = 34;
+
+          const durationWeeks = Math.round(totalMs / (7 * 24 * 60 * 60 * 1000));
+
+          return (
+            <div>
+              {/* Legend + duration */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 14, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  {Object.entries(BAR_COLOR).map(([s, c]) => (
+                    <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: 2, background: c }} />
+                      <span style={{ fontSize: '0.6875rem', color: '#64748B', textTransform: 'capitalize' }}>{s}</span>
+                    </div>
+                  ))}
+                  {todayInRange && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <div style={{ width: 2, height: 14, background: '#EF4444', borderRadius: 1 }} />
+                      <span style={{ fontSize: '0.6875rem', color: '#64748B' }}>Today</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Gantt */}
+              <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, overflow: 'hidden' }}>
+                <div style={{ display: 'flex' }}>
+                  {/* Board label column */}
+                  <div style={{ width: LABEL_W, flexShrink: 0, borderRight: '1px solid #E8EDF2' }}>
+                    <div style={{ height: HEADER_H, background: '#F8FAFC', borderBottom: '1px solid #E8EDF2', display: 'flex', alignItems: 'center', paddingLeft: 14 }}>
+                      <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Board</span>
+                    </div>
+                    {planItems.map((item, i) => (
+                      <div key={item.id} style={{
+                        height: ROW_H,
+                        padding: '0 14px',
+                        display: 'flex', flexDirection: 'column', justifyContent: 'center',
+                        borderBottom: i < planItems.length - 1 ? '1px solid #F1F5F9' : 'none',
+                        background: i % 2 === 0 ? '#fff' : '#FAFBFC',
+                      }}>
+                        <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#0F172A', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.boards?.name}</p>
+                        <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.boards?.city}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Timeline grid */}
+                  <div style={{ flex: 1, overflowX: 'auto', minWidth: 0 }}>
+                    <div style={{ minWidth: Math.max(480, months.length * 80), position: 'relative' }}>
+                      {/* Month header */}
+                      <div style={{ height: HEADER_H, background: '#F8FAFC', borderBottom: '1px solid #E8EDF2', position: 'relative' }}>
+                        {months.map(m => (
+                          <div key={m.label} style={{
+                            position: 'absolute', left: `${m.leftPct}%`, width: `${m.widthPct}%`,
+                            height: '100%', borderRight: '1px solid #E8EDF2',
+                            display: 'flex', alignItems: 'center', paddingLeft: 8, boxSizing: 'border-box',
+                          }}>
+                            <span style={{ fontSize: '0.625rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{m.label}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Rows */}
+                      {planItems.map((item, i) => {
+                        const s   = item.start_date ? new Date(item.start_date).getTime() : rangeStart.getTime();
+                        const e   = item.end_date   ? new Date(item.end_date).getTime()   : rangeEnd.getTime();
+                        const lft = Math.max(0,   (s - rangeStart.getTime()) / totalMs * 100);
+                        const rgt = Math.min(100, (e - rangeStart.getTime()) / totalMs * 100);
+                        const w   = Math.max(0.8, rgt - lft);
+                        const col = BAR_COLOR[item.status] || '#94A3B8';
+
+                        return (
+                          <div key={item.id} style={{
+                            height: ROW_H, position: 'relative',
+                            background: i % 2 === 0 ? '#fff' : '#FAFBFC',
+                            borderBottom: i < planItems.length - 1 ? '1px solid #F1F5F9' : 'none',
+                          }}>
+                            {/* Grid month dividers */}
+                            {months.map(m => (
+                              <div key={m.label} style={{
+                                position: 'absolute', left: `${m.leftPct + m.widthPct}%`,
+                                top: 0, bottom: 0, width: 1, background: '#F1F5F9',
+                              }} />
+                            ))}
+                            {/* Bar */}
+                            <div title={`${item.boards?.name} · ${item.status}`} style={{
+                              position: 'absolute', left: `${lft}%`, width: `${w}%`,
+                              top: '50%', transform: 'translateY(-50%)',
+                              height: 24, background: col, borderRadius: 5,
+                              opacity: item.status === 'declined' ? 0.35 : 1,
+                              display: 'flex', alignItems: 'center', paddingLeft: 7,
+                              boxSizing: 'border-box', overflow: 'hidden', minWidth: 6,
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                            }}>
+                              <span style={{ fontSize: '0.5625rem', fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {FORMAT_LABELS[item.boards?.format || ''] || item.boards?.format}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Today line */}
+                      {todayInRange && (
+                        <div style={{
+                          position: 'absolute', left: `${todayPct}%`,
+                          top: 0, bottom: 0, width: 2,
+                          background: '#EF4444', zIndex: 10, pointerEvents: 'none',
+                        }}>
+                          <div style={{ position: 'absolute', top: HEADER_H, left: '50%', transform: 'translateX(-50%)', width: 8, height: 8, borderRadius: '50%', background: '#EF4444' }} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* KPI strip */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginTop: 14 }}>
+                {[
+                  { label: 'Total boards',   value: String(planItems.length) },
+                  { label: 'Agreed / Signed', value: String(planItems.filter(i => ['agreed','signed'].includes(i.status)).length) },
+                  { label: 'Still pending',  value: String(planItems.filter(i => i.status === 'pending').length) },
+                  { label: 'Campaign span',  value: `${durationWeeks} wk${durationWeeks !== 1 ? 's' : ''}` },
+                ].map(k => (
+                  <div key={k.label} style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10, padding: '14px 16px' }}>
+                    <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>{k.label}</p>
+                    <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0F172A', fontFamily: 'monospace', letterSpacing: '-0.04em', margin: 0 }}>{k.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── Attribution Tab ── */}
         {activeTab === 'attribution' && (() => {

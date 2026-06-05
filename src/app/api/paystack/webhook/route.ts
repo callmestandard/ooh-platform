@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { logActivity } from '@/lib/activity-log';
 
 export const runtime = 'nodejs';
 
@@ -79,6 +80,15 @@ export async function POST(req: NextRequest) {
           `${inv.client_name} paid ${amount}. Invoice is now settled.`,
           `/dashboard/agency/invoices/${invoiceId}`,
         );
+        await logActivity({
+          entityType: 'invoice',
+          entityId: invoiceId,
+          action: 'invoice.paid',
+          summary: `${inv.invoice_number} paid via Paystack (${amount})`,
+          actorRole: 'system',
+          changes: { status: { from: 'sent', to: 'paid' } },
+          metadata: { payment_ref: reference, source: 'paystack_webhook' },
+        }, supabase);
       }
     }
   }

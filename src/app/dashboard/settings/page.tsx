@@ -15,6 +15,7 @@ type ProfileData = {
   company: string;
   jobTitle: string;
   bio: string;
+  erpVendorCode: string;
 };
 
 type NotifPrefs = Record<NotificationType, boolean>;
@@ -221,7 +222,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
 
   // Profile state
-  const [profile, setProfile] = useState<ProfileData>({ displayName: '', email: '', phone: '', company: '', jobTitle: '', bio: '' });
+  const [profile, setProfile] = useState<ProfileData>({ displayName: '', email: '', phone: '', company: '', jobTitle: '', bio: '', erpVendorCode: '' });
 
   // Notification prefs
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>({
@@ -257,6 +258,7 @@ export default function SettingsPage() {
       company: role === 'agency' ? 'MediaPro Lagos' : role === 'client' ? 'MTN Nigeria' : role === 'owner' ? 'Sule Outdoor' : 'OOH Platform',
       jobTitle: role === 'agency' ? 'Media Director' : role === 'client' ? 'Marketing Manager' : role === 'owner' ? 'Business Owner' : 'Platform Admin',
       bio: '',
+      erpVendorCode: '',
     });
     setProfile(storedProfile);
     setNotifPrefs(loadJSON<NotifPrefs>(getStorageKey(role, 'notif_prefs'), notifPrefs));
@@ -267,8 +269,9 @@ export default function SettingsPage() {
       supabase.auth.getUser().then(({ data: { user } }) => {
         if (!user) return;
         setAgencyProfileId(user.id);
-        supabase.from('profiles').select('brand_accent_color, brand_tagline, brand_website, brand_logo_url').eq('id', user.id).single().then(({ data }) => {
+        supabase.from('profiles').select('brand_accent_color, brand_tagline, brand_website, brand_logo_url, erp_vendor_code').eq('id', user.id).single().then(({ data }) => {
           if (data) {
+            setProfile(p => ({ ...p, erpVendorCode: data.erp_vendor_code || '' }));
             setBranding(prev => ({
               ...prev,
               accentColor: data.brand_accent_color || prev.accentColor,
@@ -302,6 +305,7 @@ export default function SettingsPage() {
           brand_tagline: branding.tagline || null,
           brand_website: branding.companyWebsite || null,
           brand_logo_url: branding.logoUrl || null,
+          erp_vendor_code: profile.erpVendorCode.trim() || null,
         }).eq('id', agencyProfileId);
       }
     }
@@ -451,6 +455,11 @@ export default function SettingsPage() {
                   <Field label="Job title">
                     <Input value={profile.jobTitle} onChange={v => setProfile(p => ({ ...p, jobTitle: v }))} placeholder="e.g. Media Director" />
                   </Field>
+                  {role === 'agency' && (
+                    <Field label="ERP vendor code" hint="Your supplier ID in client systems (Oracle, SAP, etc.).">
+                      <Input value={profile.erpVendorCode} onChange={v => setProfile(p => ({ ...p, erpVendorCode: v }))} placeholder="e.g. VND-OOH-00421" />
+                    </Field>
+                  )}
                 </div>
                 <Field label="Bio" hint="Brief description shown on your profile.">
                   <textarea

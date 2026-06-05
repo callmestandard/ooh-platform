@@ -3,6 +3,9 @@
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Invoice, InvoiceItem } from '@/lib/types';
+import ActivityTimeline from '@/components/activity/ActivityTimeline';
+import { computeTaxBreakdown } from '@/lib/erp-export';
+import { supabase } from '@/lib/supabase';
 
 type FullInvoice = Invoice & {
   campaign?: { id: string; name: string };
@@ -45,13 +48,69 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [generatingLink, setGeneratingLink] = useState(false);
   const [paymentLink, setPaymentLink] = useState('');
   const [copiedLink, setCopiedLink]   = useState(false);
+  const [activityKey, setActivityKey] = useState(0);
+  const [erpForm, setErpForm] = useState({
+    erp_system: '',
+    client_cost_centre: '',
+    payment_terms: 'Net 30',
+    client_invoice_number: '',
+    wht_rate: '5',
+  });
+  const [savingErp, setSavingErp] = useState(false);
 
   useEffect(() => { fetchInvoice(); }, [id]);
 
   async function fetchInvoice() {
     const res = await fetch(`/api/invoices/${id}`);
-    if (res.ok) setInvoice(await res.json());
+    if (res.ok) {
+      const data = await res.json() as FullInvoice;
+      setInvoice(data);
+      setErpForm({
+        erp_system: data.campaign?.erp_system || '',
+        client_cost_centre: data.campaign?.client_cost_centre || '',
+        payment_terms: data.campaign?.payment_terms || 'Net 30',
+        client_invoice_number: data.client_invoice_number || '',
+        wht_rate: String(data.wht_rate ?? 5),
+      });
+    }
     setLoading(false);
+  }
+
+  async function saveErpFields() {
+    if (!invoice) return;
+    setSavingErp(true);
+    const res = await fetch(`/api/invoices/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_invoice_number: erpForm.client_invoice_number.trim() || null,
+        wht_rate: parseFloat(erpForm.wht_rate) || 5,
+      }),
+    });
+    if (invoice.campaign?.id) {
+      await supabase.from('campaigns').update({
+        erp_system: erpForm.erp_system || null,
+        client_cost_centre: erpForm.client_cost_centre || null,
+        payment_terms: erpForm.payment_terms || null,
+      }).eq('id', invoice.campaign.id);
+    }
+    if (res.ok) {
+      const data = await res.json() as FullInvoice;
+      setInvoice({
+        ...data,
+        campaign: invoice.campaign ? {
+          ...invoice.campaign,
+          erp_system: erpForm.erp_system || null,
+          client_cost_centre: erpForm.client_cost_centre || null,
+          payment_terms: erpForm.payment_terms || null,
+        } : data.campaign,
+      });
+      setActivityKey(k => k + 1);
+      showToast('ERP fields saved');
+    } else {
+      showToast('Failed to save ERP fields', false);
+    }
+    setSavingErp(false);
   }
 
   function showToast(msg: string, ok = true) {
@@ -66,7 +125,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       body: JSON.stringify(updates),
     });
     const data = await res.json();
-    if (res.ok) { setInvoice(data); showToast('Invoice updated'); }
+    if (res.ok) {
+      setInvoice(data);
+      showToast('Invoice updated');
+      setActivityKey(k => k + 1);
+    }
     else showToast(data.error || 'Update failed', false);
     setUpdating(false);
   }
@@ -126,6 +189,16 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const canSend   = invoice.status === 'draft';
   const canPay    = invoice.status === 'sent' || invoice.status === 'overdue';
   const canCancel = invoice.status !== 'paid' && invoice.status !== 'cancelled';
+  const tax = computeTaxBreakdown(
+    invoice.subtotal,
+    invoice.tax_rate,
+    parseFloat(erpForm.wht_rate) || invoice.wht_rate || 5,
+  );
+
+  const erpInput: React.CSSProperties = {
+    width: '100%', padding: '8px 10px', border: '1px solid #E2E8F0', borderRadius: 7,
+    fontSize: '0.8125rem', color: '#0F172A', fontFamily: 'inherit', boxSizing: 'border-box',
+  };
 
   return (
     <div style={{ fontFamily: "'Inter', -apple-system, sans-serif", maxWidth: 960, margin: '0 auto', padding: '0 0 60px' }}>
@@ -145,6 +218,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           ← Invoices
         </button>
         <div style={{ flex: 1 }} />
+        <a href={`/api/invoices/${invoice.id}/erp-export?format=csv`}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: '0.8125rem', fontWeight: 600, color: '#475569', textDecoration: 'none' }}>
+          Export CSV
+        </a>
+        <a href={`/api/invoices/${invoice.id}/erp-export?format=xml`}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: '0.8125rem', fontWeight: 600, color: '#475569', textDecoration: 'none' }}>
+          Export XML
+        </a>
         <a href={`/api/invoices/${invoice.id}/pdf`} target="_blank"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: '0.8125rem', fontWeight: 600, color: '#1B4F8A', textDecoration: 'none' }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -233,8 +314,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
                 <div style={{ width: 280 }}>
                   {[
-                    { label: 'Subtotal', value: fmtNaira(invoice.subtotal), bold: false },
-                    { label: `VAT (${invoice.tax_rate}%)`, value: fmtNaira(invoice.tax_amount), bold: false },
+                    { label: 'Subtotal', value: fmtNaira(tax.subtotal), bold: false },
+                    { label: `VAT (${tax.vatRate}%)`, value: fmtNaira(tax.vatAmount), bold: false },
+                    { label: `WHT (${tax.whtRate}%)`, value: `−${fmtNaira(tax.whtAmount)}`, bold: false },
+                    { label: 'Net payable', value: fmtNaira(tax.netPayable), bold: false },
                   ].map(r => (
                     <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #F1F5F9' }}>
                       <span style={{ fontSize: '0.875rem', color: '#64748B' }}>{r.label}</span>
@@ -344,14 +427,57 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
+          {/* ERP reconciliation */}
+          <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 18, marginBottom: 12 }}>
+            <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 4px' }}>ERP reconciliation</p>
+            <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '0 0 14px', lineHeight: 1.4 }}>
+              Fields for Oracle / SAP / Business Central import. Export CSV or XML after saving.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 500, color: '#374151', display: 'block', marginBottom: 4 }}>Client ERP system</label>
+                <select value={erpForm.erp_system} onChange={e => setErpForm(f => ({ ...f, erp_system: e.target.value }))} style={{ ...erpInput, cursor: 'pointer' }}>
+                  <option value="">— Select —</option>
+                  <option value="oracle">Oracle</option>
+                  <option value="sap">SAP</option>
+                  <option value="business_central">Microsoft Business Central</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 500, color: '#374151', display: 'block', marginBottom: 4 }}>Client PO / Oracle ref</label>
+                <input value={erpForm.client_invoice_number} onChange={e => setErpForm(f => ({ ...f, client_invoice_number: e.target.value }))} placeholder="e.g. MTN-PO-2026-00441" style={erpInput} />
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 500, color: '#374151', display: 'block', marginBottom: 4 }}>Cost centre</label>
+                <input value={erpForm.client_cost_centre} onChange={e => setErpForm(f => ({ ...f, client_cost_centre: e.target.value }))} placeholder="e.g. MKT-LAG-OOH-001" style={erpInput} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 500, color: '#374151', display: 'block', marginBottom: 4 }}>Payment terms</label>
+                  <input value={erpForm.payment_terms} onChange={e => setErpForm(f => ({ ...f, payment_terms: e.target.value }))} style={erpInput} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 500, color: '#374151', display: 'block', marginBottom: 4 }}>WHT %</label>
+                  <input type="number" value={erpForm.wht_rate} onChange={e => setErpForm(f => ({ ...f, wht_rate: e.target.value }))} style={erpInput} />
+                </div>
+              </div>
+              <button onClick={saveErpFields} disabled={savingErp}
+                style={{ width: '100%', padding: 9, borderRadius: 8, border: 'none', background: '#1B4F8A', color: '#fff', fontSize: '0.8125rem', fontWeight: 600, cursor: savingErp ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: savingErp ? 0.7 : 1 }}>
+                {savingErp ? 'Saving…' : 'Save ERP fields'}
+              </button>
+            </div>
+          </div>
+
           {/* Invoice summary */}
           <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 18 }}>
             <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 14px' }}>Summary</p>
             {[
               { label: 'Line items',   value: String(invoice.items.length) },
               { label: 'Subtotal',     value: fmtNaira(invoice.subtotal) },
-              { label: `VAT ${invoice.tax_rate}%`, value: fmtNaira(invoice.tax_amount) },
-              { label: 'Total',        value: fmtNaira(invoice.total_amount) },
+              { label: `VAT ${tax.vatRate}%`, value: fmtNaira(tax.vatAmount) },
+              { label: `WHT ${tax.whtRate}%`, value: fmtNaira(tax.whtAmount) },
+              { label: 'Net payable',  value: fmtNaira(tax.netPayable) },
             ].map(({ label, value }) => (
               <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #F8FAFC' }}>
                 <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>{label}</span>
@@ -377,6 +503,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               </div>
             ))}
           </div>
+
+          <ActivityTimeline entityType="invoice" entityId={id} title="Audit trail" refreshKey={activityKey} />
         </div>
       </div>
 

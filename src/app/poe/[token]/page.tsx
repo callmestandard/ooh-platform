@@ -4,9 +4,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { createNotification } from '@/lib/notifications';
+import { logActivity } from '@/lib/activity-log';
 
 type BookingInfo = {
   id: string;
+  status: string;
   poe_token: string;
   start_date: string;
   end_date: string;
@@ -19,6 +21,7 @@ type BookingInfo = {
     height: number;
   };
   campaigns: {
+    id: string;
     name: string;
     client_name: string;
   };
@@ -54,9 +57,9 @@ export default function POEUploadPage() {
     const { data, error } = await supabase
       .from('bookings')
       .select(`
-        id, poe_token, start_date, end_date,
+        id, status, poe_token, start_date, end_date,
         boards (name, address, city, format, width, height),
-        campaigns (name, client_name)
+        campaigns (id, name, client_name)
       `)
       .eq('poe_token', token)
       .single();
@@ -146,8 +149,7 @@ export default function POEUploadPage() {
       }
     }
 
-    // Insert compliance check
-    const { error: insertError } = await supabase.from('compliance_checks').insert({
+    const { data: newCheck, error: insertError } = await supabase.from('compliance_checks').insert({
       booking_id: booking.id,
       photo_url: photoUrl,
       latitude: location?.lat,
@@ -158,7 +160,7 @@ export default function POEUploadPage() {
       status: 'submitted',
       notes: notes || null,
       device_info: navigator.userAgent,
-    });
+    }).select('id').single();
 
     if (insertError) {
       setStep('form');
@@ -166,8 +168,29 @@ export default function POEUploadPage() {
       return;
     }
 
-    // Update booking status to live
     await supabase.from('bookings').update({ status: 'live' }).eq('id', booking.id);
+
+    const campaignId = (booking.campaigns as { id?: string } | null)?.id ?? null;
+    await logActivity({
+      entityType: 'compliance_check',
+      entityId: newCheck!.id,
+      campaignId,
+      action: 'compliance.submitted',
+      summary: `POE submitted for ${booking.boards?.name || 'board'} — ${booking.campaigns?.name || 'campaign'}`,
+      actorRole: 'owner',
+      actorName: submitterName,
+      metadata: { booking_id: booking.id },
+    });
+    await logActivity({
+      entityType: 'booking',
+      entityId: booking.id,
+      campaignId,
+      action: 'booking.status_changed',
+      summary: `${booking.boards?.name} marked live after POE submission`,
+      actorRole: 'owner',
+      actorName: submitterName,
+      changes: { status: { from: booking.status, to: 'live' } },
+    });
 
     // Notify the agency that proof has been submitted
     await createNotification({
