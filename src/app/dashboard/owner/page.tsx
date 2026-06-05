@@ -1924,7 +1924,7 @@ function OwnerContent() {
                     return (
                       <tr key={inv.id} style={{ borderBottom: i < ownerInvoices.length - 1 ? '1px solid #F8FAFC' : 'none' }}>
                         <td style={{ padding: '12px 14px' }}>
-                          <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', fontFamily: 'monospace' }}>{inv.invoice_number}</span>
+                          <a href={`/dashboard/owner/invoices/${inv.id}`} style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1B4F8A', fontFamily: 'monospace', textDecoration: 'none' }}>{inv.invoice_number}</a>
                           {inv.compiled_invoice_id && <span style={{ display: 'block', fontSize: '0.625rem', color: '#8B5CF6', fontWeight: 600, marginTop: 2 }}>↗ Compiled into client invoice</span>}
                         </td>
                         <td style={{ padding: '12px 14px' }}>
@@ -1944,23 +1944,23 @@ function OwnerContent() {
                           </span>
                         </td>
                         <td style={{ padding: '12px 14px' }}>
-                          {inv.status === 'draft' && (
-                            <button
-                              onClick={() => sendMPI(inv.id)}
-                              style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1B4F8A', background: '#EFF6FF', border: 'none', padding: '5px 10px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit' }}
-                            >
-                              Send to Agency →
-                            </button>
-                          )}
-                          {inv.status === 'sent' && (
-                            <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>Awaiting agency</span>
-                          )}
-                          {inv.status === 'acknowledged' && (
-                            <a href={`/invoice/${inv.compiled_invoice_id}`} target="_blank" style={{ fontSize: '0.75rem', fontWeight: 600, color: '#8B5CF6', textDecoration: 'none' }}>View client invoice →</a>
-                          )}
-                          {inv.status === 'paid' && (
-                            <span style={{ fontSize: '0.75rem', color: '#10B981', fontWeight: 600 }}>✓ Paid</span>
-                          )}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start' }}>
+                            <a href={`/dashboard/owner/invoices/${inv.id}`} style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', textDecoration: 'none', background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '3px 9px', borderRadius: 6 }}>View →</a>
+                            {inv.status === 'draft' && (
+                              <button
+                                onClick={() => sendMPI(inv.id)}
+                                style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1B4F8A', background: '#EFF6FF', border: 'none', padding: '3px 9px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}
+                              >
+                                Send to Agency →
+                              </button>
+                            )}
+                            {inv.status === 'acknowledged' && (
+                              <a href={`/invoice/${inv.compiled_invoice_id}`} target="_blank" style={{ fontSize: '0.75rem', fontWeight: 600, color: '#8B5CF6', textDecoration: 'none' }}>Client invoice →</a>
+                            )}
+                            {inv.status === 'paid' && (
+                              <span style={{ fontSize: '0.75rem', color: '#10B981', fontWeight: 600 }}>✓ Paid</span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
