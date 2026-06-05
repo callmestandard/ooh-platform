@@ -33,6 +33,7 @@ type Campaign = {
   objective?: string | null;
   target_cities?: string | null;
   plan_notes?: string | null;
+  agency_id?: string | null;
 };
 
 type Booking = {
@@ -580,6 +581,23 @@ function ClientContent() {
         link: `/dashboard/agency/campaigns/${activeCampaign?.id}`,
       });
       showToast(`All ${pendingIds.length} boards approved — agency notified!`);
+      // Fire-and-forget email to agency
+      const agencyId = activeCampaign?.agency_id;
+      if (agencyId) {
+        const { data: { user: clientUser } } = await supabase.auth.getUser();
+        fetch('/api/notify/email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'plan_approved',
+            agencyId,
+            clientId: clientUser?.id ?? '',
+            campaignName: activeCampaign?.name ?? '',
+            boardCount: pendingIds.length,
+            campaignId: activeCampaign?.id ?? '',
+          }),
+        }).catch(() => {});
+      }
     }
   }
 

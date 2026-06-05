@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { diffFields, logActivity } from '@/lib/activity-log';
+import { emailMPISent } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -217,6 +218,25 @@ export async function PATCH(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Email agency when owner sends the MPI
+  if (data && data.status === 'sent' && before?.status !== 'sent') {
+    const agencyUserId = data.agency_id ?? data.campaign?.agency_id;
+    if (agencyUserId) {
+      const { data: { user } } = await supabase.auth.admin.getUserById(agencyUserId);
+      if (user?.email) {
+        const ownerUser = data.owner_id ? await supabase.auth.admin.getUserById(data.owner_id) : null;
+        const ownerName = ownerUser?.data?.user?.user_metadata?.full_name ?? 'Board owner';
+        await emailMPISent({
+          to: user.email,
+          invoiceNumber: data.invoice_number,
+          totalAmount: data.total_amount,
+          ownerName,
+          invoiceId: id,
+        });
+      }
+    }
+  }
 
   if (before && data) {
     const changes = diffFields(

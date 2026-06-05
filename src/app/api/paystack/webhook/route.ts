@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { logActivity } from '@/lib/activity-log';
+import { emailPaymentReceived } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -80,6 +81,26 @@ export async function POST(req: NextRequest) {
           `${inv.client_name} paid ${amount}. Invoice is now settled.`,
           `/dashboard/agency/invoices/${invoiceId}`,
         );
+
+        // Email the agency
+        const { data: agencyInv } = await supabase
+          .from('invoices')
+          .select('agency_id, campaign:campaigns(agency_id)')
+          .eq('id', invoiceId)
+          .single() as { data: { agency_id?: string; campaign?: { agency_id?: string } } | null };
+        const agencyUserId = agencyInv?.agency_id ?? (agencyInv?.campaign as { agency_id?: string } | null)?.agency_id;
+        if (agencyUserId) {
+          const { data: { user } } = await supabase.auth.admin.getUserById(agencyUserId);
+          if (user?.email) {
+            await emailPaymentReceived({
+              to: user.email,
+              invoiceNumber: inv.invoice_number,
+              totalAmount: inv.total_amount,
+              clientName: inv.client_name,
+              invoiceId: invoiceId!,
+            });
+          }
+        }
         await logActivity({
           entityType: 'invoice',
           entityId: invoiceId,
