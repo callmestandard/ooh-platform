@@ -248,6 +248,14 @@ export default function SettingsPage() {
   const [agencyProfileId, setAgencyProfileId] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
+  // Password change
+  const [currentPw, setCurrentPw]   = useState('');
+  const [newPw, setNewPw]           = useState('');
+  const [confirmPw, setConfirmPw]   = useState('');
+  const [changingPw, setChangingPw] = useState(false);
+  const [pwError, setPwError]       = useState('');
+  const [pwSuccess, setPwSuccess]   = useState(false);
+
   // Load from localStorage on mount
   useEffect(() => {
     if (!role) return;
@@ -326,6 +334,48 @@ export default function SettingsPage() {
       setBranding(b => ({ ...b, logoUrl: publicUrl }));
     }
     setUploadingLogo(false);
+  }
+
+  async function handleChangePassword() {
+    setPwError('');
+    setPwSuccess(false);
+    if (!currentPw) { setPwError('Enter your current password.'); return; }
+    if (newPw.length < 8) { setPwError('New password must be at least 8 characters.'); return; }
+    if (newPw !== confirmPw) { setPwError('Passwords do not match.'); return; }
+
+    setChangingPw(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.email) {
+        setPwError('No active session — please sign in again.');
+        return;
+      }
+
+      // Verify current password by re-authenticating
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: session.user.email,
+        password: currentPw,
+      });
+      if (signInError) {
+        setPwError('Current password is incorrect.');
+        return;
+      }
+
+      // Update to new password
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPw });
+      if (updateError) {
+        setPwError(updateError.message);
+        return;
+      }
+
+      setCurrentPw('');
+      setNewPw('');
+      setConfirmPw('');
+      setPwSuccess(true);
+      setTimeout(() => setPwSuccess(false), 4000);
+    } finally {
+      setChangingPw(false);
+    }
   }
 
   async function handleInvite() {
@@ -820,19 +870,48 @@ export default function SettingsPage() {
               <SectionCard title="Change password" subtitle="Keep your account secure with a strong password.">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <Field label="Current password">
-                    <Input value="" onChange={() => {}} type="password" placeholder="••••••••" disabled />
+                    <Input value={currentPw} onChange={setCurrentPw} type="password" placeholder="••••••••" />
                   </Field>
-                  <Field label="New password">
-                    <Input value="" onChange={() => {}} type="password" placeholder="••••••••" disabled />
+                  <Field label="New password" hint="Minimum 8 characters.">
+                    <Input value={newPw} onChange={setNewPw} type="password" placeholder="••••••••" />
                   </Field>
                   <Field label="Confirm new password">
-                    <Input value="" onChange={() => {}} type="password" placeholder="••••••••" disabled />
+                    <Input value={confirmPw} onChange={setConfirmPw} type="password" placeholder="••••••••" />
                   </Field>
                 </div>
-                <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '10px 14px', marginTop: 14 }}>
-                  <p style={{ fontSize: '0.8125rem', color: '#1E3A8A', margin: 0 }}>
-                    Password management is handled through Supabase Auth. Use the login page's "Forgot password" flow to reset your password securely.
-                  </p>
+
+                {pwError && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', marginTop: 14 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <p style={{ fontSize: '0.8125rem', color: '#991B1B', margin: 0 }}>{pwError}</p>
+                  </div>
+                )}
+
+                {pwSuccess && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '10px 14px', marginTop: 14 }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    <p style={{ fontSize: '0.8125rem', color: '#065F46', fontWeight: 600, margin: 0 }}>Password updated successfully.</p>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={handleChangePassword}
+                    disabled={changingPw || !currentPw || !newPw || !confirmPw}
+                    style={{
+                      padding: '9px 20px', borderRadius: 8, border: 'none', fontFamily: 'inherit',
+                      fontSize: '0.875rem', fontWeight: 600, cursor: changingPw || !currentPw || !newPw || !confirmPw ? 'not-allowed' : 'pointer',
+                      background: changingPw || !currentPw || !newPw || !confirmPw ? '#CBD5E1' : '#1B4F8A',
+                      color: '#fff', display: 'flex', alignItems: 'center', gap: 8,
+                    }}
+                  >
+                    {changingPw ? (
+                      <>
+                        <div style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                        Updating…
+                      </>
+                    ) : 'Update password'}
+                  </button>
                 </div>
               </SectionCard>
 
