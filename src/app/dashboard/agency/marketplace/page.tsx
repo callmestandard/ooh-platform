@@ -729,7 +729,7 @@ export default function MarketplacePage() {
               </button>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, animation: 'fadeIn 0.25s both' }}>
+            <div className="resp-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, animation: 'fadeIn 0.25s both' }}>
               {filtered.map(b => (
                 <BoardCard key={b.id} board={b} onViewDetail={setDetail}
                   isShortlisted={shortlist.has(b.id)}

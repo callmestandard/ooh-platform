@@ -265,7 +265,7 @@ export default function CompliancePage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '1.5rem' }}>
+      <div className="resp-grid-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '1.5rem' }}>
         {[
           { label: 'Total checks', value: stats.total, color: '#0F172A' },
           { label: 'Compliance rate', value: `${stats.rate}%`, color: stats.rate >= 90 ? '#059669' : stats.rate >= 70 ? '#D97706' : '#DC2626' },

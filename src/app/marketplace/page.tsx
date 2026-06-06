@@ -615,7 +615,7 @@ export default function MarketplacePage() {
             <p style={{ fontSize: '0.9375rem', color: 'rgba(255,255,255,0.45)', margin: '0 auto 36px', maxWidth: 440 }}>
               No cold calls. No site visits. No spreadsheets.
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, maxWidth: 640, margin: '0 auto 36px', textAlign: 'left' }}>
+            <div className="resp-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, maxWidth: 640, margin: '0 auto 36px', textAlign: 'left' }}>
               {[
                 { num: '01', title: 'Browse & filter', body: 'Find boards by city, format, size, and budget on one page.' },
                 { num: '02', title: 'Request a quote', body: 'Submit your campaign dates and budget. Owner responds in 24h.' },

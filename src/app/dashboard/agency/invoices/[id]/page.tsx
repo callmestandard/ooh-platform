@@ -233,7 +233,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         </a>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, animation: 'fadeIn 0.25s both' }}>
+      <div className="resp-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, animation: 'fadeIn 0.25s both' }}>
 
         {/* ── Left: Invoice document ── */}
         <div>

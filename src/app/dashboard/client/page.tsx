@@ -941,7 +941,7 @@ function ClientContent() {
           <div style={{ height: 10, background: '#F1F5F9', borderRadius: 999, overflow: 'hidden', marginBottom: 8 }}>
             <div style={{ height: '100%', borderRadius: 999, background: budgetUtilisation > 90 ? '#EF4444' : budgetUtilisation > 70 ? '#F59E0B' : '#1B4F8A', width: `${budgetUtilisation}%`, transition: 'width 1s ease' }} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+          <div className="resp-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             {[
               { label: 'Total budget',       value: formatNaira(totalBudget),              color: '#0F172A' },
               { label: 'Committed spend',    value: formatNaira(committedSpend),           color: '#1B4F8A' },

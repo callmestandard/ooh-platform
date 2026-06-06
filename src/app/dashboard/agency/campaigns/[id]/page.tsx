@@ -642,7 +642,7 @@ export default function CampaignPlanPage() {
         </div>
 
         {/* Stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: '1.5rem' }}>
+        <div className="resp-grid-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: '1.5rem' }}>
           {[
             { label: 'Total budget', value: formatNaira(campaign.total_budget), bar: '#1B4F8A' },
             { label: 'Plan cost', value: formatNaira(totalPlanCost), bar: totalPlanCost > campaign.total_budget ? '#EF4444' : '#10B981' },
@@ -1151,7 +1151,7 @@ export default function CampaignPlanPage() {
               </div>
 
               {/* KPI strip */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginTop: 14 }}>
+              <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginTop: 14 }}>
                 {[
                   { label: 'Total boards',   value: String(planItems.length) },
                   { label: 'Agreed / Signed', value: String(planItems.filter(i => ['agreed','signed'].includes(i.status)).length) },
@@ -1178,7 +1178,7 @@ export default function CampaignPlanPage() {
             <div>
               {/* KPI strip */}
               {trackingLinks.length > 0 && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+                <div className="resp-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
                   {[
                     { label: 'Total scans', value: String(totalScans), color: '#1B4F8A' },
                     { label: 'Last 7 days', value: String(weekScans), color: '#7C3AED' },
@@ -1318,7 +1318,7 @@ export default function CampaignPlanPage() {
           const inputSt: React.CSSProperties = { width: '100%', padding: '8px 11px', border: '1px solid #E2E8F0', borderRadius: 7, fontSize: '0.875rem', color: '#0F172A', outline: 'none', fontFamily: 'inherit', background: '#fff', boxSizing: 'border-box' };
 
           return (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, alignItems: 'start' }}>
+            <div className="resp-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16, alignItems: 'start' }}>
 
               {/* Left — form */}
               <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '22px 24px' }}>

@@ -520,7 +520,7 @@ export default function CreativesPage() {
       </div>
 
       {/* KPI summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: '1.5rem' }}>
+      <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: '1.5rem' }}>
         {[
           { label: 'Total boards', value: bookings.length, sub: 'Across all campaigns', bar: '#1B4F8A', filter: 'all' },
           { label: 'Missing artwork', value: missingCount, sub: 'Need upload', bar: '#EF4444', filter: 'missing' },

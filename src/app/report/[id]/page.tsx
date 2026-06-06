@@ -390,7 +390,7 @@ export default function CampaignReportPage() {
         </div>
 
         {/* ── KPI Grid ── */}
-        <div className="fade" style={{ display: 'grid', gridTemplateColumns: `repeat(${totalScans > 0 ? 5 : 4}, 1fr)`, gap: 12, marginBottom: 20 }}>
+        <div className="fade resp-grid-5" style={{ display: 'grid', gridTemplateColumns: `repeat(${totalScans > 0 ? 5 : 4}, 1fr)`, gap: 12, marginBottom: 20 }}>
           <KPICard label="Boards in plan" value={String(activeBookings.length)} sub={`${bookings.filter(b => b.status === 'live').length} currently live`} color="#1B4F8A" />
           {totalScans > 0 && (
             <KPICard
@@ -595,7 +595,7 @@ export default function CampaignReportPage() {
             </div>
             <div style={{ padding: '20px 24px' }}>
               {/* Summary row */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+              <div className="resp-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
                 {[
                   { label: 'Total scans', value: totalScans.toLocaleString(), color: '#F59E0B' },
                   { label: 'Mobile scans', value: `${mobileScans.toLocaleString()} (${mobilePct}%)`, color: '#7C3AED' },

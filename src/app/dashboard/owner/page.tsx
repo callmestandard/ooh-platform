@@ -319,7 +319,7 @@ function RateCardTab({ boards, formatNaira, onSave }: { boards: Board[]; formatN
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+      <div className="resp-form-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
 
         {/* Base rate */}
         <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '18px 20px' }}>
@@ -372,7 +372,7 @@ function RateCardTab({ boards, formatNaira, onSave }: { boards: Board[]; formatN
       {/* Seasonal multipliers */}
       <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '18px 20px', marginBottom: '1rem' }}>
         <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 14px' }}>Seasonal multipliers</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
           {card.seasons.map(season => (
             <div
               key={season.id}

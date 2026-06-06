@@ -312,7 +312,7 @@ export default function AudiencePage() {
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
+      <div className="resp-2col" style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
 
         {/* Board selector */}
         <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, overflow: 'hidden' }}>
@@ -397,7 +397,7 @@ export default function AudiencePage() {
               </div>
 
               {/* Reach metrics */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+              <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
                 {[
                   { label: 'Daily impressions',  value: formatImpressions(profile.dailyImpressions), sub: 'Vehicles + pedestrians', bar: '#1B4F8A' },
                   { label: 'Weekly reach',        value: formatImpressions(profile.weeklyReach),       sub: 'Unique eyes per week', bar: '#7C3AED' },
