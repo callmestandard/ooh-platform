@@ -264,7 +264,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Top stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '1.5rem' }}>
+      <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '1.5rem' }}>
         {[
           { label: 'Total campaigns', value: campaigns.length, sub: `${activeCampaigns} active`, color: '#0F172A' },
           { label: 'Total budget', value: formatNaira(totalBudget), sub: 'Across all campaigns', color: '#1B4F8A' },

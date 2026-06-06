@@ -529,9 +529,9 @@ export default function SettingsPage() {
         <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>Manage your account, preferences, and billing details.</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 20, alignItems: 'start' }}>
+      <div className="resp-settings-layout" style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 20, alignItems: 'start' }}>
         {/* Sidebar nav */}
-        <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: 8, position: 'sticky', top: 0 }}>
+        <div className="resp-settings-tabs" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: 8, position: 'sticky', top: 0 }}>
           {tabs.map(tab => (
             <button
               key={tab.key}
@@ -576,7 +576,7 @@ export default function SettingsPage() {
                   uploading={uploadingAvatar}
                 />
                 <div style={{ height: 1, background: '#F1F5F9', margin: '20px 0' }} />
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="resp-form-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <Field label="Display name">
                     <Input value={profile.displayName} onChange={v => setProfile(p => ({ ...p, displayName: v }))} placeholder="Your full name" />
                   </Field>
@@ -616,7 +616,7 @@ export default function SettingsPage() {
 
               {/* Account info */}
               <SectionCard title="Account information" subtitle="Read-only details about your account.">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="resp-form-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   {[
                     { label: 'Account type', value: roleLabels[role] },
                     { label: 'Member since', value: 'May 2025' },
@@ -705,7 +705,7 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="resp-form-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <Field label="Bank name">
                     <Select value={payout.bankName} onChange={v => setPayout(p => ({ ...p, bankName: v }))} options={NIGERIAN_BANKS} />
                   </Field>
@@ -724,7 +724,7 @@ export default function SettingsPage() {
 
               {/* Earnings summary */}
               <SectionCard title="Earnings summary" subtitle="Your lifetime earnings on OOH Platform.">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                <div className="resp-form-3col" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
                   {[
                     { label: 'Total earned', value: '₦0', sub: 'Since joining', color: '#1B4F8A' },
                     { label: 'Pending payout', value: '₦0', sub: 'Processing now', color: '#F59E0B' },
@@ -876,7 +876,7 @@ export default function SettingsPage() {
                   </div>
                 </Field>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="resp-form-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <Field label="Company website">
                     <Input value={branding.companyWebsite} onChange={v => setBranding(b => ({ ...b, companyWebsite: v }))} placeholder="https://youragency.ng" />
                   </Field>

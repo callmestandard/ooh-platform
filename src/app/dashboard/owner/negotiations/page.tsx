@@ -114,7 +114,7 @@ export default function OwnerNegotiationsPage() {
       </div>
 
       {/* Stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: '1.5rem' }}>
+      <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: '1.5rem' }}>
         {[
           { label: 'Total requests', value: bookings.length,                                               accent: '#0F172A' },
           { label: 'Awaiting action', value: bookings.filter(b => b.status === 'pending').length,          accent: '#D97706' },

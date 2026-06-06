@@ -144,7 +144,7 @@ export default function NegotiationsPage() {
       </div>
 
       {/* ── Stats ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.5rem' }}>
+      <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.5rem' }}>
         {[
           { label: 'Total', value: stats.total, icon: '📋', accent: '#0F172A', sub: 'All deals' },
           { label: 'Awaiting', value: stats.pending, icon: '⏳', accent: '#D97706', sub: 'Need follow-up' },

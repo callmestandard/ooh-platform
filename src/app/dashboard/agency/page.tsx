@@ -199,7 +199,7 @@ export default function AgencyDashboardPage() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.75rem' }}>
+      <div className="resp-grid-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '1.75rem' }}>
         <StatCard label="Active campaigns"      value={String(activeCampaigns)}        bar="#1B4F8A" sub={`${campaigns.length} total`} />
         <StatCard label="Pending negotiations"  value={String(pendingNegotiations)}    bar="#F59E0B" sub="Awaiting response" />
         <StatCard label="Outstanding invoices"  value={outstandingTotal > 0 ? formatNaira(outstandingTotal) : '₦0'} bar={overdueInvoices.length > 0 ? '#EF4444' : '#94A3B8'} sub={`${unpaidInvoices.length} unpaid`} />
@@ -230,7 +230,7 @@ export default function AgencyDashboardPage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '16px' }}>
+      <div className="resp-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '16px' }}>
         {/* Campaigns table */}
         <div className="table-scroll" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #F1F5F9' }}>

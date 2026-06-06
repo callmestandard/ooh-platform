@@ -220,7 +220,7 @@ export default function PublicInvoicePage({ params, searchParams }: {
           </div>
 
           {/* Meta row */}
-          <div style={{ padding: '16px 28px', borderBottom: '1px solid #F1F5F9', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+          <div className="resp-grid-4" style={{ padding: '16px 28px', borderBottom: '1px solid #F1F5F9', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
             {[
               { label: 'Invoice Date', value: fmtDate(invoice.created_at) },
               { label: 'Due Date',     value: fmtDate(invoice.due_date) },

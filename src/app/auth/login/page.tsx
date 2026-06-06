@@ -138,7 +138,7 @@ function LoginContent() {
       fontFamily: "'Inter', -apple-system, sans-serif",
     }}>
       {/* Left panel — branding */}
-      <div style={{
+      <div className="auth-split-left" style={{
         width: '45%',
         background: '#0F172A',
         display: 'flex',
@@ -205,7 +205,7 @@ function LoginContent() {
       </div>
 
       {/* Right panel — login form */}
-      <div style={{
+      <div className="auth-split-right" style={{
         flex: 1,
         display: 'flex',
         alignItems: 'center',

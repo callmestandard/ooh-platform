@@ -119,7 +119,7 @@ export default function SignupPage() {
     <div style={{ minHeight: '100vh', background: '#F8FAFC', display: 'flex', fontFamily: "'Inter', -apple-system, sans-serif" }}>
 
       {/* Left panel */}
-      <div style={{ width: '42%', background: '#0F172A', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '48px', position: 'relative', overflow: 'hidden' }}>
+      <div className="auth-split-left" style={{ width: '42%', background: '#0F172A', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '48px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', inset: 0, opacity: 0.03, backgroundImage: 'linear-gradient(rgba(255,255,255,0.8) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.8) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
         <div style={{ position: 'relative' }}>
           <a href="/" style={{ textDecoration: 'none' }}><OOHLogo /></a>
@@ -149,7 +149,7 @@ export default function SignupPage() {
       </div>
 
       {/* Right panel */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 48px' }}>
+      <div className="auth-split-right" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 48px' }}>
         <div style={{ width: '100%', maxWidth: 420 }}>
 
           {/* Step indicator */}
