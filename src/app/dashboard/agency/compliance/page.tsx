@@ -350,10 +350,13 @@ export default function CompliancePage() {
             {loading ? (
               <div style={{ padding: '3rem', textAlign: 'center', color: '#94A3B8' }}>Loading...</div>
             ) : filtered.length === 0 ? (
-              <div style={{ padding: '3rem', textAlign: 'center', color: '#94A3B8' }}>
-                <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📸</div>
-                <p style={{ margin: 0, fontWeight: 500, color: '#64748B' }}>No compliance checks yet</p>
-                <p style={{ margin: '4px 0 0', fontSize: '0.8125rem' }}>Upload the first proof of posting</p>
+              <div style={{ padding: '4rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ width: 52, height: 52, background: '#EFF6FF', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1B4F8A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                </div>
+                <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No compliance checks yet</p>
+                <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: '0 0 20px' }}>Upload proof-of-posting photos to confirm boards are live</p>
+                <button onClick={() => setActiveTab('upload')} style={{ background: '#1B4F8A', color: '#fff', border: 'none', padding: '10px 22px', borderRadius: '8px', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Upload Proof</button>
               </div>
             ) : filtered.map((check, i) => {
               const cfg = STATUS_CONFIG[check.status];

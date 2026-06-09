@@ -977,8 +977,13 @@ function OwnerContent() {
       {activeTab === 'bookings' && (
         <div className="table-scroll" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden' }}>
           {bookings.length === 0 ? (
-            <div style={{ padding: '4rem', textAlign: 'center' }}>
-              <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>No bookings yet</p>
+            <div style={{ padding: '5rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ width: 52, height: 52, background: '#EFF6FF', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1B4F8A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              </div>
+              <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No bookings yet</p>
+              <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: '0 0 20px' }}>Agencies will book your boards once you list them on the marketplace</p>
+              <a href="/dashboard/owner/boards" style={{ background: '#1B4F8A', color: '#fff', border: 'none', padding: '10px 22px', borderRadius: '8px', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', display: 'inline-block' }}>Manage Boards</a>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1099,9 +1104,12 @@ function OwnerContent() {
       {activeTab === 'messages' && (
         <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden' }}>
           {messages.length === 0 ? (
-            <div style={{ padding: '4rem', textAlign: 'center' }}>
-              <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>No messages yet</p>
-              <p style={{ fontSize: '0.75rem', color: '#CBD5E1', margin: '4px 0 0' }}>Messages from agencies will appear here</p>
+            <div style={{ padding: '5rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ width: 52, height: 52, background: '#F5F3FF', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No messages yet</p>
+              <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>Offer negotiations and messages from agencies will appear here</p>
             </div>
           ) : messages.map((msg, i) => {
             const tc: Record<string, { bg: string; border: string; label: string; labelColor: string }> = {
@@ -1342,9 +1350,12 @@ function OwnerContent() {
                 <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>Revenue contribution per board</p>
               </div>
               {boardRevList.length === 0 ? (
-                <div style={{ padding: '3rem', textAlign: 'center' }}>
-                  <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>No agreed bookings yet</p>
-                  <p style={{ fontSize: '0.75rem', color: '#CBD5E1', margin: '4px 0 0' }}>Earnings will appear once agencies agree on rates</p>
+                <div style={{ padding: '3rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ width: 44, height: 44, background: '#ECFDF5', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  </div>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 4px' }}>No agreed bookings yet</p>
+                  <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>Revenue per board will show once agencies agree on rates</p>
                 </div>
               ) : boardRevList.map((board, i) => (
                 <div key={i} style={{ padding: '14px 20px', borderBottom: i < boardRevList.length - 1 ? '1px solid #F8FAFC' : 'none' }}>
@@ -1375,8 +1386,12 @@ function OwnerContent() {
                 <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>All agreed deals</p>
               </div>
               {agreedBookings.length === 0 ? (
-                <div style={{ padding: '3rem', textAlign: 'center' }}>
-                  <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>No earnings data yet</p>
+                <div style={{ padding: '3rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ width: 44, height: 44, background: '#EFF6FF', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1B4F8A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+                  </div>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 4px' }}>No booking history yet</p>
+                  <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>Agreed deals will show up here with invoice tracking</p>
                 </div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1536,8 +1551,12 @@ function OwnerContent() {
                 <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>Utilisation rate, pipeline and earned revenue per board</p>
               </div>
               {boardUtil.length === 0 ? (
-                <div style={{ padding: '3rem', textAlign: 'center' }}>
-                  <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>No boards listed yet</p>
+                <div style={{ padding: '3rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ width: 44, height: 44, background: '#FFF7ED', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                  </div>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 4px' }}>No boards listed yet</p>
+                  <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>Add boards to track their utilisation and revenue</p>
                 </div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>

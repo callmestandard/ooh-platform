@@ -1044,8 +1044,12 @@ function ClientContent() {
             <span style={{ fontSize: '0.8125rem', color: '#94A3B8' }}>Loading boards...</span>
           </div>
         ) : bookings.length === 0 ? (
-          <div style={{ padding: '4rem', textAlign: 'center' }}>
-            <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>No boards in this campaign yet</p>
+          <div style={{ padding: '5rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ width: 52, height: 52, background: '#F5F3FF', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </div>
+            <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No boards in this campaign yet</p>
+            <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>Your agency will add boards to this campaign — they will appear here</p>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1113,8 +1117,12 @@ function ClientContent() {
               <span style={{ fontSize: '0.8125rem', color: '#94A3B8' }}>Loading boards...</span>
             </div>
           ) : bookings.length === 0 ? (
-            <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '4rem', textAlign: 'center' }}>
-              <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>No boards in this campaign</p>
+            <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '5rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ width: 52, height: 52, background: '#F5F3FF', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              </div>
+              <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No boards in this campaign</p>
+              <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>Your agency will add boards here once they start booking locations</p>
             </div>
           ) : (
             <>

@@ -247,8 +247,13 @@ export default function AgencyDashboardPage() {
           </div>
 
           {campaigns.length === 0 ? (
-            <div style={{ padding: '3rem', textAlign: 'center' }}>
-              <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>No campaigns yet</p>
+            <div style={{ padding: '4rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ width: 48, height: 48, background: '#F5F3FF', borderRadius: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              </div>
+              <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No campaigns yet</p>
+              <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: '0 0 20px' }}>Create your first campaign and start booking OOH boards</p>
+              <button onClick={() => router.push('/dashboard/agency/campaigns')} style={{ background: '#7C3AED', color: '#fff', border: 'none', padding: '10px 22px', borderRadius: '8px', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Create Campaign</button>
             </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -296,14 +301,13 @@ export default function AgencyDashboardPage() {
               </button>
             </div>
             {bookings.length === 0 ? (
-              <div style={{ padding: '2rem', textAlign: 'center' }}>
-                <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>No bookings yet</p>
-                <button
-                  onClick={() => router.push('/dashboard/agency/boards-map')}
-                  style={{ marginTop: '8px', fontSize: '0.75rem', color: '#1B4F8A', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
-                >
-                  Go to Boards Map →
-                </button>
+              <div style={{ padding: '3rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ width: 44, height: 44, background: '#EFF6FF', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#1B4F8A" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </div>
+                <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No bookings yet</p>
+                <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '0 0 16px' }}>Browse the board map and send your first offer</p>
+                <button onClick={() => router.push('/dashboard/agency/boards-map')} style={{ background: '#1B4F8A', color: '#fff', border: 'none', padding: '9px 18px', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Explore Boards Map</button>
               </div>
             ) : bookings.map((b, i) => (
               <div
