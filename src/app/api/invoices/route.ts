@@ -27,6 +27,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'client_name is required' }, { status: 400 });
   }
 
+  // Fetch caller's profile so we can stamp agency_id / owner_id on the invoice
+  const { data: callerProfile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single() as { data: { role: string } | null };
+
   // Generate invoice number from current count
   const { count } = await supabase
     .from('invoices')
@@ -73,7 +80,11 @@ export async function POST(req: NextRequest) {
   const tax_amount  = Math.round(subtotal * (tax_rate / 100) * 100) / 100;
   const total_amount = subtotal + tax_amount;
 
-  // Create invoice
+  // Create invoice — stamp the tenant ID so the caller can retrieve it later
+  const tenantFields: Record<string, string> = {};
+  if (callerProfile?.role === 'agency') tenantFields.agency_id = user.id;
+  else if (callerProfile?.role === 'owner') tenantFields.owner_id = user.id;
+
   const { data: invoice, error } = await supabase
     .from('invoices')
     .insert({
@@ -82,6 +93,7 @@ export async function POST(req: NextRequest) {
       due_date: due_date || null, notes: notes || null,
       client_invoice_number: client_invoice_number || null,
       status: 'draft',
+      ...tenantFields,
     })
     .select()
     .single();
