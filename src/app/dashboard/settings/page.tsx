@@ -307,25 +307,18 @@ export default function SettingsPage() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
       setProfileUserId(user.id);
+      if (role === 'agency') setAgencyProfileId(user.id);
       supabase
         .from('profiles')
-        .select('avatar_url, brand_accent_color, brand_tagline, brand_website, brand_logo_url, erp_vendor_code')
+        .select('*')
         .eq('id', user.id)
         .single()
         .then(({ data }) => {
           if (!data) return;
-          const row = data as {
-            avatar_url?: string | null;
-            brand_accent_color?: string | null;
-            brand_tagline?: string | null;
-            brand_website?: string | null;
-            brand_logo_url?: string | null;
-            erp_vendor_code?: string | null;
-          };
+          const row = data as Record<string, string | null>;
           if (row.avatar_url) setAvatarUrl(row.avatar_url);
           if (role === 'agency') {
-            setAgencyProfileId(user.id);
-            setProfile(p => ({ ...p, erpVendorCode: row.erp_vendor_code || '' }));
+            if (row.erp_vendor_code) setProfile(p => ({ ...p, erpVendorCode: row.erp_vendor_code || '' }));
             setBranding(prev => ({
               ...prev,
               accentColor: row.brand_accent_color || prev.accentColor,
@@ -355,15 +348,19 @@ export default function SettingsPage() {
     if (role === 'owner') saveJSON(getStorageKey(role, 'payout'), payout);
     if (role === 'agency') {
       saveJSON(getStorageKey(role, 'branding'), branding);
-      // Persist to Supabase
       if (agencyProfileId) {
-        await supabase.from('profiles').update({
+        const { error: updateErr } = await supabase.from('profiles').update({
           brand_accent_color: branding.accentColor,
           brand_tagline: branding.tagline || null,
           brand_website: branding.companyWebsite || null,
           brand_logo_url: branding.logoUrl || null,
           erp_vendor_code: profile.erpVendorCode.trim() || null,
         }).eq('id', agencyProfileId);
+        if (updateErr) {
+          setSaving(false);
+          showToast('Failed to save branding — database error');
+          return;
+        }
       }
     }
     setSaving(false);

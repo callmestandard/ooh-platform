@@ -632,7 +632,7 @@ function ClientContent() {
   const daysLeft = activeCampaign ? getDaysRemaining(activeCampaign.end_date) : 0;
 
   async function downloadPOE(format: 'pdf' | 'pptx') {
-    if (!activeCampaign) return;
+    if (!activeCampaign) { showToast('No campaign selected', 'error'); return; }
     setExportingPOE(format);
     try {
       const res = await fetch('/api/poe-deck', {
@@ -640,7 +640,10 @@ function ClientContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ campaignId: activeCampaign.id, format }),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || `Server error (${res.status})`);
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
