@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { logActivity } from '@/lib/activity-log';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 export const runtime = 'nodejs';
 
@@ -15,8 +16,12 @@ function generateInvoiceNumber(count: number): string {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { campaign_id, client_name, client_email, due_date, tax_rate = 7.5, notes, client_invoice_number } = body;
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
+
+  let body: Record<string, unknown>;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
+  const { campaign_id, client_name, client_email, due_date, tax_rate = 7.5, notes, client_invoice_number } = body as Record<string, any>;
 
   if (!client_name) {
     return NextResponse.json({ error: 'client_name is required' }, { status: 400 });
@@ -103,12 +108,39 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(invoice, { status: 201 });
 }
 
-export async function GET() {
-  const { data, error } = await supabase
+export async function GET(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
+
+  // Fetch the calling user's profile to determine their role + tenant IDs
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single() as { data: { role: string } | null };
+
+  let q = supabase
     .from('invoices')
     .select('*, campaign:campaigns(id, name)')
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(200);
 
+  if (profile?.role === 'agency') {
+    q = q.eq('agency_id', user.id);
+  } else if (profile?.role === 'owner') {
+    q = q.eq('owner_id', user.id);
+  } else if (profile?.role === 'client') {
+    // Client sees invoices for campaigns they own
+    const { data: campaigns } = await supabase
+      .from('campaigns')
+      .select('id')
+      .eq('client_id', user.id);
+    const campaignIds = (campaigns ?? []).map((c: { id: string }) => c.id);
+    if (!campaignIds.length) return NextResponse.json([]);
+    q = q.in('campaign_id', campaignIds);
+  }
+
+  const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }

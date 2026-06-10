@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Campaign } from '@/lib/types';
 import { getCampaigns, createCampaign, updateCampaignStatus, deleteCampaign } from '@/lib/campaigns';
 import { formatNaira, formatDate } from '@/lib/utils';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 const STATUS_CONFIG: Record<string, { bg: string; color: string; dot: string }> = {
   draft:     { bg: '#F1F5F9', color: '#475569', dot: '#94A3B8' },
@@ -266,6 +267,7 @@ export default function CampaignsPage() {
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState<Campaign | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   useEffect(() => { loadCampaigns(); }, []);
 
@@ -287,9 +289,15 @@ export default function CampaignsPage() {
     }
   }
 
-  async function handleDelete(id: string, e: React.MouseEvent) {
+  function handleDelete(id: string, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!confirm('Delete this campaign? This cannot be undone.')) return;
+    setDeleteConfirmId(id);
+  }
+
+  async function confirmDelete() {
+    if (!deleteConfirmId) return;
+    const id = deleteConfirmId;
+    setDeleteConfirmId(null);
     const ok = await deleteCampaign(id);
     if (ok) {
       setCampaigns(cs => cs.filter(c => c.id !== id));
@@ -496,6 +504,15 @@ export default function CampaignsPage() {
         />
       )}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <ConfirmDialog
+        open={!!deleteConfirmId}
+        title="Delete campaign?"
+        description="This cannot be undone. All bookings and data associated with this campaign will be permanently removed."
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirmId(null)}
+      />
     </>
   );
 }

@@ -59,22 +59,29 @@ export default function OwnerNegotiationsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [activeFilter, setActiveFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => { fetchBookings(); }, []);
 
   async function fetchBookings() {
-    const { data: { session: onSession } } = await supabase.auth.getSession();
-    const uid = onSession?.user?.id;
-    if (!uid) { setLoading(false); return; }
+    try {
+      const { data: { session: onSession } } = await supabase.auth.getSession();
+      const uid = onSession?.user?.id;
+      if (!uid) { setLoading(false); return; }
 
-    const { data } = await supabase
-      .from('bookings')
-      .select('*, boards!inner(id, name, city, format, asking_rate, owner_id), campaigns(id, name, client_name)')
-      .eq('boards.owner_id', uid)
-      .not('status', 'eq', 'declined')
-      .order('created_at', { ascending: false });
-    setBookings((data as Booking[]) || []);
-    setLoading(false);
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*, boards!inner(id, name, city, format, asking_rate, owner_id), campaigns(id, name, client_name)')
+        .eq('boards.owner_id', uid)
+        .not('status', 'eq', 'declined')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setBookings((data as Booking[]) || []);
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to load negotiations');
+    } finally {
+      setLoading(false);
+    }
   }
 
   const filtered = activeFilter === 'all'
@@ -82,6 +89,14 @@ export default function OwnerNegotiationsPage() {
     : bookings.filter(b => b.status === activeFilter);
 
   const pendingCount = bookings.filter(b => b.status === 'pending').length;
+
+  if (fetchError) return (
+    <div style={{ padding: '3rem', textAlign: 'center' }}>
+      <p style={{ color: '#EF4444', fontWeight: 600, marginBottom: 12 }}>Failed to load negotiations</p>
+      <p style={{ color: '#64748B', fontSize: '0.875rem', marginBottom: 16 }}>{fetchError}</p>
+      <button onClick={() => { setFetchError(null); setLoading(true); fetchBookings(); }} style={{ padding: '8px 20px', background: '#7C3AED', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.875rem' }}>Retry</button>
+    </div>
+  );
 
   return (
     <div style={{ fontFamily: "'Inter', -apple-system, sans-serif" }}>

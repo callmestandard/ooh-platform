@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 import {
   emailPlanSentForApproval,
   emailPlanApproved,
@@ -35,6 +36,9 @@ async function getProfileName(userId: string): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
+
   const body = await req.json() as { type: string; [key: string]: unknown };
 
   try {

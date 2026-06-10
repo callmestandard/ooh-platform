@@ -80,23 +80,17 @@ export default function BoardsMapPage() {
   const [audienceProfiles, setAudienceProfiles]     = useState<Record<string, AudienceProfile>>({});
   const [enrichedCount, setEnrichedCount]           = useState(0);
 
-  useEffect(() => { fetchBoards(); fetchAudienceProfiles(); }, []);
+  useEffect(() => { fetchBoards(); }, []);
   useEffect(() => { applyFilters(); }, [boards, filters, audienceProfiles]);
 
   async function fetchBoards() {
-    const { data } = await supabase.from('boards').select('*').order('created_at', { ascending: false });
+    const { data } = await supabase
+      .from('boards')
+      .select('id, name, address, city, state, format, asking_rate, status, latitude, longitude, width, height, photos')
+      .order('created_at', { ascending: false })
+      .limit(500);
     setBoards((data as Board[]) || []);
     setLoading(false);
-  }
-
-  async function fetchAudienceProfiles() {
-    const { data } = await supabase.from('board_audience_profiles').select('*');
-    if (data) {
-      const map: Record<string, AudienceProfile> = {};
-      data.forEach((p: AudienceProfile) => { map[p.board_id] = p; });
-      setAudienceProfiles(map);
-      setEnrichedCount(data.length);
-    }
   }
 
   function applyFilters() {

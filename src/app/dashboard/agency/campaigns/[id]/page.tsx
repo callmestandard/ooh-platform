@@ -8,6 +8,8 @@ import CampaignActivityTimeline from '@/components/activity/CampaignActivityTime
 import CreativeUploadPanel, { type CreativeUpload } from '@/components/creatives/CreativeUploadPanel';
 import DownloadInvoice from '@/components/invoice/DownloadInvoice';
 import { useState, useEffect, useCallback } from 'react';
+import { authedFetch } from '@/lib/api';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { formatNaira, formatDate } from '@/lib/utils';
@@ -140,6 +142,7 @@ export default function CampaignPlanPage() {
   const [planItems, setPlanItems] = useState<PlanItem[]>([]);
   const [allBoards, setAllBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'plan' | 'boards' | 'summary' | 'arcon' | 'attribution' | 'activity' | 'timeline'>('plan');
   const [activityKey, setActivityKey] = useState(0);
   const [showAddBoard, setShowAddBoard] = useState(false);
@@ -150,6 +153,8 @@ export default function CampaignPlanPage() {
   const [creativesByBooking, setCreativesByBooking] = useState<Record<string, CreativeUpload>>({});
   const [uploadingFor, setUploadingFor] = useState<PlanItem | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [removeConfirm, setRemoveConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [approveConfirm, setApproveConfirm] = useState(false);
   const [showSendToClient, setShowSendToClient] = useState(false);
   const [clientProfiles, setClientProfiles] = useState<ClientProfile[]>([]);
   const [selectedClientId, setSelectedClientId] = useState('');
@@ -296,59 +301,53 @@ export default function CampaignPlanPage() {
 
   async function fetchData() {
     setLoading(true);
-    const [campRes, itemsRes, boardsRes] = await Promise.all([
-      supabase.from('campaigns').select('*').eq('id', id).single(),
-      supabase.from('bookings').select('*, boards(*)').eq('campaign_id', id).order('created_at'),
-      supabase.from('boards').select('*').eq('status', 'available').order('name'),
-    ]);
-    if (campRes.data) {
-      const c = campRes.data as Campaign;
-      setCampaign(c);
-      setArconForm({
-        arcon_status: c.arcon_status || 'not_submitted',
-        arcon_ref: c.arcon_ref || '',
-        arcon_submitted_at: c.arcon_submitted_at ? c.arcon_submitted_at.slice(0, 10) : '',
-        arcon_approved_at: c.arcon_approved_at ? c.arcon_approved_at.slice(0, 10) : '',
-        arcon_expiry_date: c.arcon_expiry_date || '',
-        arcon_notes: c.arcon_notes || '',
-      });
-    }
-    if (itemsRes.data) {
-      const items = itemsRes.data as unknown as PlanItem[];
-      setPlanItems(items);
-  
-      // Fetch compliance checks for all bookings in this plan
-      if (items.length > 0) {
-        const { data: compData } = await supabase
-          .from('compliance_checks')
-          .select('*')
-          .in('booking_id', items.map(i => i.id));
-  
-        if (compData) {
-          const compMap: Record<string, any> = {};
-          compData.forEach(c => {
-            if (!compMap[c.booking_id]) compMap[c.booking_id] = c;
-          });
-          setComplianceByBooking(compMap);
-        }
+    setFetchError(null);
+    try {
+      const [campRes, itemsRes, boardsRes] = await Promise.all([
+        supabase.from('campaigns').select('*').eq('id', id).single(),
+        supabase.from('bookings').select('*, boards(*)').eq('campaign_id', id).order('created_at'),
+        supabase.from('boards').select('*').eq('status', 'available').order('name'),
+      ]);
+      if (campRes.error) throw campRes.error;
+      if (campRes.data) {
+        const c = campRes.data as Campaign;
+        setCampaign(c);
+        setArconForm({
+          arcon_status: c.arcon_status || 'not_submitted',
+          arcon_ref: c.arcon_ref || '',
+          arcon_submitted_at: c.arcon_submitted_at ? c.arcon_submitted_at.slice(0, 10) : '',
+          arcon_approved_at: c.arcon_approved_at ? c.arcon_approved_at.slice(0, 10) : '',
+          arcon_expiry_date: c.arcon_expiry_date || '',
+          arcon_notes: c.arcon_notes || '',
+        });
+      }
+      if (itemsRes.data) {
+        const items = itemsRes.data as unknown as PlanItem[];
+        setPlanItems(items);
 
-        // Fetch creative uploads
-        const { data: creativeData } = await supabase
-          .from('creative_uploads')
-          .select('*')
-          .in('booking_id', items.map(i => i.id))
-          .order('created_at', { ascending: false });
-        if (creativeData) {
-          const crMap: Record<string, CreativeUpload> = {};
-          (creativeData as CreativeUpload[]).forEach(c => {
-            if (!crMap[c.booking_id]) crMap[c.booking_id] = c;
-          });
-          setCreativesByBooking(crMap);
+        if (items.length > 0) {
+          const [compRes, crRes] = await Promise.all([
+            supabase.from('compliance_checks').select('*').in('booking_id', items.map(i => i.id)),
+            supabase.from('creative_uploads').select('*').in('booking_id', items.map(i => i.id)).order('created_at', { ascending: false }),
+          ]);
+          if (compRes.data) {
+            const compMap: Record<string, any> = {};
+            compRes.data.forEach(c => { if (!compMap[c.booking_id]) compMap[c.booking_id] = c; });
+            setComplianceByBooking(compMap);
+          }
+          if (crRes.data) {
+            const crMap: Record<string, CreativeUpload> = {};
+            (crRes.data as CreativeUpload[]).forEach(c => { if (!crMap[c.booking_id]) crMap[c.booking_id] = c; });
+            setCreativesByBooking(crMap);
+          }
         }
       }
+      if (boardsRes.data) setAllBoards(boardsRes.data as Board[]);
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to load campaign');
+    } finally {
+      setLoading(false);
     }
-    if (boardsRes.data) setAllBoards(boardsRes.data as Board[]);
-    setLoading(false);
   }
 
   async function openSendToClient() {
@@ -397,9 +396,8 @@ export default function CampaignPlanPage() {
       // Fire-and-forget email to client
       const { data: { user: agencyUser } } = await supabase.auth.getUser();
       if (agencyUser) {
-        fetch('/api/notify/email', {
+        authedFetch('/api/notify/email', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: 'plan_sent_for_approval',
             clientId: selectedClientId,
@@ -475,7 +473,13 @@ export default function CampaignPlanPage() {
   }
 
   async function removeFromPlan(itemId: string, boardName: string) {
-    if (!confirm(`Remove ${boardName} from this plan?`)) return;
+    setRemoveConfirm({ id: itemId, name: boardName });
+  }
+
+  async function confirmRemoveFromPlan() {
+    if (!removeConfirm) return;
+    const { id: itemId, name: boardName } = removeConfirm;
+    setRemoveConfirm(null);
     const { error } = await supabase.from('bookings').delete().eq('id', itemId);
     if (!error) {
       const actor = await getActivityActor();
@@ -513,7 +517,11 @@ export default function CampaignPlanPage() {
   }
 
   async function approvePlan() {
-    if (!confirm('Mark this plan as approved by client?')) return;
+    setApproveConfirm(true);
+  }
+
+  async function confirmApprovePlan() {
+    setApproveConfirm(false);
     const { error } = await supabase.from('campaigns').update({
       status: 'active',
       approved_at: new Date().toISOString(),
@@ -541,6 +549,14 @@ export default function CampaignPlanPage() {
     (b.name.toLowerCase().includes(boardSearch.toLowerCase()) ||
      b.city?.toLowerCase().includes(boardSearch.toLowerCase()) ||
      b.address?.toLowerCase().includes(boardSearch.toLowerCase()))
+  );
+
+  if (fetchError) return (
+    <div style={{ padding: '3rem', textAlign: 'center' }}>
+      <p style={{ color: '#EF4444', fontWeight: 600, marginBottom: 12 }}>Failed to load campaign</p>
+      <p style={{ color: '#64748B', fontSize: '0.875rem', marginBottom: 16 }}>{fetchError}</p>
+      <button onClick={fetchData} style={{ padding: '8px 20px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.875rem' }}>Retry</button>
+    </div>
   );
 
   if (loading) {
@@ -1792,6 +1808,25 @@ export default function CampaignPlanPage() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={!!removeConfirm}
+        title={`Remove ${removeConfirm?.name ?? 'board'} from plan?`}
+        description="The booking record will be deleted. This cannot be undone."
+        confirmLabel="Remove"
+        variant="danger"
+        onConfirm={confirmRemoveFromPlan}
+        onCancel={() => setRemoveConfirm(null)}
+      />
+      <ConfirmDialog
+        open={approveConfirm}
+        title="Mark plan as client-approved?"
+        description="This will set the campaign status to Active and record client approval. Make sure the client has reviewed all boards."
+        confirmLabel="Approve"
+        variant="default"
+        onConfirm={confirmApprovePlan}
+        onCancel={() => setApproveConfirm(false)}
+      />
 
       {/* Toast */}
       {toast && (

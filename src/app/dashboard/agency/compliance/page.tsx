@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { authedFetch } from '@/lib/api';
 import { createNotification } from '@/lib/notifications';
 import { logActivity } from '@/lib/activity-log';
 import { formatDate } from '@/lib/utils';
@@ -64,11 +65,13 @@ export default function CompliancePage() {
   const [checks, setChecks] = useState<ComplianceCheck[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'upload' | 'history'>('overview');
   const [selectedCheck, setSelectedCheck] = useState<ComplianceCheck | null>(null);
   const [filterStatus, setFilterStatus] = useState('all');
 
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Upload state
   const [uploadBookingId, setUploadBookingId] = useState('');
@@ -85,27 +88,34 @@ export default function CompliancePage() {
   }, []);
 
   async function fetchData() {
-    const { data: { session: compSession } } = await supabase.auth.getSession();
-    const uid = compSession?.user?.id;
-    if (!uid) { setLoading(false); return; }
+    try {
+      const { data: { session: compSession } } = await supabase.auth.getSession();
+      const uid = compSession?.user?.id;
+      if (!uid) { setLoading(false); return; }
 
-    const [checksRes, bookingsRes] = await Promise.all([
-      supabase.from('compliance_checks').select(`
-        *, bookings!inner (id, start_date, end_date,
+      const [checksRes, bookingsRes] = await Promise.all([
+        supabase.from('compliance_checks').select(`
+          *, bookings!inner (id, start_date, end_date,
+            boards (name, address, city, format),
+            campaigns!inner (name, agency_id)
+          )
+        `).eq('bookings.campaigns.agency_id', uid).order('submitted_at', { ascending: false }),
+        supabase.from('bookings').select(`
+          id, status, start_date, end_date,
           boards (name, address, city, format),
           campaigns!inner (name, agency_id)
-        )
-      `).eq('bookings.campaigns.agency_id', uid).order('submitted_at', { ascending: false }),
-      supabase.from('bookings').select(`
-        id, status, start_date, end_date,
-        boards (name, address, city, format),
-        campaigns!inner (name, agency_id)
-      `).eq('campaigns.agency_id', uid).in('status', ['pending', 'negotiating', 'agreed', 'signed', 'live'])
-    ]);
+        `).eq('campaigns.agency_id', uid).in('status', ['pending', 'negotiating', 'agreed', 'signed', 'live'])
+      ]);
 
-    if (checksRes.data) setChecks(checksRes.data as ComplianceCheck[]);
-    if (bookingsRes.data) setBookings(bookingsRes.data as unknown as Booking[]);
-    setLoading(false);
+      if (checksRes.error) throw checksRes.error;
+      if (bookingsRes.error) throw bookingsRes.error;
+      if (checksRes.data) setChecks(checksRes.data as ComplianceCheck[]);
+      if (bookingsRes.data) setBookings(bookingsRes.data as unknown as Booking[]);
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to load compliance data');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function getLocation() {
@@ -122,20 +132,22 @@ export default function CompliancePage() {
   async function handleUpload() {
     if (!uploadBookingId) return;
     setUploadSubmitting(true);
+    setUploadError(null);
 
-    const { error } = await supabase.from('compliance_checks').insert({
-      booking_id: uploadBookingId,
-      status: 'submitted',
-      submitted_by: 'Agency Field Team',
-      notes: uploadNotes || null,
-      latitude: location?.lat || null,
-      longitude: location?.lng || null,
-      submitted_at: new Date().toISOString(),
-    });
+    try {
+      const { error } = await supabase.from('compliance_checks').insert({
+        booking_id: uploadBookingId,
+        status: 'submitted',
+        submitted_by: 'Agency Field Team',
+        notes: uploadNotes || null,
+        latitude: location?.lat || null,
+        longitude: location?.lng || null,
+        submitted_at: new Date().toISOString(),
+      });
 
-    if (!error) {
+      if (error) throw error;
+
       setUploadSuccess(true);
-      // Find the board name for a useful notification body
       const booking = bookings.find(b => b.id === uploadBookingId);
       const boardName = booking?.boards?.name || 'a board';
       await createNotification({
@@ -154,8 +166,11 @@ export default function CompliancePage() {
         setActiveTab('overview');
         fetchData();
       }, 2000);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Failed to submit proof of posting. Please try again.');
+    } finally {
+      setUploadSubmitting(false);
     }
-    setUploadSubmitting(false);
   }
 
   async function updateStatus(id: string, status: 'verified' | 'flagged') {
@@ -193,9 +208,8 @@ export default function CompliancePage() {
   async function aiVerify(checkId: string) {
     setVerifyingId(checkId);
     try {
-      const res = await fetch('/api/compliance/verify', {
+      const res = await authedFetch('/api/compliance/verify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ compliance_check_id: checkId }),
       });
       const data = await res.json();
@@ -230,6 +244,14 @@ export default function CompliancePage() {
     flagged: checks.filter(c => c.status === 'flagged').length,
     rate: checks.length > 0 ? Math.round((checks.filter(c => c.status === 'verified').length / checks.length) * 100) : 0,
   };
+
+  if (fetchError) return (
+    <div style={{ padding: '3rem', textAlign: 'center' }}>
+      <p style={{ color: '#EF4444', fontWeight: 600, marginBottom: 12 }}>Failed to load compliance data</p>
+      <p style={{ color: '#64748B', fontSize: '0.875rem', marginBottom: 16 }}>{fetchError}</p>
+      <button onClick={() => { setFetchError(null); setLoading(true); fetchData(); }} style={{ padding: '8px 20px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.875rem' }}>Retry</button>
+    </div>
+  );
 
   return (
     <div style={{ fontFamily: "'DM Sans', 'Inter', sans-serif" }}>
@@ -643,6 +665,12 @@ export default function CompliancePage() {
                   style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid #E2E8F0', fontSize: '0.875rem', resize: 'none', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
                 />
               </div>
+
+              {uploadError && (
+                <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', color: '#7F1D1D', fontSize: '0.8125rem' }}>
+                  {uploadError}
+                </div>
+              )}
 
               <button
                 onClick={handleUpload}

@@ -253,6 +253,7 @@ function GenderDonut({ male, female }: { male: number; female: number }) {
 export default function AudiencePage() {
   const [boards, setBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedBoard, setSelectedBoard] = useState<Board | null>(null);
   const [campaignBudget, setCampaignBudget] = useState('');
   const [campaignDuration, setCampaignDuration] = useState('4');
@@ -261,16 +262,22 @@ export default function AudiencePage() {
   useEffect(() => { fetchBoards(); }, []);
 
   async function fetchBoards() {
-    const { data } = await supabase
-      .from('boards')
-      .select('id, name, city, state, format, latitude, longitude, asking_rate, illuminated, status')
-      .order('city');
-    if (data) {
-      const boardList = data as Board[];
-      setBoards(boardList);
-      if (boardList.length > 0) setSelectedBoard(boardList[0]);
+    try {
+      const { data, error } = await supabase
+        .from('boards')
+        .select('id, name, city, state, format, latitude, longitude, asking_rate, illuminated, status')
+        .order('city');
+      if (error) throw error;
+      if (data) {
+        const boardList = data as Board[];
+        setBoards(boardList);
+        if (boardList.length > 0) setSelectedBoard(boardList[0]);
+      }
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to load boards');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   function toggleBoard(id: string) {
@@ -292,6 +299,14 @@ export default function AudiencePage() {
   const planCPM = planCost > 0 && totalImpressions > 0 ? Math.round((planCost / totalImpressions) * 1000) : 0;
   const budget = parseFloat(campaignBudget) || 0;
   const budgetUtilisation = budget > 0 ? Math.min(100, Math.round((planCost / budget) * 100)) : 0;
+
+  if (fetchError) return (
+    <div style={{ padding: '3rem', textAlign: 'center' }}>
+      <p style={{ color: '#EF4444', fontWeight: 600, marginBottom: 12 }}>Failed to load boards</p>
+      <p style={{ color: '#64748B', fontSize: '0.875rem', marginBottom: 16 }}>{fetchError}</p>
+      <button onClick={() => { setFetchError(null); setLoading(true); fetchBoards(); }} style={{ padding: '8px 20px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.875rem' }}>Retry</button>
+    </div>
+  );
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>

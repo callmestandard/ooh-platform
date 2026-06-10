@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
+import { authedFetch } from '@/lib/api';
 
 const MapView = dynamic(() => import('./MapView'), {
   ssr: false,
@@ -399,9 +400,10 @@ export default function MarketplacePage() {
       .from('boards')
       .select('id, name, format, address, city, state, width, height, asking_rate, face_count, illuminated, status, photo_urls, latitude, longitude, notes, contact_phone, available_from, created_at')
       .order('created_at', { ascending: false })
+      .limit(300)
       .then(({ data }) => { setBoards((data as Board[]) || []); setLoading(false); });
 
-    supabase.from('campaigns').select('id, name').order('created_at', { ascending: false })
+    supabase.from('campaigns').select('id, name').order('created_at', { ascending: false }).limit(50)
       .then(({ data }) => setCampaigns((data as { id: string; name: string }[]) || []));
   }, []);
 
@@ -429,18 +431,19 @@ export default function MarketplacePage() {
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 3500); }
 
-  // Format average rates (market context)
-  const formatAvg: Record<string, number> = {};
-  boards.forEach(b => {
-    if (!formatAvg[b.format]) formatAvg[b.format] = 0;
-    formatAvg[b.format] += b.asking_rate;
-  });
-  const formatCount: Record<string, number> = {};
-  boards.forEach(b => { formatCount[b.format] = (formatCount[b.format] || 0) + 1; });
-  Object.keys(formatAvg).forEach(f => { formatAvg[f] = Math.round(formatAvg[f] / (formatCount[f] || 1)); });
+  const formatAvg = useMemo(() => {
+    const totals: Record<string, number> = {};
+    const counts: Record<string, number> = {};
+    boards.forEach(b => {
+      totals[b.format] = (totals[b.format] || 0) + b.asking_rate;
+      counts[b.format] = (counts[b.format] || 0) + 1;
+    });
+    const avg: Record<string, number> = {};
+    Object.keys(totals).forEach(f => { avg[f] = Math.round(totals[f] / (counts[f] || 1)); });
+    return avg;
+  }, [boards]);
 
-  // Filter + sort
-  const filtered = boards
+  const filtered = useMemo(() => boards
     .filter(b => {
       if (showAvailOnly && b.status !== 'available') return false;
       if (cityFilter && b.city?.toLowerCase() !== cityFilter.toLowerCase()) return false;
@@ -458,7 +461,8 @@ export default function MarketplacePage() {
       if (sortBy === 'price_lo') return (a.asking_rate || 0) - (b.asking_rate || 0);
       if (sortBy === 'price_hi') return (b.asking_rate || 0) - (a.asking_rate || 0);
       return 0;
-    });
+    }),
+  [boards, showAvailOnly, cityFilter, formatFilter, maxPrice, campaignStart, campaignEnd, bookedBoardIds, showShortlistOnly, shortlist, search, sortBy]);
 
   async function submitOffer() {
     if (!offerBoard || !offerForm.offered_rate) return;
@@ -490,9 +494,8 @@ export default function MarketplacePage() {
       if (booking?.id && offerBoard.owner_id) {
         const { data: { user: agencyUser } } = await supabase.auth.getUser();
         if (agencyUser) {
-          fetch('/api/notify/email', {
+          authedFetch('/api/notify/email', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               type: 'booking_request',
               ownerId: offerBoard.owner_id,

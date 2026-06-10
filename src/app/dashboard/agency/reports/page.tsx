@@ -44,33 +44,41 @@ export default function ReportsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [boards, setBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => { fetchData(); }, []);
 
   async function fetchData() {
-    const { data: { session } } = await supabase.auth.getSession();
-    const uid = session?.user?.id;
-    if (!uid) { setLoading(false); return; }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) { setLoading(false); return; }
 
-    const [campRes, bookRes] = await Promise.all([
-      supabase.from('campaigns').select('*').eq('agency_id', uid).order('created_at', { ascending: false }),
-      supabase
-        .from('bookings')
-        .select('*, boards(id, name, format, city, asking_rate, status), campaigns!inner(name, client_name, agency_id)')
-        .eq('campaigns.agency_id', uid)
-        .order('created_at', { ascending: false }),
-    ]);
-    if (campRes.data) setCampaigns(campRes.data as Campaign[]);
-    if (bookRes.data) {
-      setBookings(bookRes.data as Booking[]);
-      // Derive unique boards from this agency's bookings for utilization tab
-      const boardMap = new Map<string, Board>();
-      for (const b of bookRes.data as unknown as { boards: Board }[]) {
-        if (b.boards?.id && !boardMap.has(b.boards.id)) boardMap.set(b.boards.id, b.boards);
+      const [campRes, bookRes] = await Promise.all([
+        supabase.from('campaigns').select('id, name, status, client_name, total_budget, start_date, end_date, created_at, agency_id').eq('agency_id', uid).order('created_at', { ascending: false }).limit(200),
+        supabase
+          .from('bookings')
+          .select('id, campaign_id, board_id, status, offered_rate, agreed_rate, start_date, end_date, created_at, boards(id, name, format, city, asking_rate, status), campaigns!inner(name, client_name, agency_id)')
+          .eq('campaigns.agency_id', uid)
+          .order('created_at', { ascending: false })
+          .limit(500),
+      ]);
+      if (campRes.error) throw campRes.error;
+      if (bookRes.error) throw bookRes.error;
+      if (campRes.data) setCampaigns(campRes.data as Campaign[]);
+      if (bookRes.data) {
+        setBookings(bookRes.data as unknown as Booking[]);
+        const boardMap = new Map<string, Board>();
+        for (const b of bookRes.data as unknown as { boards: Board }[]) {
+          if (b.boards?.id && !boardMap.has(b.boards.id)) boardMap.set(b.boards.id, b.boards);
+        }
+        setBoards(Array.from(boardMap.values()));
       }
-      setBoards(Array.from(boardMap.values()));
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to load reports');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   // Derived stats
@@ -90,7 +98,7 @@ export default function ReportsPage() {
 
   // ── Chart data derivations ─────────────────────────────────────────────────
 
-  // Monthly spend — last 6 months from bookings
+  // Monthly spend — last 6 months from bookings (real agreed/offered rates)
   const monthlySpend = (() => {
     const months: { label: string; value: number }[] = [];
     const now = new Date();
@@ -102,11 +110,6 @@ export default function ReportsPage() {
         .filter(b => b.campaigns && (b as unknown as { created_at?: string }).created_at?.startsWith(key))
         .reduce((s, b) => s + (b.agreed_rate || b.offered_rate || 0), 0);
       months.push({ label, value });
-    }
-    // If no real data, seed with campaign budgets spread across months for demo visual
-    if (months.every(m => m.value === 0) && campaigns.length > 0) {
-      const spread = campaigns.reduce((s, c) => s + (c.total_budget || 0), 0) / 6;
-      return months.map((m, i) => ({ ...m, value: Math.round(spread * (0.6 + Math.sin(i) * 0.3 + i * 0.07)) }));
     }
     return months;
   })();
@@ -244,6 +247,14 @@ export default function ReportsPage() {
       </div>
     );
   }
+
+  if (fetchError) return (
+    <div style={{ padding: '3rem', textAlign: 'center' }}>
+      <p style={{ color: '#EF4444', fontWeight: 600, marginBottom: 12 }}>Failed to load reports</p>
+      <p style={{ color: '#64748B', fontSize: '0.875rem', marginBottom: 16 }}>{fetchError}</p>
+      <button onClick={() => { setFetchError(null); setLoading(true); fetchData(); }} style={{ padding: '8px 20px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.875rem' }}>Retry</button>
+    </div>
+  );
 
   return (
     <div style={{ fontFamily: "'DM Sans', 'Inter', sans-serif" }}>

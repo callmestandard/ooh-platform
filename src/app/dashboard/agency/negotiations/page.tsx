@@ -73,6 +73,7 @@ export default function NegotiationsPage() {
   const [filtered, setFiltered] = useState<Booking[]>([]);
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => { fetchBookings(); }, []);
   useEffect(() => {
@@ -80,18 +81,24 @@ export default function NegotiationsPage() {
   }, [bookings, activeFilter]);
 
   async function fetchBookings() {
-    const { data: { session: negSession } } = await supabase.auth.getSession();
-    const uid = negSession?.user?.id;
-    if (!uid) { setLoading(false); return; }
+    try {
+      const { data: { session: negSession } } = await supabase.auth.getSession();
+      const uid = negSession?.user?.id;
+      if (!uid) { setLoading(false); return; }
 
-    const { data, error } = await supabase
-      .from('bookings')
-      .select(`*, boards (id, name, address, city, state, format, asking_rate, photos), campaigns!inner (id, name, agency_id)`)
-      .eq('campaigns.agency_id', uid)
-      .order('created_at', { ascending: false });
-    if (error) console.error(error);
-    else setBookings((data as Booking[]) || []);
-    setLoading(false);
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`id, status, offered_rate, agreed_rate, start_date, end_date, created_at, campaign_id, board_id, boards (id, name, address, city, state, format, asking_rate, photos), campaigns!inner (id, name, agency_id)`)
+        .eq('campaigns.agency_id', uid)
+        .order('created_at', { ascending: false })
+        .limit(150);
+      if (error) throw error;
+      setBookings((data as unknown as Booking[]) || []);
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to load negotiations');
+    } finally {
+      setLoading(false);
+    }
   }
 
   const stats = {
@@ -100,6 +107,14 @@ export default function NegotiationsPage() {
     negotiating: bookings.filter(b => b.status === 'negotiating').length,
     closed:      bookings.filter(b => ['agreed', 'signed', 'live'].includes(b.status)).length,
   };
+
+  if (fetchError) return (
+    <div style={{ padding: '3rem', textAlign: 'center' }}>
+      <p style={{ color: '#EF4444', fontWeight: 600, marginBottom: 12 }}>Failed to load negotiations</p>
+      <p style={{ color: '#64748B', fontSize: '0.875rem', marginBottom: 16 }}>{fetchError}</p>
+      <button onClick={() => { setFetchError(null); setLoading(true); fetchBookings(); }} style={{ padding: '8px 20px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.875rem' }}>Retry</button>
+    </div>
+  );
 
   return (
     <div style={{ fontFamily: "'DM Sans','Inter',sans-serif" }}>

@@ -6,6 +6,7 @@ import type { Invoice, InvoiceItem } from '@/lib/types';
 import ActivityTimeline from '@/components/activity/ActivityTimeline';
 import { computeTaxBreakdown } from '@/lib/erp-export';
 import { supabase } from '@/lib/supabase';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 type FullInvoice = Invoice & {
   campaign?: { id: string; name: string };
@@ -45,6 +46,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [showPayModal, setShowPayModal] = useState(false);
   const [payRef, setPayRef]           = useState('');
   const [toast, setToast]             = useState<{ msg: string; ok: boolean } | null>(null);
+  const [cancelConfirm, setCancelConfirm] = useState(false);
   const [generatingLink, setGeneratingLink] = useState(false);
   const [paymentLink, setPaymentLink] = useState('');
   const [copiedLink, setCopiedLink]   = useState(false);
@@ -203,6 +205,16 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   return (
     <div style={{ fontFamily: "'Inter', -apple-system, sans-serif", maxWidth: 960, margin: '0 auto', padding: '0 0 60px' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } } @keyframes fadeIn { from { opacity:0;transform:translateY(6px) } to { opacity:1;transform:none } }`}</style>
+
+      <ConfirmDialog
+        open={cancelConfirm}
+        title="Cancel this invoice?"
+        description="The invoice will be marked as cancelled. This action cannot be undone."
+        confirmLabel="Cancel Invoice"
+        variant="danger"
+        onConfirm={() => { setCancelConfirm(false); patch({ status: 'cancelled' }); }}
+        onCancel={() => setCancelConfirm(false)}
+      />
 
       {/* ── Toast ── */}
       {toast && (
@@ -419,7 +431,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               </a>
 
               {canCancel && (
-                <button onClick={() => { if (confirm('Cancel this invoice?')) patch({ status: 'cancelled' }); }} disabled={updating}
+                <button onClick={() => setCancelConfirm(true)} disabled={updating}
                   style={{ width: '100%', padding: '10px 0', borderRadius: 9, border: '1px solid #FECACA', background: '#FEF2F2', color: '#991B1B', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                   Cancel Invoice
                 </button>

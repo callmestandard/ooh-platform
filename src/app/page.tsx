@@ -280,12 +280,14 @@ function MapPin({ x, y, price, tone, active, delay, pulse }: {
 ═══════════════════════════════════════════════════════════ */
 
 function Nav({ scrolled }: { scrolled: boolean }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   return (
     <nav style={{
       position: 'sticky', top: 0, zIndex: 100,
       transition: 'background .3s, border-color .3s',
-      borderBottom: scrolled ? '1px solid rgba(26,22,15,.10)' : '1px solid transparent',
-      background: scrolled ? 'rgba(246,244,239,.85)' : 'transparent',
+      borderBottom: scrolled || menuOpen ? '1px solid rgba(26,22,15,.10)' : '1px solid transparent',
+      background: scrolled || menuOpen ? 'rgba(246,244,239,.97)' : 'transparent',
       backdropFilter: scrolled ? 'blur(16px) saturate(140%)' : 'none',
     }}>
       <div className="lp-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 70 }}>
@@ -309,7 +311,7 @@ function Nav({ scrolled }: { scrolled: boolean }) {
           </span>
         </Link>
 
-        {/* Center links */}
+        {/* Center links (desktop) */}
         <div className="lp-nav-links">
           {[['Marketplace','#marketplace'],['How it works','#how'],['Features','#features'],['Pricing','#pricing']].map(([l,h]) => (
             <a key={l} href={h} style={{ fontSize: 14.5, fontWeight: 500, color: '#4a443b', padding: '8px 14px', borderRadius: 9, textDecoration: 'none', transition: 'color .15s, background .15s' }}
@@ -322,10 +324,10 @@ function Nav({ scrolled }: { scrolled: boolean }) {
 
         {/* Right */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Link href="/auth/login" style={{ fontSize: 14.5, fontWeight: 500, color: '#4a443b', padding: '9px 14px', textDecoration: 'none', borderRadius: 9, transition: 'color .15s' }}>
+          <Link href="/auth/login" className="lp-nav-desktop" style={{ fontSize: 14.5, fontWeight: 500, color: '#4a443b', padding: '9px 14px', textDecoration: 'none', borderRadius: 9, transition: 'color .15s' }}>
             Log in
           </Link>
-          <Link href="/signup" style={{
+          <Link href="/signup" className="lp-nav-desktop" style={{
             display: 'inline-flex', alignItems: 'center', gap: 7,
             background: '#2f6bff', color: '#fff', borderRadius: 12,
             padding: '10px 18px', fontSize: 14, fontWeight: 600, textDecoration: 'none',
@@ -336,8 +338,27 @@ function Nav({ scrolled }: { scrolled: boolean }) {
             Start free
             <Ico n="arrow" size={15} color="#fff" sw={2.2}/>
           </Link>
+          {/* Hamburger (mobile only) */}
+          <button className="lp-hamburger" onClick={() => setMenuOpen(m => !m)} aria-label="Menu">
+            <span style={{ width: 20, height: 2, background: '#1a1712', borderRadius: 2, display: 'block', transition: 'transform .2s', transform: menuOpen ? 'translateY(7px) rotate(45deg)' : 'none' }}/>
+            <span style={{ width: 20, height: 2, background: '#1a1712', borderRadius: 2, display: 'block', transition: 'opacity .2s', opacity: menuOpen ? 0 : 1 }}/>
+            <span style={{ width: 20, height: 2, background: '#1a1712', borderRadius: 2, display: 'block', transition: 'transform .2s', transform: menuOpen ? 'translateY(-7px) rotate(-45deg)' : 'none' }}/>
+          </button>
         </div>
       </div>
+
+      {/* Mobile dropdown */}
+      {menuOpen && (
+        <div className="lp-mob-menu" style={{ display: 'flex', flexDirection: 'column', padding: '4px 20px 20px', borderTop: '1px solid rgba(26,22,15,.08)' }}>
+          {[['Marketplace','#marketplace'],['How it works','#how'],['Features','#features'],['Pricing','#pricing']].map(([l,h]) => (
+            <a key={l} href={h} onClick={() => setMenuOpen(false)} style={{ fontSize: 16, fontWeight: 500, color: '#1a1712', padding: '13px 0', borderBottom: '1px solid rgba(26,22,15,.06)', textDecoration: 'none' }}>{l}</a>
+          ))}
+          <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+            <Link href="/auth/login" onClick={() => setMenuOpen(false)} style={{ flex: 1, textAlign: 'center', padding: '13px', borderRadius: 11, border: '1px solid rgba(26,22,15,.16)', fontSize: 15, fontWeight: 600, color: '#1a1712', textDecoration: 'none' }}>Log in</Link>
+            <Link href="/signup" onClick={() => setMenuOpen(false)} style={{ flex: 1, textAlign: 'center', padding: '13px', borderRadius: 11, background: '#2f6bff', fontSize: 15, fontWeight: 600, color: '#fff', textDecoration: 'none', boxShadow: '0 8px 22px -8px rgba(47,107,255,.7)' }}>Start free</Link>
+          </div>
+        </div>
+      )}
     </nav>
   );
 }
@@ -477,9 +498,9 @@ function Hero() {
         </div>
 
         {/* ── Right: map visual ── */}
-        <div style={{ position: 'relative', zIndex: 1, minHeight: 480 }}>
+        <div className="lp-hero-visual" style={{ position: 'relative', zIndex: 1, minHeight: 480 }}>
           {/* Floating stat chips */}
-          <div style={{ position: 'absolute', left: -16, top: -14, zIndex: 6, display: 'flex', gap: 10 }} className="lp-float-a">
+          <div style={{ position: 'absolute', left: -16, top: -14, zIndex: 6, display: 'flex', gap: 10 }} className="lp-float-a lp-hero-chips">
             {[{ v: '143', l: 'boards live', tone: 'b' }, { v: '28', l: 'active deals', tone: 'g' }].map(({ v, l, tone }) => (
               <div key={l} style={{
                 background: '#fff', border: '1px solid rgba(26,22,15,.14)',
@@ -521,7 +542,7 @@ function Hero() {
           </div>
 
           {/* Featured board card */}
-          <div style={{
+          <div className="lp-hero-board" style={{
             position: 'absolute', width: 268, right: -18, bottom: -22, zIndex: 5,
             background: '#fff', border: '1px solid rgba(26,22,15,.14)',
             borderRadius: 16, overflow: 'hidden',
@@ -588,7 +609,7 @@ function StatCell({ prefix = '', target, suffix = '', label, tone, first = false
 function StatsBar() {
   return (
     <section style={{ borderBlock: '1px solid rgba(26,22,15,.10)', background: '#fff' }}>
-      <div className="lp-wrap" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)' }}>
+      <div className="lp-wrap lp-statsbar-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)' }}>
         <StatCell prefix="₦" target={100} suffix="B+" label="Nigerian OOH market value" tone="green" first/>
         <StatCell target={143} label="Billboard locations indexed" tone="blue"/>
         <StatCell target={12} label="Cities covered" tone="blue"/>
@@ -1034,7 +1055,7 @@ function Pricing() {
           {PRICING_DATA.map(plan => {
             const isFeat = plan.featured;
             return (
-              <div key={plan.tag} style={{
+              <div key={plan.tag} className={isFeat ? 'lp-feat-plan' : undefined} style={{
                 background: isFeat ? 'linear-gradient(165deg,#211d16,#14110b)' : '#fff',
                 border: isFeat ? '1px solid transparent' : '1px solid rgba(26,22,15,.10)',
                 borderRadius: 24, padding: '32px 28px 30px',
@@ -1104,7 +1125,7 @@ function FinalCTA() {
     <section style={{ padding: '40px 0 100px', background: '#fff' }}>
       <div className="lp-wrap">
         {/* Ink slab */}
-        <div style={{
+        <div className="lp-cta-inner" style={{
           position: 'relative', overflow: 'hidden',
           borderRadius: 24, padding: '70px 56px',
           background: 'linear-gradient(160deg,#211d16 0%,#14110b 70%)',
@@ -1271,6 +1292,7 @@ export default function LandingPage() {
 
         /* ── Nav links (hidden on mobile) ── */
         .lp-nav-links { display:flex; align-items:center; gap:4px; }
+        .lp-nav-desktop { display:inline-flex; }
 
         /* ── Hero grid ── */
         .lp-hero-grid { display:grid; grid-template-columns:1.04fr 1fr; gap:56px; align-items:center; }
@@ -1333,23 +1355,59 @@ export default function LandingPage() {
         input[type=range].lp-rng{-webkit-appearance:none;width:100%;height:5px;border-radius:5px;outline:none;cursor:pointer}
         input[type=range].lp-rng::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;border-radius:50%;background:#2f6bff;border:2px solid #fff;cursor:pointer;box-shadow:0 3px 8px rgba(0,0,0,.2)}
 
-        /* ── Responsive ── */
+        /* ── Mobile nav ── */
+        .lp-hamburger { display:none; flex-direction:column; justify-content:center; gap:5px; padding:8px; background:none; border:none; cursor:pointer; }
+        .lp-mob-menu  { display:none; }
+
+        /* ── Responsive 980px ── */
         @media(max-width:980px){
-          .lp-hero-grid{grid-template-columns:1fr!important;gap:60px}
+          .lp-hero-grid{grid-template-columns:1fr!important;gap:48px}
           .lp-market-shell{grid-template-columns:1fr!important}
           .lp-market-shell > div:first-child{border-right:none!important;border-bottom:1px solid rgba(26,22,15,.10)}
           .lp-nav-links{display:none!important}
+          .lp-nav-desktop{display:none!important}
+          .lp-hamburger{display:flex!important}
           .lp-foot-grid{grid-template-columns:1fr 1fr!important;gap:32px}
           .lp-foot-grid > div:first-child{grid-column:1/-1}
         }
+
+        /* ── Responsive 720px ── */
         @media(max-width:720px){
-          .lp-wrap{padding-inline:22px}
+          .lp-wrap{padding-inline:20px}
+
+          /* Hero */
+          .lp-hero-grid{gap:32px!important}
+          .lp-hero-visual{min-height:280px!important}
+          .lp-hero-chips{display:none!important}
+          .lp-hero-board{display:none!important}
+
+          /* Stats bar 2×2 */
+          .lp-statsbar-grid{grid-template-columns:1fr 1fr!important}
+          .lp-statsbar-grid > div:nth-child(odd){border-left:none!important}
+          .lp-statsbar-grid > div:nth-child(n+3){border-top:1px solid rgba(26,22,15,.10)!important}
+
+          /* Section heads */
+          .lp-section-head{margin-bottom:32px!important}
+          .lp-section-head p{font-size:16px!important}
+
+          /* How / Features / Steps */
           .lp-steps-grid{grid-template-columns:1fr!important}
           .lp-feat-grid{grid-template-columns:1fr!important}
           .lp-results-grid{grid-template-columns:1fr!important}
-          .lp-price-grid{grid-template-columns:1fr!important;max-width:400px;margin:0 auto}
-          .lp-price-grid > div[style*="translateY(-12px)"]{transform:none!important}
+
+          /* Pricing */
+          .lp-price-grid{grid-template-columns:1fr!important;max-width:420px;margin:0 auto}
+          .lp-feat-plan{transform:none!important}
+
+          /* CTA box */
+          .lp-cta-inner{padding:44px 22px!important}
+
+          /* Footer */
           .lp-foot-grid{grid-template-columns:1fr 1fr!important}
+
+          /* Ambition chips — smaller on tiny screens */
+          .lp-city-chip{font-size:11px!important;padding:5px 9px!important}
+          .lp-city-chip small{display:none!important}
         }
 
         /* ── Reduced motion ── */

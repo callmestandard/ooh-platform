@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { formatNaira, formatDateShort as formatDate } from '@/lib/utils';
+import { SkeletonGrid, SkeletonTable } from '@/components/ui/Skeleton';
 
 type Campaign = {
   id: string;
@@ -73,26 +74,36 @@ export default function AgencyDashboardPage() {
   const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
   const [boardCount, setBoardCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { fetchData(); }, []);
 
   async function fetchData() {
-    const { data: { session } } = await supabase.auth.getSession();
-    const uid = session?.user?.id;
-    if (!uid) { setLoading(false); return; }
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) { setLoading(false); return; }
 
-    const [campRes, bookRes, boardRes, invRes] = await Promise.all([
-      supabase.from('campaigns').select('*').eq('agency_id', uid).order('created_at', { ascending: false }),
-      supabase.from('bookings').select('*, boards(name, city), campaigns!inner(name, agency_id)').eq('campaigns.agency_id', uid).order('created_at', { ascending: false }).limit(5),
-      supabase.from('boards').select('id', { count: 'exact', head: true }),
-      supabase.from('invoices').select('id, invoice_number, client_name, status, total_amount, due_date, paid_at')
-        .eq('invoice_type', 'client').neq('status', 'cancelled').order('created_at', { ascending: false }).limit(50),
-    ]);
-    if (campRes.data) setCampaigns(campRes.data as Campaign[]);
-    if (bookRes.data) setBookings(bookRes.data as unknown as Booking[]);
-    if (boardRes.count !== null) setBoardCount(boardRes.count);
-    if (invRes.data) setInvoices(invRes.data as InvoiceSummary[]);
-    setLoading(false);
+      const [campRes, bookRes, boardRes, invRes] = await Promise.all([
+        supabase.from('campaigns').select('*').eq('agency_id', uid).order('created_at', { ascending: false }).limit(100),
+        supabase.from('bookings').select('*, boards(name, city), campaigns!inner(name, agency_id)').eq('campaigns.agency_id', uid).order('created_at', { ascending: false }).limit(5),
+        supabase.from('boards').select('id', { count: 'exact', head: true }),
+        supabase.from('invoices').select('id, invoice_number, client_name, status, total_amount, due_date, paid_at')
+          .eq('invoice_type', 'client').eq('agency_id', uid).neq('status', 'cancelled').order('created_at', { ascending: false }).limit(50),
+      ]);
+
+      if (campRes.error) throw campRes.error;
+      if (invRes.error) throw invRes.error;
+
+      if (campRes.data) setCampaigns(campRes.data as Campaign[]);
+      if (bookRes.data) setBookings(bookRes.data as unknown as Booking[]);
+      if (boardRes.count !== null) setBoardCount(boardRes.count);
+      if (invRes.data) setInvoices(invRes.data as InvoiceSummary[]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
   }
 
   const now = new Date();
@@ -113,11 +124,25 @@ export default function AgencyDashboardPage() {
 
   if (loading) {
     return (
+      <div style={{ padding: '24px 20px', maxWidth: 1200, margin: '0 auto' }}>
+        <SkeletonGrid cols={4} rows={1} />
+        <div style={{ marginTop: 24 }}>
+          <SkeletonTable rows={4} cols={5} />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ width: 32, height: 32, border: '2px solid #E2E8F0', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto 12px' }} />
-          <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>Loading dashboard...</p>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div style={{ textAlign: 'center', maxWidth: 400 }}>
+          <div style={{ width: 48, height: 48, background: '#FEF2F2', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>Failed to load dashboard</p>
+          <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: '0 0 16px' }}>{error}</p>
+          <button onClick={() => { setError(null); setLoading(true); fetchData(); }} style={{ background: '#1B4F8A', color: '#fff', border: 'none', padding: '9px 20px', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Try again</button>
         </div>
       </div>
     );

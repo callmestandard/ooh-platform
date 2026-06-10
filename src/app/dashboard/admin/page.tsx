@@ -172,6 +172,7 @@ function AdminContent() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [togglingUser, setTogglingUser] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
 
@@ -210,21 +211,27 @@ function AdminContent() {
   useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
-    const [bRes, bookRes, campRes, compRes, profRes, actRes] = await Promise.all([
-      supabase.from('boards').select('*').order('created_at', { ascending: false }),
-      supabase.from('bookings').select('*, boards(name, city, format), campaigns(name, client_name)').order('created_at', { ascending: false }),
-      supabase.from('campaigns').select('*').order('created_at', { ascending: false }),
-      supabase.from('compliance_checks').select('*').order('submitted_at', { ascending: false }),
-      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-      supabase.from('activity_events').select('*').order('created_at', { ascending: false }).limit(50),
-    ]);
-    if (bRes.data) setBoards(bRes.data as Board[]);
-    if (bookRes.data) setBookings(bookRes.data as unknown as Booking[]);
-    if (campRes.data) setCampaigns(campRes.data as Campaign[]);
-    if (compRes.data) setCompliance(compRes.data as ComplianceCheck[]);
-    if (profRes.data && profRes.data.length > 0) setProfiles(profRes.data as Profile[]);
-    if (actRes.data) setActivityEvents(actRes.data as ActivityEvent[]);
-    setLoading(false);
+    try {
+      const [bRes, bookRes, campRes, compRes, profRes, actRes] = await Promise.all([
+        supabase.from('boards').select('id, name, address, city, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at').order('created_at', { ascending: false }).limit(200),
+        supabase.from('bookings').select('id, status, offered_rate, agreed_rate, start_date, end_date, duration_months, created_at, boards(name, city, format), campaigns(name, client_name)').order('created_at', { ascending: false }).limit(200),
+        supabase.from('campaigns').select('id, name, client_name, status, total_budget, start_date, end_date, agency_id, created_at').order('created_at', { ascending: false }).limit(100),
+        supabase.from('compliance_checks').select('id, booking_id, status, submitted_at, photo_url, notes').order('submitted_at', { ascending: false }).limit(100),
+        supabase.from('profiles').select('id, role, full_name, company_name, created_at').order('created_at', { ascending: false }).limit(200),
+        supabase.from('activity_events').select('id, entity_type, entity_id, campaign_id, actor_id, actor_role, actor_name, action, summary, created_at').order('created_at', { ascending: false }).limit(50),
+      ]);
+      if (bRes.error) throw bRes.error;
+      if (bRes.data) setBoards(bRes.data as Board[]);
+      if (bookRes.data) setBookings(bookRes.data as unknown as Booking[]);
+      if (campRes.data) setCampaigns(campRes.data as Campaign[]);
+      if (compRes.data) setCompliance(compRes.data as ComplianceCheck[]);
+      if (profRes.data && profRes.data.length > 0) setProfiles(profRes.data as Profile[]);
+      if (actRes.data) setActivityEvents(actRes.data as ActivityEvent[]);
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to load admin data');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function toggleUserSuspension(profileId: string, currentlySuspended: boolean) {
@@ -410,6 +417,14 @@ function AdminContent() {
   const filteredBoards = invFilter === 'all' ? boards : boards.filter(b => b.status === invFilter);
   // Filtered bookings
   const filteredBookings = bookFilter === 'all' ? bookings : bookings.filter(b => b.status === bookFilter);
+
+  if (fetchError) return (
+    <div style={{ padding: '3rem', textAlign: 'center' }}>
+      <p style={{ color: '#EF4444', fontWeight: 600, marginBottom: 12 }}>Failed to load admin data</p>
+      <p style={{ color: '#64748B', fontSize: '0.875rem', marginBottom: 16 }}>{fetchError}</p>
+      <button onClick={() => { setFetchError(null); setLoading(true); fetchAll(); }} style={{ padding: '8px 20px', background: '#DC2626', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.875rem' }}>Retry</button>
+    </div>
+  );
 
   if (loading) {
     return (

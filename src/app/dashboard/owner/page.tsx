@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import DownloadInvoice from '@/components/invoice/DownloadInvoice';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { supabase } from '@/lib/supabase';
+import { SkeletonGrid, SkeletonTable } from '@/components/ui/Skeleton';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -497,6 +498,7 @@ function OwnerContent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [creativesByBooking, setCreativesByBooking] = useState<Record<string, { id: string; file_url: string; file_name: string; file_size: number | null; status: string; notes: string | null }>>({});
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'boards' | 'bookings' | 'messages' | 'earnings' | 'calendar' | 'analytics' | 'rate-card' | 'invoices'>('boards');
   const [reviewingCreative, setReviewingCreative] = useState<{ bookingId: string; fileUrl: string; fileName: string; creativeId: string } | null>(null);
   const [reviewNote, setReviewNote] = useState('');
@@ -531,10 +533,14 @@ function OwnerContent() {
   const [mpiSaving, setMpiSaving] = useState(false);
 
   async function fetchOwnerInvoices() {
+    const { data: { session: invSession } } = await supabase.auth.getSession();
+    const invUid = invSession?.user?.id;
+    if (!invUid) { setInvoicesLoaded(true); return; }
     const { data } = await supabase
       .from('invoices')
       .select('*, campaign:campaigns(id, name), items:invoice_items(description, total, booking_id)')
       .eq('invoice_type', 'media_partner')
+      .eq('owner_id', invUid)
       .order('created_at', { ascending: false });
     if (data) setOwnerInvoices(data as unknown as MPI[]);
     setInvoicesLoaded(true);
@@ -595,44 +601,59 @@ function OwnerContent() {
   useEffect(() => { fetchData(); }, []);
 
   async function fetchData() {
-    const { data: { session: ownerSession } } = await supabase.auth.getSession();
-    const uid = ownerSession?.user?.id;
-    if (!uid) { setBoards([]); setBookings([]); return; }
+    try {
+      const { data: { session: ownerSession } } = await supabase.auth.getSession();
+      const uid = ownerSession?.user?.id;
+      if (!uid) { setBoards([]); setBookings([]); setLoading(false); return; }
 
-    const [boardsRes, bookingsRes, msgRes] = await Promise.all([
-      supabase.from('boards').select('*, rate_card').eq('owner_id', uid).order('created_at', { ascending: false }),
-      supabase
-        .from('bookings')
-        .select('*, boards!inner(name, city, format, owner_id), campaigns(name, client_name)')
-        .eq('boards.owner_id', uid)
-        .not('status', 'eq', 'declined')
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('messages')
-        .select('*, bookings(boards(name))')
-        .eq('sender_role', 'agency')
-        .order('created_at', { ascending: false })
-        .limit(10),
-    ]);
-    if (boardsRes.data) setBoards(boardsRes.data as Board[]);
-    if (bookingsRes.data) {
-      const bks = bookingsRes.data as unknown as Booking[];
-      setBookings(bks);
-      if (bks.length > 0) {
-        const { data: crData } = await supabase
-          .from('creative_uploads')
-          .select('id, booking_id, file_url, file_name, file_size, status, notes')
-          .in('booking_id', bks.map(b => b.id))
-          .order('created_at', { ascending: false });
-        if (crData) {
-          const crMap: Record<string, typeof crData[0]> = {};
-          crData.forEach((c: any) => { if (!crMap[c.booking_id]) crMap[c.booking_id] = c; });
-          setCreativesByBooking(crMap);
+      const [boardsRes, bookingsRes] = await Promise.all([
+        supabase.from('boards').select('*, rate_card').eq('owner_id', uid).order('created_at', { ascending: false }).limit(200),
+        supabase
+          .from('bookings')
+          .select('*, boards!inner(name, city, format, owner_id), campaigns(name, client_name)')
+          .eq('boards.owner_id', uid)
+          .not('status', 'eq', 'declined')
+          .order('created_at', { ascending: false })
+          .limit(100),
+      ]);
+
+      if (boardsRes.error) throw boardsRes.error;
+      if (bookingsRes.error) throw bookingsRes.error;
+
+      if (boardsRes.data) setBoards(boardsRes.data as Board[]);
+      if (bookingsRes.data) {
+        const bks = bookingsRes.data as unknown as Booking[];
+        setBookings(bks);
+        if (bks.length > 0) {
+          // Messages scoped to this owner's bookings only
+          const bookingIds = bks.map(b => b.id);
+          const [crRes, msgRes] = await Promise.all([
+            supabase
+              .from('creative_uploads')
+              .select('id, booking_id, file_url, file_name, file_size, status, notes')
+              .in('booking_id', bookingIds)
+              .order('created_at', { ascending: false }),
+            supabase
+              .from('messages')
+              .select('*, bookings(boards(name))')
+              .in('booking_id', bookingIds)
+              .eq('sender_role', 'agency')
+              .order('created_at', { ascending: false })
+              .limit(20),
+          ]);
+          if (crRes.data) {
+            const crMap: Record<string, typeof crRes.data[0]> = {};
+            crRes.data.forEach((c: any) => { if (!crMap[c.booking_id]) crMap[c.booking_id] = c; });
+            setCreativesByBooking(crMap);
+          }
+          if (msgRes.data) setMessages(msgRes.data as unknown as Message[]);
         }
       }
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
     }
-    if (msgRes.data) setMessages(msgRes.data as unknown as Message[]);
-    setLoading(false);
   }
 
   const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
@@ -724,9 +745,26 @@ function OwnerContent() {
 
   if (loading) {
     return (
+      <div style={{ padding: '24px 20px', maxWidth: 1200, margin: '0 auto' }}>
+        <SkeletonGrid cols={3} rows={1} />
+        <div style={{ marginTop: 24 }}>
+          <SkeletonTable rows={5} cols={4} />
+        </div>
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
-        <div style={{ width: 28, height: 28, border: '2px solid #E2E8F0', borderTopColor: '#7C3AED', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div style={{ textAlign: 'center', maxWidth: 400 }}>
+          <div style={{ width: 48, height: 48, background: '#FEF2F2', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>Failed to load dashboard</p>
+          <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: '0 0 16px' }}>{fetchError}</p>
+          <button onClick={() => { setFetchError(null); setLoading(true); fetchData(); }} style={{ background: '#7C3AED', color: '#fff', border: 'none', padding: '9px 20px', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Try again</button>
+        </div>
       </div>
     );
   }

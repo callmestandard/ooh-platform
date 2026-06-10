@@ -85,6 +85,7 @@ export default function NegotiationDetailPage() {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionMode, setActionMode] = useState<ActionMode>(null);
   const [messageText, setMessageText] = useState('');
   const [counterRate, setCounterRate] = useState('');
@@ -107,22 +108,33 @@ export default function NegotiationDetailPage() {
   }, [messages]);
 
   async function fetchBooking() {
-    const { data } = await supabase
-      .from('bookings')
-      .select(`*, boards!bookings_board_id_fkey (*), campaigns!bookings_campaign_id_fkey (id, name, client_name)`)
-      .eq('id', id)
-      .single();
-    if (data) setBooking(data as Booking);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select(`*, boards!bookings_board_id_fkey (*), campaigns!bookings_campaign_id_fkey (id, name, client_name)`)
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      if (data) setBooking(data as Booking);
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to load booking');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function fetchMessages() {
-    const { data } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('booking_id', id)
-      .order('created_at', { ascending: true });
-    if (data) setMessages(data as Message[]);
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('booking_id', id)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      if (data) setMessages(data as Message[]);
+    } catch {
+      // Messages failing silently is acceptable
+    }
   }
 
   function subscribeToMessages() {
@@ -349,6 +361,14 @@ export default function NegotiationDetailPage() {
       setExportingContract(false);
     }
   }
+
+  if (fetchError) return (
+    <div style={{ padding: '3rem', textAlign: 'center' }}>
+      <p style={{ color: '#EF4444', fontWeight: 600, marginBottom: 12 }}>Failed to load booking</p>
+      <p style={{ color: '#64748B', fontSize: '0.875rem', marginBottom: 16 }}>{fetchError}</p>
+      <button onClick={() => { setFetchError(null); setLoading(true); fetchBooking(); fetchMessages(); }} style={{ padding: '8px 20px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.875rem' }}>Retry</button>
+    </div>
+  );
 
   if (loading) {
     return (

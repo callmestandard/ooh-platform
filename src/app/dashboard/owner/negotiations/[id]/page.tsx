@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { authedFetch } from '@/lib/api';
 import { createNotification } from '@/lib/notifications';
 import { getActivityActor, logActivity } from '@/lib/activity-log';
 
@@ -81,6 +82,7 @@ export default function OwnerNegotiationDetailPage() {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [actionMode, setActionMode] = useState<ActionMode>(null);
   const [messageText, setMessageText] = useState('');
   const [counterRate, setCounterRate] = useState('');
@@ -136,22 +138,33 @@ export default function OwnerNegotiationDetailPage() {
   }, [messages]);
 
   async function fetchBooking() {
-    const { data } = await supabase
-      .from('bookings')
-      .select('*, boards!bookings_board_id_fkey(*), campaigns!bookings_campaign_id_fkey(id, name, client_name, agency_id)')
-      .eq('id', id)
-      .single();
-    if (data) setBooking(data as unknown as Booking);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('*, boards!bookings_board_id_fkey(*), campaigns!bookings_campaign_id_fkey(id, name, client_name, agency_id)')
+        .eq('id', id)
+        .single();
+      if (error) throw error;
+      if (data) setBooking(data as unknown as Booking);
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to load booking');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function fetchMessages() {
-    const { data } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('booking_id', id)
-      .order('created_at', { ascending: true });
-    if (data) setMessages(data as Message[]);
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('booking_id', id)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      if (data) setMessages(data as Message[]);
+    } catch {
+      // Messages failing silently is acceptable — booking data is primary
+    }
   }
 
   function subscribeToMessages() {
@@ -256,15 +269,15 @@ export default function OwnerNegotiationDetailPage() {
     if (agencyId) {
       const { actorId: ownerId } = await getActivityActor();
       if (actionMode === 'accept') {
-        fetch('/api/notify/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        authedFetch('/api/notify/email', { method: 'POST',
           body: JSON.stringify({ type: 'booking_accepted', agencyId, ownerId, boardName, agreedRate: booking.offered_rate, bookingId: booking.id }),
         }).catch(() => {});
       } else if (actionMode === 'decline') {
-        fetch('/api/notify/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        authedFetch('/api/notify/email', { method: 'POST',
           body: JSON.stringify({ type: 'booking_declined', agencyId, ownerId, boardName, bookingId: booking.id }),
         }).catch(() => {});
       } else if (actionMode === 'counter') {
-        fetch('/api/notify/email', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        authedFetch('/api/notify/email', { method: 'POST',
           body: JSON.stringify({ type: 'booking_counter_offer', agencyId, ownerId, boardName, counterRate: parseFloat(counterRate), bookingId: booking.id }),
         }).catch(() => {});
       }
@@ -276,6 +289,14 @@ export default function OwnerNegotiationDetailPage() {
     setActionMode(null);
     setSending(false);
   }
+
+  if (fetchError) return (
+    <div style={{ padding: '3rem', textAlign: 'center' }}>
+      <p style={{ color: '#EF4444', fontWeight: 600, marginBottom: 12 }}>Failed to load booking</p>
+      <p style={{ color: '#64748B', fontSize: '0.875rem', marginBottom: 16 }}>{fetchError}</p>
+      <button onClick={() => { setFetchError(null); setLoading(true); fetchBooking(); fetchMessages(); }} style={{ padding: '8px 20px', background: '#7C3AED', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.875rem' }}>Retry</button>
+    </div>
+  );
 
   if (loading) {
     return (

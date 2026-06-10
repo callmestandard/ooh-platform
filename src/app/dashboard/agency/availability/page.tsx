@@ -218,6 +218,7 @@ export default function AvailabilityPage() {
   const [boards, setBoards] = useState<Board[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'calendar' | 'timeline'>('timeline');
   const [calMonth, setCalMonth] = useState(new Date());
   const [selectedBoard, setSelectedBoard] = useState<string>('all');
@@ -227,13 +228,20 @@ export default function AvailabilityPage() {
   useEffect(() => { fetchData(); }, []);
 
   async function fetchData() {
-    const [boardRes, bookRes] = await Promise.all([
-      supabase.from('boards').select('id, name, city, state, format, asking_rate, status').order('name'),
-      supabase.from('bookings').select('id, board_id, campaign_id, status, start_date, end_date, agreed_rate, offered_rate, campaigns(name, client_name)').order('start_date'),
-    ]);
-    setBoards((boardRes.data as Board[]) || []);
-    setBookings((bookRes.data as unknown as Booking[]) || []);
-    setLoading(false);
+    try {
+      const [boardRes, bookRes] = await Promise.all([
+        supabase.from('boards').select('id, name, city, state, format, asking_rate, status').order('name').limit(300),
+        supabase.from('bookings').select('id, board_id, campaign_id, status, start_date, end_date, agreed_rate, offered_rate, campaigns(name, client_name)').order('start_date').limit(500),
+      ]);
+      if (boardRes.error) throw boardRes.error;
+      if (bookRes.error) throw bookRes.error;
+      setBoards((boardRes.data as Board[]) || []);
+      setBookings((bookRes.data as unknown as Booking[]) || []);
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to load availability data');
+    } finally {
+      setLoading(false);
+    }
   }
 
   const filteredBoards = boards.filter(b => {
@@ -275,6 +283,14 @@ export default function AvailabilityPage() {
       }
     }
   });
+
+  if (fetchError) return (
+    <div style={{ padding: '3rem', textAlign: 'center' }}>
+      <p style={{ color: '#EF4444', fontWeight: 600, marginBottom: 12 }}>Failed to load availability data</p>
+      <p style={{ color: '#64748B', fontSize: '0.875rem', marginBottom: 16 }}>{fetchError}</p>
+      <button onClick={() => { setFetchError(null); setLoading(true); fetchData(); }} style={{ padding: '8px 20px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.875rem' }}>Retry</button>
+    </div>
+  );
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
