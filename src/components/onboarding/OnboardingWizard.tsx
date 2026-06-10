@@ -130,7 +130,7 @@ export default function OnboardingWizard({ role, userName }: { role: DemoRole; u
   const current  = steps[step];
   const isLast   = step === steps.length - 1;
   const actions  = ACTIONS[role];
-  const firstName = userName.split(' ')[0];
+  const firstName = (userName || '').split(' ')[0] || 'there';
 
   return (
     <>

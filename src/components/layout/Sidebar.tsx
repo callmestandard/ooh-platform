@@ -132,7 +132,7 @@ export function Sidebar({ role, userName, roleLabel, onLogout, isOpen, onClose }
     return pathname.startsWith(itemPath);
   }
 
-  const initials = userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+  const initials = (userName || '').split(" ").map(n => n[0] || '').join("").slice(0, 2).toUpperCase();
 
   return (
     <aside className={`ooh-sidebar${isOpen ? ' sidebar-open' : ''}`} style={{

@@ -192,7 +192,7 @@ function Avatar({ name, role, avatarUrl, onUpload, uploading }: {
   const roleColors: Record<DemoRole, string> = {
     agency: '#1B4F8A', client: '#059669', owner: '#7C3AED', admin: '#DC2626',
   };
-  const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  const initials = (name || '').split(' ').map(n => n[0] || '').join('').slice(0, 2).toUpperCase();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
       <div style={{ position: 'relative', flexShrink: 0 }}>

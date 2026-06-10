@@ -430,7 +430,7 @@ function ClientContent() {
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [activeCampaign?.id, fetchCampaignData]);
+  }, [activeCampaign?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function switchCampaign(id: string) {
     const c = campaigns.find(c => c.id === id);
