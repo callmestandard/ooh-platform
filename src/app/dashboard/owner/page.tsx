@@ -497,6 +497,7 @@ function OwnerContent() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [creativesByBooking, setCreativesByBooking] = useState<Record<string, { id: string; file_url: string; file_name: string; file_size: number | null; status: string; notes: string | null }>>({});
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'boards' | 'bookings' | 'messages' | 'earnings' | 'calendar' | 'analytics' | 'rate-card' | 'invoices'>('boards');
@@ -605,9 +606,10 @@ function OwnerContent() {
       const { data: { session: ownerSession } } = await supabase.auth.getSession();
       const uid = ownerSession?.user?.id;
       if (!uid) { setBoards([]); setBookings([]); setLoading(false); return; }
+      setUserId(uid);
 
       const [boardsRes, bookingsRes] = await Promise.all([
-        supabase.from('boards').select('*, rate_card').eq('owner_id', uid).order('created_at', { ascending: false }).limit(200),
+        supabase.from('boards').select('*').eq('owner_id', uid).order('created_at', { ascending: false }).limit(200),
         supabase
           .from('bookings')
           .select('*, boards!inner(name, city, format, owner_id), campaigns(name, client_name)')
@@ -710,7 +712,8 @@ function OwnerContent() {
       if (error) { showToast('Failed to update board', 'error'); setSaving(false); return; }
       showToast(`${form.name} updated`);
     } else {
-      const { error } = await supabase.from('boards').insert({ ...payload, status: 'available' });
+      if (!userId) { showToast('Session expired — please refresh', 'error'); setSaving(false); return; }
+      const { error } = await supabase.from('boards').insert({ ...payload, status: 'available', owner_id: userId });
       if (error) { showToast('Failed to add board', 'error'); setSaving(false); return; }
       showToast(`${form.name} added to your inventory`);
     }

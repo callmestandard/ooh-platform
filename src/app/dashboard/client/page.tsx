@@ -650,7 +650,9 @@ function ClientContent() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch { /* silent */ } finally {
+    } catch {
+      showToast('Failed to generate POE — please try again', 'error');
+    } finally {
       setExportingPOE(null);
     }
   }
@@ -1840,6 +1842,17 @@ function ClientContent() {
           >
             ✕
           </button>
+          <a
+            href={photoLightbox}
+            download
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            style={{ position: 'absolute', top: 20, right: 68, background: 'rgba(255,255,255,0.12)', border: 'none', color: '#fff', height: 36, padding: '0 14px', borderRadius: 8, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download
+          </a>
           <img
             src={photoLightbox}
             alt="Proof of posting"
