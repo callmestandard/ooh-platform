@@ -93,9 +93,8 @@ export default function OwnerNegotiationDetailPage() {
     if (!booking) return;
     setExportingContract(true);
     try {
-      const res = await fetch('/api/contract-pdf', {
+      const res = await authedFetch('/api/contract-pdf', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           booking_id:    booking.id,
           agency_name:   booking.campaigns?.client_name || 'Agency',

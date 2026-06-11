@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { diffFields, logActivity } from '@/lib/activity-log';
 import { emailInvoiceSent } from '@/lib/email';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 export const runtime = 'nodejs';
 
@@ -11,9 +12,11 @@ const supabase = createClient(
 );
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   const { id } = await params;
 
   const { data, error } = await supabase
@@ -23,6 +26,17 @@ export async function GET(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+
+  // Scope: verify caller owns this invoice
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const inv = data as Record<string, unknown> & { campaign?: { agency_id?: string } | null; owner_id?: string | null; agency_id?: string | null };
+  if (profile?.role === 'agency' && inv.campaign?.agency_id !== user.id && inv.agency_id !== user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  if (profile?.role === 'owner' && inv.owner_id !== user.id) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   return NextResponse.json(data);
 }
 
@@ -30,6 +44,8 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   const { id } = await params;
   const body = await req.json();
 
@@ -103,9 +119,11 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   const { id } = await params;
 
   const { data: inv } = await supabase

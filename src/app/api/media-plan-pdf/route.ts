@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import PDFDocument from 'pdfkit';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 // Colors
 const NAVY   = '#1B4F8A';
@@ -78,6 +79,8 @@ export type MediaPlanPayload = {
 };
 
 export async function POST(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   try {
     const payload: MediaPlanPayload = await req.json();
     const { campaign_name, client_name, objective, start_date, end_date, total_budget, boards } = payload;

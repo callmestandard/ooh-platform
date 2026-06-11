@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import PDFDocument from 'pdfkit';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 export const runtime = 'nodejs';
 
@@ -58,6 +59,8 @@ const FORMAT_LABELS: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   try {
     const p: ContractPayload = await req.json();
 

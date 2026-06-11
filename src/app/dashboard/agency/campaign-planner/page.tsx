@@ -4,8 +4,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
+import { authedFetch } from '@/lib/api';
 import { createNotification } from '@/lib/notifications';
 import { formatNaira } from '@/lib/utils';
+import { useToast } from '@/components/ui/Toast';
 import type { Board } from '@/app/dashboard/agency/boards-map/page';
 import type { AudienceProfile } from '@/lib/types';
 
@@ -141,7 +143,6 @@ function smartSuggest(
   return selected;
 }
 
-type Toast = { msg: string; type: 'success' | 'error' };
 
 type ParsedBrief = {
   client_name: string;
@@ -167,7 +168,7 @@ export default function CampaignPlannerPage() {
   const [suggesting, setSuggesting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [toast, setToast] = useState<Toast | null>(null);
+  const { toast: showToast } = useToast();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [step, setStep] = useState<1 | 2>(1); // 1 = details, 2 = boards
   const [form, setForm] = useState<PlanForm>({
@@ -208,11 +209,6 @@ export default function CampaignPlannerPage() {
         }
       });
   }, []);
-
-  function showToast(msg: string, type: Toast['type'] = 'success') {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
-  }
 
   const toggleBoard = useCallback((board: Board) => {
     setSelectedIds(prev => {
@@ -265,7 +261,12 @@ export default function CampaignPlannerPage() {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const res = await fetch('/api/import-plan', { method: 'POST', body: fd });
+      const { data: { session: importSession } } = await supabase.auth.getSession();
+      const res = await fetch('/api/import-plan', {
+        method: 'POST',
+        headers: importSession?.access_token ? { Authorization: `Bearer ${importSession.access_token}` } : {},
+        body: fd,
+      });
       const json = await res.json();
       if (!res.ok) { showToast(json.error || 'Import failed', 'error'); return; }
       setImportResult(json as ImportResult);
@@ -406,9 +407,8 @@ export default function CampaignPlannerPage() {
         estimated_impressions: estimateImpressions(b, days),
       }));
 
-      const res = await fetch('/api/media-plan-pdf', {
+      const res = await authedFetch('/api/media-plan-pdf', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           campaign_name: form.name || 'Media Plan',
           client_name:   form.client_name || '',
@@ -1204,22 +1204,6 @@ export default function CampaignPlannerPage() {
         </div>
       )}
 
-      {/* Toast */}
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '12px 18px', borderRadius: '10px',
-          background: toast.type === 'success' ? '#0F172A' : '#7F1D1D',
-          color: '#F8FAFC', fontSize: '0.8125rem', fontWeight: 500,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-          animation: 'fadeUp 0.25s ease',
-        }}>
-          <span>{toast.type === 'success' ? '✓' : '✕'}</span>
-          <span>{toast.msg}</span>
-          <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }`}</style>
-        </div>
-      )}
     </div>
   );
 }

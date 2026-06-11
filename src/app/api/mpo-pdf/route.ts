@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import PDFDocument from 'pdfkit';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 const NAVY  = '#1B4F8A';
 const AMBER = '#F59E0B';
@@ -60,6 +61,8 @@ function drawHRule(doc: PDFKit.PDFDocument, x: number, y: number, w: number, col
 }
 
 export async function POST(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   try {
     const p: MPOPayload = await req.json();
 

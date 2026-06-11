@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 export const runtime = 'nodejs';
 
@@ -12,6 +13,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   const { id } = await params;
 
   const { data: board, error: boardErr } = await supabase

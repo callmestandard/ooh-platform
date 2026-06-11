@@ -7,7 +7,8 @@ import { getActivityActor, logActivity } from '@/lib/activity-log';
 import CampaignActivityTimeline from '@/components/activity/CampaignActivityTimeline';
 import CreativeUploadPanel, { type CreativeUpload } from '@/components/creatives/CreativeUploadPanel';
 import DownloadInvoice from '@/components/invoice/DownloadInvoice';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { useToast } from '@/components/ui/Toast';
 import { authedFetch } from '@/lib/api';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useParams, useRouter } from 'next/navigation';
@@ -152,7 +153,7 @@ export default function CampaignPlanPage() {
   const [complianceByBooking, setComplianceByBooking] = useState<Record<string, any>>({});
   const [creativesByBooking, setCreativesByBooking] = useState<Record<string, CreativeUpload>>({});
   const [uploadingFor, setUploadingFor] = useState<PlanItem | null>(null);
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const { toast: showToast } = useToast();
   const [removeConfirm, setRemoveConfirm] = useState<{ id: string; name: string } | null>(null);
   const [approveConfirm, setApproveConfirm] = useState(false);
   const [showSendToClient, setShowSendToClient] = useState(false);
@@ -199,10 +200,6 @@ export default function CampaignPlanPage() {
     notes: '',
   });
 
-  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
-  }, []);
 
   async function saveArcon() {
     if (!campaign) return;
@@ -1828,22 +1825,6 @@ export default function CampaignPlanPage() {
         onCancel={() => setApproveConfirm(false)}
       />
 
-      {/* Toast */}
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '12px 18px', borderRadius: '10px',
-          background: toast.type === 'success' ? '#0F172A' : '#7F1D1D',
-          color: '#F8FAFC', fontSize: '0.8125rem', fontWeight: 500,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-          animation: 'fadeUp 0.25s ease',
-          fontFamily: 'inherit',
-        }}>
-          <span>{toast.type === 'success' ? '✓' : '✕'}</span>
-          <span>{toast.msg}</span>
-        </div>
-      )}
     </>
   );
 }

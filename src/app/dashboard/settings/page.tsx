@@ -5,6 +5,7 @@ import { useDashboardRole } from '@/components/layout/DashboardLayout';
 import { ROLE_STORAGE_KEY, type DemoRole } from '@/lib/constants';
 import type { NotificationType } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
+import { useToast } from '@/components/ui/Toast';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -243,7 +244,7 @@ function Avatar({ name, role, avatarUrl, onUpload, uploading }: {
 export default function SettingsPage() {
   const role = useDashboardRole();
   const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'payout' | 'team' | 'branding' | 'security'>('profile');
-  const [toast, setToast] = useState<string | null>(null);
+  const { toast: showToast } = useToast();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -334,11 +335,6 @@ export default function SettingsPage() {
       setBranding(loadJSON<BrandingData>(getStorageKey(role, 'branding'), branding));
     }
   }, [role]); // eslint-disable-line
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
-  }
 
   async function handleSave() {
     if (!role) return;
@@ -502,18 +498,6 @@ export default function SettingsPage() {
         @keyframes toastIn { from { opacity:0; transform:translateY(8px) translateX(-50%); } to { opacity:1; transform:translateY(0) translateX(-50%); } }
       `}</style>
 
-      {/* Toast */}
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
-          background: '#0F172A', color: '#fff', padding: '11px 20px', borderRadius: 10,
-          fontSize: '0.875rem', fontWeight: 500, zIndex: 9999, boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-          animation: 'toastIn 0.2s ease', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          {toast}
-        </div>
-      )}
 
       {/* Page header */}
       <div style={{ marginBottom: '1.75rem' }}>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -164,6 +165,8 @@ function tryParseOohTemplate(arrayRows: unknown[][]): RawRow[] | null {
 }
 
 export async function POST(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;

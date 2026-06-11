@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { authedFetch } from '@/lib/api';
 
 type Props = {
   campaignId: string;
@@ -18,9 +19,8 @@ export default function GeneratePOEDeck({ campaignId, campaignName, clientName, 
     setLoading(format);
     setError('');
     try {
-      const res = await fetch('/api/poe-deck', {
+      const res = await authedFetch('/api/poe-deck', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ campaignId, format }),
       });
 

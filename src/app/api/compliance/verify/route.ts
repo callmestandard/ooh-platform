@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth, unauthorized } from '@/lib/require-auth';
+import { rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -32,6 +33,7 @@ function haversineMetres(lat1: number, lon1: number, lat2: number, lon2: number)
 export async function POST(req: NextRequest) {
   const user = await requireAuth(req);
   if (!user) return unauthorized();
+  if (!rateLimit(`compliance:${user.id}`)) return rateLimitResponse();
 
   const { compliance_check_id } = await req.json();
 

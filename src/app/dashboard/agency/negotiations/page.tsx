@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { SkeletonTable } from '@/components/ui/Skeleton';
 
 type Booking = {
   id: string;
@@ -220,10 +221,7 @@ export default function NegotiationsPage() {
 
       {/* ── List ── */}
       {loading ? (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5rem 0' }}>
-          <div style={{ width: 32, height: 32, border: '2px solid #1B4F8A', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
+        <SkeletonTable rows={6} cols={5} />
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '5rem 0' }}>
           <div style={{ width: 56, height: 56, borderRadius: '16px', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '1.5rem' }}>📋</div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 export const maxDuration = 60;
 
@@ -65,6 +66,8 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; ext: str
 // ── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   try {
     const { campaignId, format } = await req.json();
     if (!campaignId) return NextResponse.json({ error: 'campaignId required' }, { status: 400 });

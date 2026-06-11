@@ -6,6 +6,7 @@ import { authedFetch } from '@/lib/api';
 import { createNotification } from '@/lib/notifications';
 import { logActivity } from '@/lib/activity-log';
 import { formatDate } from '@/lib/utils';
+import { SkeletonTable } from '@/components/ui/Skeleton';
 
 type ComplianceCheck = {
   id: string;
@@ -370,7 +371,7 @@ export default function CompliancePage() {
             </div>
 
             {loading ? (
-              <div style={{ padding: '3rem', textAlign: 'center', color: '#94A3B8' }}>Loading...</div>
+              <div style={{ padding: '8px' }}><SkeletonTable rows={5} cols={5} /></div>
             ) : filtered.length === 0 ? (
               <div style={{ padding: '4rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{ width: 52, height: 52, background: '#EFF6FF', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>

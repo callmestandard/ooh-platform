@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import type { Invoice, InvoiceItem } from '@/lib/types';
+import { useToast } from '@/components/ui/Toast';
 
 type FullInvoice = Invoice & {
   campaign?: { id: string; name: string };
@@ -48,7 +49,7 @@ export default function PublicInvoicePage({ params, searchParams }: {
   const [invoice, setInvoice]   = useState<FullInvoice | null>(null);
   const [loading, setLoading]   = useState(true);
   const [paying, setPaying]     = useState(false);
-  const [toast, setToast]       = useState('');
+  const { toast: showToast } = useToast();
   const [copied, setCopied]     = useState(false);
 
   useEffect(() => {
@@ -81,11 +82,6 @@ export default function PublicInvoicePage({ params, searchParams }: {
     } finally {
       setPaying(false);
     }
-  }
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(''), 4000);
   }
 
   async function handleCopy() {
@@ -361,12 +357,6 @@ export default function PublicInvoicePage({ params, searchParams }: {
         </div>
       </div>
 
-      {/* Toast */}
-      {toast && (
-        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: '#0F172A', color: '#fff', padding: '12px 20px', borderRadius: 10, fontSize: '0.875rem', fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.2)', animation: 'fadeIn 0.2s both', whiteSpace: 'nowrap' }}>
-          {toast}
-        </div>
-      )}
     </div>
   );
 }

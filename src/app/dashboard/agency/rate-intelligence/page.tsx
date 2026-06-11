@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { getAllMarketRates, getRateTrend, getPlatformStats, getNegotiationSpreads, type RateTrendPoint, type NegotiationSpread } from '@/lib/rate-intelligence';
 import { formatNaira } from '@/lib/utils';
+import { SkeletonGrid } from '@/components/ui/Skeleton';
 
 type MarketRow = {
   format: string;
@@ -188,9 +189,7 @@ export default function RateIntelligencePage() {
       </div>
 
       {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '5rem 0' }}>
-          <div style={{ width: 28, height: 28, border: '2px solid #E2E8F0', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-        </div>
+        <SkeletonGrid cols={3} rows={3} />
       ) : rows.length === 0 ? (
         <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '4rem 2rem', textAlign: 'center' }}>
           <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📊</div>

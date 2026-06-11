@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 export const runtime = 'nodejs';
 
@@ -33,9 +34,11 @@ function setFill(doc: PDFKit.PDFDocument, hex: string) {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   const { id } = await params;
 
   const { data: invoice, error } = await supabase

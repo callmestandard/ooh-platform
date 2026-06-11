@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import DownloadInvoice from '@/components/invoice/DownloadInvoice';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { supabase } from '@/lib/supabase';
 import { SkeletonGrid, SkeletonTable } from '@/components/ui/Skeleton';
+import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
+import { useToast } from '@/components/ui/Toast';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -499,6 +501,7 @@ function OwnerContent() {
   const [creativesByBooking, setCreativesByBooking] = useState<Record<string, { id: string; file_url: string; file_name: string; file_size: number | null; status: string; notes: string | null }>>({});
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [wizardName, setWizardName] = useState('');
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'boards' | 'bookings' | 'messages' | 'earnings' | 'calendar' | 'analytics' | 'rate-card' | 'invoices'>('boards');
   const [reviewingCreative, setReviewingCreative] = useState<{ bookingId: string; fileUrl: string; fileName: string; creativeId: string } | null>(null);
@@ -512,6 +515,12 @@ function OwnerContent() {
       setActiveTab(tab as typeof activeTab);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setWizardName(user?.user_metadata?.full_name || '');
+    });
+  }, []);
 
   // Invoices state
   type MPI = {
@@ -596,7 +605,7 @@ function OwnerContent() {
   const [editingBoard, setEditingBoard] = useState<Board | null>(null);
   const [form, setForm] = useState<BoardForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const { toast: showToast } = useToast();
   const [copiedBoardId, setCopiedBoardId] = useState<string | null>(null);
 
   useEffect(() => { fetchData(); }, []);
@@ -658,10 +667,6 @@ function OwnerContent() {
     }
   }
 
-  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
-  }, []);
 
   function openAdd() {
     setEditingBoard(null);
@@ -2149,22 +2154,7 @@ function OwnerContent() {
         <RateCardTab boards={boards} formatNaira={formatNaira} onSave={() => showToast('Rate card saved')} />
       )}
 
-      {/* Toast */}
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '12px 18px', borderRadius: '10px',
-          background: toast.type === 'success' ? '#0F172A' : '#7F1D1D',
-          color: '#F8FAFC', fontSize: '0.8125rem', fontWeight: 500,
-          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-          animation: 'fadeUp 0.25s ease',
-          fontFamily: 'inherit',
-        }}>
-          <span>{toast.type === 'success' ? '✓' : '✕'}</span>
-          <span>{toast.msg}</span>
-        </div>
-      )}
+      <OnboardingWizard role="owner" userName={wizardName} />
     </div>
   );
 }

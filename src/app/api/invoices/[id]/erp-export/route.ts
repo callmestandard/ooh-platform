@@ -6,6 +6,7 @@ import {
   type ErpInvoicePayload,
 } from '@/lib/erp-export';
 import { logActivity } from '@/lib/activity-log';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 export const runtime = 'nodejs';
 
@@ -18,6 +19,8 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   const { id } = await params;
   const format = req.nextUrl.searchParams.get('format') === 'xml' ? 'xml' : 'csv';
 

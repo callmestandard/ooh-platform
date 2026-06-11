@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { formatNaira } from '@/lib/utils';
+import { SkeletonTable } from '@/components/ui/Skeleton';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -293,9 +294,8 @@ export default function AvailabilityPage() {
   );
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
-      <div style={{ width: 28, height: 28, border: '2px solid #E2E8F0', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    <div style={{ padding: '24px' }}>
+      <SkeletonTable rows={8} cols={5} />
     </div>
   );
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { logActivity } from '@/lib/activity-log';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 export const runtime = 'nodejs';
 
@@ -14,6 +15,8 @@ const supabase = createClient(
 // optionally appends a compliance summary in the notes, then creates a client invoice.
 // Each source MPI gets its compiled_invoice_id set to the new invoice's id.
 export async function POST(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   const body = await req.json();
   const {
     mpi_ids,           // string[] — media partner invoice IDs to compile

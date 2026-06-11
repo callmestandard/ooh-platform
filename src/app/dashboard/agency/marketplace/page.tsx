@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import { authedFetch } from '@/lib/api';
+import { useToast } from '@/components/ui/Toast';
 
 const MapView = dynamic(() => import('./MapView'), {
   ssr: false,
@@ -66,6 +67,9 @@ const NIGERIAN_CITIES = [
 
 const HIGH_TRAFFIC_CITIES = ['Lagos', 'Abuja', 'Victoria Island', 'Lekki', 'Ikeja', 'Maitama', 'Port Harcourt'];
 const PREMIUM_FORMATS = ['gantry', 'unipole', 'digital'];
+
+// TODO: Audience/demographic filter — requires location-intel table (audience_segments) which doesn't exist yet.
+// When location-intel is live, add filter chips here for Commuters, Shoppers, Residents, etc.
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -386,7 +390,7 @@ export default function MarketplacePage() {
   const [campaigns, setCampaigns]     = useState<{ id: string; name: string }[]>([]);
   const [offerForm, setOfferForm]     = useState({ campaign_id: '', offered_rate: '', start_date: '', end_date: '', notes: '' });
   const [submitting, setSubmitting]   = useState(false);
-  const [toast, setToast]             = useState('');
+  const { toast: showToast } = useToast();
   const [campaignStart, setCampaignStart] = useState('');
   const [campaignEnd, setCampaignEnd]     = useState('');
   const [bookedBoardIds, setBookedBoardIds] = useState<Set<string>>(new Set());
@@ -429,8 +433,6 @@ export default function MarketplacePage() {
     });
   }
 
-  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 3500); }
-
   const formatAvg = useMemo(() => {
     const totals: Record<string, number> = {};
     const counts: Record<string, number> = {};
@@ -451,7 +453,7 @@ export default function MarketplacePage() {
       if (maxPrice && b.asking_rate > parseInt(maxPrice)) return false;
       if (campaignStart && campaignEnd && bookedBoardIds.has(b.id)) return false;
       if (showShortlistOnly && !shortlist.has(b.id)) return false;
-      if (search) {
+if (search) {
         const q = search.toLowerCase();
         return b.name.toLowerCase().includes(q) || b.city?.toLowerCase().includes(q) || b.address?.toLowerCase().includes(q);
       }
@@ -1076,12 +1078,6 @@ export default function MarketplacePage() {
         </div>
       )}
 
-      {/* Toast */}
-      {toast && (
-        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: '#0F172A', color: '#fff', padding: '12px 22px', borderRadius: 10, fontSize: '0.875rem', fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.25)', animation: 'fadeIn 0.2s both', whiteSpace: 'nowrap' }}>
-          {toast}
-        </div>
-      )}
     </div>
   );
 }

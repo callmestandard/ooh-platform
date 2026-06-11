@@ -6,6 +6,7 @@ import { RoleGuard } from '@/components/layout/RoleGuard';
 import { supabase } from '@/lib/supabase';
 import { formatNaira, formatDate } from '@/lib/utils';
 import type { ActivityEvent } from '@/lib/activity-log';
+import { useToast } from '@/components/ui/Toast';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -183,7 +184,7 @@ function AdminContent() {
   // user role filter
   const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'agency' | 'client' | 'owner'>('all');
   // toast
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const { toast: showToast } = useToast();
   // platform settings
   const [settings, setSettings] = useState<AdminSettings>(DEFAULT_SETTINGS);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -203,10 +204,6 @@ function AdminContent() {
     } catch {}
   }, []);
 
-  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
-  }, []);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -448,12 +445,6 @@ function AdminContent() {
         .admin-filter-btn:not(.active):hover { background: #F8FAFC; }
       `}</style>
 
-      {/* Toast */}
-      {toast && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, background: toast.type === 'error' ? '#7F1D1D' : '#0F172A', color: '#fff', padding: '11px 18px', borderRadius: 10, fontSize: '0.875rem', fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', animation: 'fadeUp 0.2s ease forwards' }}>
-          {toast.msg}
-        </div>
-      )}
 
       {/* ── Welcome strip ── */}
       <div className="welcome-strip" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16, padding: '18px 24px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>

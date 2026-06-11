@@ -15,6 +15,8 @@ import { ClientBillingTab } from '@/components/client/ClientBillingTab';
 import { parseClientTab, OBJECTIVE_LABELS, type ClientTab } from '@/components/client/client-utils';
 import { formatNaira, formatDate, formatDateShort, formatImpressions } from '@/lib/utils';
 import { SkeletonCard, SkeletonTable } from '@/components/ui/Skeleton';
+import { useToast } from '@/components/ui/Toast';
+import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 
 const ClientPortalMap = dynamic(() => import('@/components/client/ClientPortalMap'), { ssr: false, loading: () => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#F8FAFC' }}>
@@ -298,7 +300,8 @@ function ClientContent() {
   const [showNewCampaign, setShowNewCampaign] = useState(false);
   const [campaignForm, setCampaignForm] = useState<CampaignForm>({ name: '', client_name: 'MTN Nigeria', total_budget: '', start_date: '', end_date: '', objective: 'brand_awareness', target_cities: '' });
   const [savingCampaign, setSavingCampaign] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [wizardName, setWizardName] = useState('');
+  const { toast: showToast } = useToast();
   const [photoLightbox, setPhotoLightbox] = useState<string | null>(null);
   const searchParams = useSearchParams();
 
@@ -312,10 +315,11 @@ function ClientContent() {
     router.push(path, { scroll: false });
   }
 
-  function showToast(msg: string, type: 'success' | 'error' = 'success') {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
-  }
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setWizardName(user?.user_metadata?.full_name || '');
+    });
+  }, []);
 
   const fetchCampaignData = useCallback(async (campaignId: string) => {
     setLoadingCampaign(true);
@@ -635,9 +639,8 @@ function ClientContent() {
     if (!activeCampaign) { showToast('No campaign selected', 'error'); return; }
     setExportingPOE(format);
     try {
-      const res = await fetch('/api/poe-deck', {
+      const res = await authedFetch('/api/poe-deck', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ campaignId: activeCampaign.id, format }),
       });
       if (!res.ok) {
@@ -1865,13 +1868,7 @@ function ClientContent() {
         </div>
       )}
 
-      {/* Toast */}
-      {toast && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 18px', borderRadius: 10, background: toast.type === 'success' ? '#0F172A' : '#7F1D1D', color: '#F8FAFC', fontSize: '0.8125rem', fontWeight: 500, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', animation: 'fadeUp 0.25s ease', fontFamily: 'inherit' }}>
-          <span>{toast.type === 'success' ? '✓' : '✕'}</span>
-          <span>{toast.msg}</span>
-        </div>
-      )}
+      <OnboardingWizard role="client" userName={wizardName} />
 
     </div>
   );

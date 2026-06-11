@@ -177,6 +177,44 @@ export async function getNegotiationSpreads(): Promise<NegotiationSpread[]> {
     .sort((a, b) => a.spread_pct - b.spread_pct);
 }
 
+// Single query returning trend data for all format+city combos — avoids N+1 when rendering a full trend dashboard.
+export async function getAllRateTrends(months = 12): Promise<
+  Record<string, RateTrendPoint[]>
+> {
+  const since = new Date();
+  since.setMonth(since.getMonth() - months);
+
+  const { data, error } = await supabase
+    .from('bookings')
+    .select('agreed_rate, created_at, boards!inner(format, city)')
+    .not('agreed_rate', 'is', null)
+    .in('status', CLOSED_STATUSES)
+    .gte('created_at', since.toISOString())
+    .order('created_at', { ascending: true });
+
+  if (error || !data || data.length === 0) return {};
+
+  const groups: Record<string, Record<string, number[]>> = {};
+  for (const row of data as unknown as { agreed_rate: number; created_at: string; boards: { format: string; city: string } }[]) {
+    const key = `${row.boards?.format}||${row.boards?.city}`;
+    const d = new Date(row.created_at);
+    const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (!groups[key]) groups[key] = {};
+    if (!groups[key][month]) groups[key][month] = [];
+    groups[key][month].push(row.agreed_rate);
+  }
+
+  const result: Record<string, RateTrendPoint[]> = {};
+  for (const [key, monthMap] of Object.entries(groups)) {
+    result[key] = Object.entries(monthMap).map(([month, rates]) => ({
+      month,
+      avg: Math.round(rates.reduce((a, b) => a + b, 0) / rates.length),
+      count: rates.length,
+    }));
+  }
+  return result;
+}
+
 export async function getAllMarketRates(): Promise<
   { format: string; city: string; avg: number; min: number; max: number; median: number; count: number }[]
 > {

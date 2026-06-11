@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { authedFetch } from '@/lib/api';
 import { createNotification } from '@/lib/notifications';
 import { getActivityActor, logActivity } from '@/lib/activity-log';
 import ActivityTimeline from '@/components/activity/ActivityTimeline';
@@ -249,9 +250,8 @@ export default function NegotiationDetailPage() {
       const agencyName = (typeof localStorage !== 'undefined' && localStorage.getItem('ooh_company_name')) || 'OOH Platform Agency';
       const mpoNum = `OOH-MPO-${new Date().getFullYear()}-${booking.id.slice(0, 6).toUpperCase()}`;
 
-      const res = await fetch('/api/mpo-pdf', {
+      const res = await authedFetch('/api/mpo-pdf', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           booking_id:    booking.id,
           campaign_name: booking.campaigns?.name || 'Campaign',
@@ -323,9 +323,8 @@ export default function NegotiationDetailPage() {
     setExportingContract(true);
     try {
       const agencyName = (typeof localStorage !== 'undefined' && localStorage.getItem('ooh_company_name')) || 'OOH Platform Agency';
-      const res = await fetch('/api/contract-pdf', {
+      const res = await authedFetch('/api/contract-pdf', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           booking_id:    booking.id,
           agency_name:   agencyName,

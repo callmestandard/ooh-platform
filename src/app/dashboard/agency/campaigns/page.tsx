@@ -6,6 +6,8 @@ import { Campaign } from '@/lib/types';
 import { getCampaigns, createCampaign, updateCampaignStatus, deleteCampaign } from '@/lib/campaigns';
 import { formatNaira, formatDate } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { SkeletonGrid } from '@/components/ui/Skeleton';
+import { useToast } from '@/components/ui/Toast';
 
 const STATUS_CONFIG: Record<string, { bg: string; color: string; dot: string }> = {
   draft:     { bg: '#F1F5F9', color: '#475569', dot: '#94A3B8' },
@@ -266,7 +268,7 @@ export default function CampaignsPage() {
   const [showNew, setShowNew] = useState(false);
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState<Campaign | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const { success: toastSuccess, error: toastError } = useToast();
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   useEffect(() => { loadCampaigns(); }, []);
@@ -283,9 +285,9 @@ export default function CampaignsPage() {
     if (ok) {
       setCampaigns(cs => cs.map(c => c.id === id ? { ...c, status } : c));
       setSelected(s => s?.id === id ? { ...s, status } : s);
-      setToast({ message: `Campaign marked as ${status}`, type: 'success' });
+      toastSuccess(`Campaign marked as ${status}`);
     } else {
-      setToast({ message: 'Failed to update', type: 'error' });
+      toastError('Failed to update');
     }
   }
 
@@ -302,7 +304,7 @@ export default function CampaignsPage() {
     if (ok) {
       setCampaigns(cs => cs.filter(c => c.id !== id));
       if (selected?.id === id) setSelected(null);
-      setToast({ message: 'Campaign deleted', type: 'success' });
+      toastSuccess('Campaign deleted');
     }
   }
 
@@ -367,9 +369,7 @@ export default function CampaignsPage() {
 
         {/* Content */}
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4rem' }}>
-            <div style={{ width: 28, height: 28, border: '2px solid #E2E8F0', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-          </div>
+          <SkeletonGrid cols={3} rows={2} />
         ) : filtered.length === 0 ? (
           <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', textAlign: 'center', padding: '5rem 2rem', minHeight: 320, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: 48, height: 48, background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
@@ -494,7 +494,7 @@ export default function CampaignsPage() {
         )}
       </div>
 
-      {showNew && <NewCampaignModal onSuccess={c => { setCampaigns(cs => [c, ...cs]); setShowNew(false); setToast({ message: `"${c.name}" created`, type: 'success' }); }} onCancel={() => setShowNew(false)} />}
+      {showNew && <NewCampaignModal onSuccess={c => { setCampaigns(cs => [c, ...cs]); setShowNew(false); toastSuccess(`"${c.name}" created`); }} onCancel={() => setShowNew(false)} />}
       {selected && (
         <CampaignDetailPanel
           campaign={selected}
@@ -503,7 +503,6 @@ export default function CampaignsPage() {
           onOpenPlan={id => { setSelected(null); handleOpenPlan(id); }}
         />
       )}
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <ConfirmDialog
         open={!!deleteConfirmId}
         title="Delete campaign?"

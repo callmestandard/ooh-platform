@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { createNotification } from '@/lib/notifications';
+import { useToast } from '@/components/ui/Toast';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -72,8 +73,7 @@ export default function AgencyInvoicesPage() {
   const [clientInvoices, setClientInvoices] = useState<ClientInvoice[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState('');
-  const [toastErr, setToastErr] = useState(false);
+  const { success: _toastOk, error: _toastErr } = useToast();
 
   // Compile panel state
   const [showCompile, setShowCompile] = useState(false);
@@ -110,9 +110,8 @@ export default function AgencyInvoicesPage() {
   const [filterCampaign, setFilterCampaign] = useState('');
 
   const showToast = useCallback((msg: string, err = false) => {
-    setToast(msg); setToastErr(err);
-    setTimeout(() => setToast(''), 3500);
-  }, []);
+    if (err) _toastErr(msg); else _toastOk(msg);
+  }, [_toastOk, _toastErr]);
 
   async function markAsPaid() {
     if (!markingPaidId) return;
@@ -920,12 +919,6 @@ export default function AgencyInvoicesPage() {
         </div>
       )}
 
-      {/* Toast */}
-      {toast && (
-        <div style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 9999, background: toastErr ? '#7F1D1D' : '#0F172A', color: '#fff', padding: '12px 20px', borderRadius: 10, fontSize: '0.875rem', fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.2)', animation: 'fadeUp 0.2s both', whiteSpace: 'nowrap' }}>
-          {toast}
-        </div>
-      )}
     </div>
   );
 }

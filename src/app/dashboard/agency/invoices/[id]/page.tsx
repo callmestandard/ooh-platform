@@ -7,6 +7,7 @@ import ActivityTimeline from '@/components/activity/ActivityTimeline';
 import { computeTaxBreakdown } from '@/lib/erp-export';
 import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/Toast';
 
 type FullInvoice = Invoice & {
   campaign?: { id: string; name: string };
@@ -45,7 +46,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [updating, setUpdating]       = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
   const [payRef, setPayRef]           = useState('');
-  const [toast, setToast]             = useState<{ msg: string; ok: boolean } | null>(null);
+  const { success: _toastOk, error: _toastErr } = useToast();
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [generatingLink, setGeneratingLink] = useState(false);
   const [paymentLink, setPaymentLink] = useState('');
@@ -116,8 +117,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   }
 
   function showToast(msg: string, ok = true) {
-    setToast({ msg, ok });
-    setTimeout(() => setToast(null), 3500);
+    if (ok) _toastOk(msg); else _toastErr(msg);
   }
 
   async function patch(updates: Record<string, unknown>) {
@@ -216,12 +216,6 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         onCancel={() => setCancelConfirm(false)}
       />
 
-      {/* ── Toast ── */}
-      {toast && (
-        <div style={{ position: 'fixed', top: 20, right: 20, zIndex: 100, background: toast.ok ? '#0F172A' : '#EF4444', color: '#fff', padding: '12px 18px', borderRadius: 10, fontSize: '0.875rem', fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,0.2)', animation: 'fadeIn 0.2s both' }}>
-          {toast.ok ? '✓' : '✕'} {toast.msg}
-        </div>
-      )}
 
       {/* ── Back + header ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>

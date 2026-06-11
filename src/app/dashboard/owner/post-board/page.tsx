@@ -559,9 +559,18 @@ function PostBoardContent() {
         <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.025em', margin: '0 0 4px' }}>
           Post a board for rent
         </h1>
-        <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>
-          List your OOH space and start receiving offers from agencies
-        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>
+            List your OOH space and start receiving offers from agencies
+          </p>
+          <button
+            onClick={() => router.push('/dashboard/owner/import-boards')}
+            style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid #CBD5E1', background: '#F8FAFC', color: '#475569', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            Import many boards
+          </button>
+        </div>
       </div>
 
       {/* Card container */}

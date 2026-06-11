@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { diffFields, logActivity } from '@/lib/activity-log';
 import { emailMPISent } from '@/lib/email';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 export const runtime = 'nodejs';
 
@@ -17,6 +18,8 @@ function nextInvoiceNumber(count: number): string {
 
 // POST — owner creates a media partner invoice for a booking
 export async function POST(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   const body = await req.json();
   const {
     booking_id,
@@ -168,12 +171,16 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(invoice, { status: 201 });
 }
 
-// GET — list media partner invoices, optionally filtered by owner_id or agency_id
+// GET — list media partner invoices scoped to the caller
 export async function GET(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   const { searchParams } = new URL(req.url);
-  const owner_id = searchParams.get('owner_id');
-  const agency_id = searchParams.get('agency_id');
   const campaign_id = searchParams.get('campaign_id');
+
+  // Scope: determine role and filter accordingly
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const role = profile?.role;
 
   let q = supabase
     .from('invoices')
@@ -181,8 +188,11 @@ export async function GET(req: NextRequest) {
     .eq('invoice_type', 'media_partner')
     .order('created_at', { ascending: false });
 
-  if (owner_id)   q = q.eq('owner_id', owner_id);
-  if (agency_id)  q = q.eq('agency_id', agency_id);
+  if (role === 'owner') {
+    q = q.eq('owner_id', user.id);
+  } else if (role === 'agency') {
+    q = q.eq('agency_id', user.id);
+  }
   if (campaign_id) q = q.eq('campaign_id', campaign_id);
 
   const { data, error } = await q;
@@ -192,6 +202,8 @@ export async function GET(req: NextRequest) {
 
 // PATCH — update status (draft→sent, sent→acknowledged, acknowledged→paid)
 export async function PATCH(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
   const body = await req.json();
   const { id, status } = body;
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });

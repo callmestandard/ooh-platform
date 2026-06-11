@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { formatNaira, formatDateShort as formatDate } from '@/lib/utils';
 import { SkeletonGrid, SkeletonTable } from '@/components/ui/Skeleton';
+import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 
 type Campaign = {
   id: string;
@@ -75,8 +76,14 @@ export default function AgencyDashboardPage() {
   const [boardCount, setBoardCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [wizardName, setWizardName] = useState('');
 
   useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setWizardName(user?.user_metadata?.full_name || '');
+    });
+  }, []);
 
   async function fetchData() {
     try {
@@ -450,6 +457,7 @@ export default function AgencyDashboardPage() {
           </div>
         </div>
       </div>
+      <OnboardingWizard role="agency" userName={wizardName} />
     </div>
   );
 }

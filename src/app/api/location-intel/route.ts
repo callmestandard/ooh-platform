@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
+import { rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -149,6 +151,10 @@ function getRecommendedVerticals(scores: ReturnType<typeof scoreLocation>, areaT
 }
 
 export async function GET(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
+  if (!rateLimit(`location-intel:${user.id}`)) return rateLimitResponse();
+
   const { searchParams } = new URL(req.url);
   const lat  = parseFloat(searchParams.get('lat') || '0');
   const lng  = parseFloat(searchParams.get('lng') || '0');

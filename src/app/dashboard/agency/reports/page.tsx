@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { formatNaira, formatDate } from '@/lib/utils';
+import { SkeletonTable } from '@/components/ui/Skeleton';
 
 type Campaign = {
   id: string;
@@ -311,7 +312,7 @@ export default function ReportsPage() {
       </div>
 
       {loading ? (
-        <div style={{ padding: '3rem', textAlign: 'center', color: '#94A3B8' }}>Loading reports...</div>
+        <SkeletonTable rows={6} cols={4} />
       ) : (
         <>
           {/* Campaign performance tab */}

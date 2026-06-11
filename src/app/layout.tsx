@@ -37,6 +37,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://ooh-platform-xi.vercel.app'),
   title: { default: 'OOH Platform', template: '%s · OOH Platform' },
   description: "Nigeria's operating system for outdoor advertising. Book billboards, track campaigns, manage compliance.",
   keywords: ['OOH', 'outdoor advertising', 'billboard', 'Nigeria', 'Lagos', 'media planning'],
