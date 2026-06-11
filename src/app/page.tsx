@@ -891,7 +891,7 @@ function Ambition() {
         </div>
 
         {/* Orbit */}
-        <div style={{ position: 'relative', maxWidth: 920, margin: '64px auto 0', aspectRatio: '1000/560' }}>
+        <div style={{ position: 'relative', maxWidth: 920, margin: '64px auto 0', aspectRatio: '1000/560', isolation: 'isolate' }}>
           <svg viewBox="0 0 1000 560" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
             {/* Rings */}
             <ellipse cx="500" cy="280" rx="110" ry="75" fill="none" stroke="rgba(26,22,15,.06)" strokeWidth="1"/>
@@ -1418,6 +1418,7 @@ export default function LandingPage() {
         }
         .lp-nav-scrolled{
           background:rgba(246,244,239,0.96);
+          -webkit-backdrop-filter:blur(18px) saturate(140%);
           backdrop-filter:blur(18px) saturate(140%);
           border-bottom-color:rgba(26,22,15,.10);
           box-shadow:0 6px 20px -16px rgba(26,22,15,0.5);
@@ -1425,6 +1426,8 @@ export default function LandingPage() {
         @media(prefers-color-scheme:dark){
           .lp-nav-scrolled{
             background:rgba(6,8,15,0.95);
+            -webkit-backdrop-filter:blur(18px) saturate(140%);
+            backdrop-filter:blur(18px) saturate(140%);
             border-bottom-color:rgba(255,255,255,.07);
             box-shadow:0 6px 20px -16px rgba(0,0,0,0.7);
           }
