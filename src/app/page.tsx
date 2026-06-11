@@ -283,13 +283,7 @@ function Nav({ scrolled }: { scrolled: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <nav style={{
-      position: 'sticky', top: 0, zIndex: 100,
-      transition: 'background .3s, border-color .3s',
-      borderBottom: scrolled || menuOpen ? '1px solid rgba(26,22,15,.10)' : '1px solid transparent',
-      background: scrolled || menuOpen ? 'rgba(246,244,239,.97)' : 'transparent',
-      backdropFilter: scrolled ? 'blur(16px) saturate(140%)' : 'none',
-    }}>
+    <nav className={scrolled || menuOpen ? 'lp-nav lp-nav-scrolled' : 'lp-nav'}>
       <div className="lp-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 70 }}>
         {/* Brand */}
         <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none' }}>
@@ -1414,6 +1408,26 @@ export default function LandingPage() {
         @media(prefers-reduced-motion:reduce){
           .lp-float-a,.lp-float-b,.lp-marquee-track,.lp-reveal{animation:none!important;transition:none!important;opacity:1!important;transform:none!important}
           .lp-section-head{opacity:1!important;transform:none!important}
+        }
+
+        /* ── Nav ── */
+        .lp-nav{
+          position:sticky;top:0;z-index:100;
+          transition:background .3s,border-color .3s,box-shadow .3s,backdrop-filter .3s;
+          border-bottom:1px solid transparent;
+        }
+        .lp-nav-scrolled{
+          background:rgba(246,244,239,0.96);
+          backdrop-filter:blur(18px) saturate(140%);
+          border-bottom-color:rgba(26,22,15,.10);
+          box-shadow:0 6px 20px -16px rgba(26,22,15,0.5);
+        }
+        @media(prefers-color-scheme:dark){
+          .lp-nav-scrolled{
+            background:rgba(6,8,15,0.95);
+            border-bottom-color:rgba(255,255,255,.07);
+            box-shadow:0 6px 20px -16px rgba(0,0,0,0.7);
+          }
         }
       `}</style>
 
