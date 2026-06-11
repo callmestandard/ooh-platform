@@ -283,7 +283,15 @@ function Nav({ scrolled }: { scrolled: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <nav className={scrolled || menuOpen ? 'lp-nav lp-nav-scrolled' : 'lp-nav'}>
+    <nav style={{
+      position: 'sticky', top: 0, zIndex: 100,
+      transition: 'background .3s, border-color .3s, box-shadow .3s',
+      borderBottom: scrolled || menuOpen ? '1px solid rgba(26,22,15,.10)' : '1px solid transparent',
+      background: scrolled || menuOpen ? 'rgba(246,244,239,0.96)' : 'transparent',
+      WebkitBackdropFilter: scrolled ? 'blur(18px) saturate(140%)' : 'none',
+      backdropFilter: scrolled ? 'blur(18px) saturate(140%)' : 'none',
+      boxShadow: scrolled ? '0 6px 20px -16px rgba(26,22,15,0.5)' : 'none',
+    }} className="lp-nav">
       <div className="lp-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 70 }}>
         {/* Brand */}
         <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none' }}>
@@ -1257,9 +1265,16 @@ export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    // IntersectionObserver is scroll-container-agnostic — avoids window.scrollY
+    // failing when overflow-x:hidden on the wrapper implicitly sets overflow-y:auto
+    const sentinel = document.getElementById('lp-scroll-sentinel');
+    if (!sentinel) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setScrolled(!entry.isIntersecting),
+      { threshold: 0, rootMargin: '0px 0px 0px 0px' },
+    );
+    obs.observe(sentinel);
+    return () => obs.disconnect();
   }, []);
 
   /* Reveal observer */
@@ -1411,32 +1426,14 @@ export default function LandingPage() {
         }
 
         /* ── Nav ── */
-        .lp-nav{
-          position:sticky;top:0;z-index:100;
-          transition:background .3s,border-color .3s,box-shadow .3s,backdrop-filter .3s;
-          border-bottom:1px solid transparent;
-        }
-        .lp-nav-scrolled{
-          background:rgba(246,244,239,0.96);
-          -webkit-backdrop-filter:blur(18px) saturate(140%);
-          backdrop-filter:blur(18px) saturate(140%);
-          border-bottom-color:rgba(26,22,15,.10);
-          box-shadow:0 6px 20px -16px rgba(26,22,15,0.5);
-        }
-        @media(prefers-color-scheme:dark){
-          .lp-nav-scrolled{
-            background:rgba(6,8,15,0.95);
-            -webkit-backdrop-filter:blur(18px) saturate(140%);
-            backdrop-filter:blur(18px) saturate(140%);
-            border-bottom-color:rgba(255,255,255,.07);
-            box-shadow:0 6px 20px -16px rgba(0,0,0,0.7);
-          }
-        }
+        .lp-nav{ position:sticky; top:0; z-index:100; }
       `}</style>
 
       <ScrollProgress/>
       <Nav scrolled={scrolled}/>
       <Hero/>
+      {/* Sentinel: when this pixel leaves the top of the viewport, nav turns opaque */}
+      <div id="lp-scroll-sentinel" style={{ height: 1, marginTop: -1, pointerEvents: 'none' }} aria-hidden="true"/>
       <StatsBar/>
       <TrustWall/>
       <HowItWorks/>
