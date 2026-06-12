@@ -185,6 +185,18 @@ export default function CampaignBuilderPage() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
+  // Pre-select city from ?city= URL param
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const cityParam = params.get('city');
+    if (!cityParam) return;
+    const allCities = [...TOP_CITIES, ...MORE_CITIES];
+    if (allCities.includes(cityParam)) {
+      setCities([cityParam]);
+      setShowMoreCities(!TOP_CITIES.includes(cityParam));
+    }
+  }, []);
+
   // ── Computed values ───────────────────────────────────────────────────────
 
   const selectedBoards = useMemo(
