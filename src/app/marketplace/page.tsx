@@ -419,6 +419,26 @@ export default function MarketplacePage() {
 
       {/* ── Body ── */}
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
+
+        {/* Campaign builder CTA */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+          background: 'linear-gradient(135deg, #1B4F8A 0%, #0EA5E9 100%)',
+          borderRadius: 14, padding: '18px 24px', marginBottom: 24, flexWrap: 'wrap',
+        }}>
+          <div>
+            <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#fff', margin: '0 0 4px' }}>Ready to plan your campaign?</p>
+            <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.7)', margin: 0 }}>Use our self-service builder — pick boards, get a quote, and submit in minutes.</p>
+          </div>
+          <a href="/campaign-builder" style={{
+            padding: '10px 22px', background: '#F59E0B', color: '#fff', borderRadius: 10,
+            fontSize: '0.875rem', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap',
+            boxShadow: '0 4px 14px -4px rgba(245,158,11,0.6)',
+          }}>
+            Plan a campaign →
+          </a>
+        </div>
+
         {/* Toolbar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

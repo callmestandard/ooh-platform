@@ -472,6 +472,14 @@ function Hero() {
               Start for free
               <Ico n="arrow" size={17} color="#fff" sw={2}/>
             </Link>
+            <Link href="/campaign-builder" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 9,
+              background: '#F59E0B', color: '#fff', borderRadius: 13,
+              padding: '16px 26px', fontSize: 16, fontWeight: 600, textDecoration: 'none',
+              boxShadow: '0 12px 30px -10px rgba(245,158,11,.5)',
+            }}>
+              Plan a campaign →
+            </Link>
             <Link href="/marketplace" style={{
               display: 'inline-flex', alignItems: 'center', gap: 9,
               background: '#fff', color: '#1a1712',

@@ -216,6 +216,18 @@ export default function AgencyDashboardPage() {
           </div>
           <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
           <button
+            onClick={() => router.push('/campaign-builder')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: '#F59E0B', color: '#fff', border: 'none',
+              padding: '9px 16px', borderRadius: 9,
+              fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
+              fontFamily: 'inherit', whiteSpace: 'nowrap',
+            }}
+          >
+            ✦ Self-service builder
+          </button>
+          <button
             onClick={() => router.push('/dashboard/agency/campaigns')}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
