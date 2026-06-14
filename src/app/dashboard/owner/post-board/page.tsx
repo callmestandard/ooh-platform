@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { createNotification } from '@/lib/notifications';
+import LocationPinPickerLoader from './LocationPinPickerLoader';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -623,18 +624,18 @@ function PostBoardContent() {
                   </p>
                 </div>
 
-                {/* GPS */}
-                <div style={{ background: '#F8FAFC', border: '1px dashed #E2E8F0', borderRadius: 10, padding: '14px 16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                {/* Map pin picker */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <div>
-                      <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#374151', margin: '0 0 2px' }}>GPS coordinates (optional)</p>
-                      <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>Helps show your board on the map for agencies</p>
+                      <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#374151', margin: '0 0 2px' }}>Pin your board on the map</p>
+                      <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>Tap the map or use your GPS — agencies see this pin when browsing</p>
                     </div>
                     <button
                       type="button"
                       onClick={useMyLocation}
                       disabled={locating}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#7C3AED', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: 8, fontSize: '0.75rem', fontWeight: 600, cursor: locating ? 'default' : 'pointer', fontFamily: 'inherit', opacity: locating ? 0.7 : 1 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#7C3AED', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: 8, fontSize: '0.75rem', fontWeight: 600, cursor: locating ? 'default' : 'pointer', fontFamily: 'inherit', opacity: locating ? 0.7 : 1, flexShrink: 0 }}
                     >
                       {locating ? (
                         <div style={{ width: 12, height: 12, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
@@ -643,19 +644,22 @@ function PostBoardContent() {
                           <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
                         </svg>
                       )}
-                      {locating ? 'Locating...' : 'Use my location'}
+                      {locating ? 'Locating...' : 'Use my GPS'}
                     </button>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div>
-                      <label style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 4 }}>Latitude</label>
-                      <Input value={latitude} onChange={setLatitude} placeholder="e.g. 6.524379" type="number" />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', display: 'block', marginBottom: 4 }}>Longitude</label>
-                      <Input value={longitude} onChange={setLongitude} placeholder="e.g. 3.379206" type="number" />
-                    </div>
-                  </div>
+                  <LocationPinPickerLoader
+                    lat={latitude ? parseFloat(latitude) : null}
+                    lng={longitude ? parseFloat(longitude) : null}
+                    city={city}
+                    onChange={(la, lo) => {
+                      setLatitude(la.toFixed(6));
+                      setLongitude(lo.toFixed(6));
+                    }}
+                    onClear={() => {
+                      setLatitude('');
+                      setLongitude('');
+                    }}
+                  />
                 </div>
               </div>
             </div>
