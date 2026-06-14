@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/Toast';
 
 const STATUS_CONFIG: Record<string, { bg: string; color: string; dot: string }> = {
   draft:     { bg: '#F1F5F9', color: '#475569', dot: '#94A3B8' },
+  submitted: { bg: '#F5F3FF', color: '#3730A3', dot: '#8B5CF6' },
   pending:   { bg: '#FFFBEB', color: '#92400E', dot: '#F59E0B' },
   active:    { bg: '#ECFDF5', color: '#065F46', dot: '#10B981' },
   completed: { bg: '#EFF6FF', color: '#1E3A8A', dot: '#3B82F6' },
@@ -259,7 +260,7 @@ function CampaignDetailPanel({ campaign, onClose, onStatusChange, onOpenPlan }: 
   );
 }
 
-const FILTERS = ['all', 'draft', 'active', 'completed', 'cancelled'];
+const FILTERS = ['all', 'submitted', 'draft', 'active', 'completed', 'cancelled'];
 
 export default function CampaignsPage() {
   const router = useRouter();

@@ -2,6 +2,7 @@
 
 import GeneratePOEDeck from '@/components/poe/GeneratePOEDeck';
 import SharePOELink from '@/components/poe/SharePOELink';
+import POETracker from '@/components/poe/POETracker';
 import { createNotification } from '@/lib/notifications';
 import { getActivityActor, logActivity } from '@/lib/activity-log';
 import CampaignActivityTimeline from '@/components/activity/CampaignActivityTimeline';
@@ -144,7 +145,7 @@ export default function CampaignPlanPage() {
   const [allBoards, setAllBoards] = useState<Board[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'plan' | 'boards' | 'summary' | 'arcon' | 'attribution' | 'activity' | 'timeline'>('plan');
+  const [activeTab, setActiveTab] = useState<'plan' | 'boards' | 'summary' | 'arcon' | 'attribution' | 'activity' | 'timeline' | 'poe'>('plan');
   const [activityKey, setActivityKey] = useState(0);
   const [showAddBoard, setShowAddBoard] = useState(false);
   const [boardSearch, setBoardSearch] = useState('');
@@ -324,7 +325,7 @@ export default function CampaignPlanPage() {
 
         if (items.length > 0) {
           const [compRes, crRes] = await Promise.all([
-            supabase.from('compliance_checks').select('*').in('booking_id', items.map(i => i.id)),
+            supabase.from('compliance_checks').select('id, booking_id, status, submitted_at, photo_url, notes, submitted_by, submitted_name, latitude, longitude').in('booking_id', items.map(i => i.id)),
             supabase.from('creative_uploads').select('*').in('booking_id', items.map(i => i.id)).order('created_at', { ascending: false }),
           ]);
           if (compRes.data) {
@@ -678,18 +679,47 @@ export default function CampaignPlanPage() {
           <BudgetBar used={totalPlanCost} total={campaign.total_budget} />
         </div>
 
-        <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '10px', padding: '16px 20px', marginBottom: '1.25rem' }}>
-  <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', margin: '0 0 10px' }}>
-    POE Report
-  </p>
-  <GeneratePOEDeck
-    campaignId={campaign.id}
-    campaignName={campaign.name}
-    clientName={campaign.client_name || ''}
-    boardCount={planItems.length}
-    poeCount={planItems.filter(i => complianceByBooking[i.id]).length}
-  />
-</div>
+        {/* POE status pill — click to open full tracker */}
+        {planItems.length > 0 && (() => {
+          const poeCount = planItems.filter(i => complianceByBooking[i.id]).length;
+          const allDone  = poeCount === planItems.length;
+          return (
+            <button
+              onClick={() => setActiveTab('poe')}
+              style={{
+                width: '100%', marginBottom: '1.25rem', padding: '12px 16px',
+                background: allDone ? '#ECFDF5' : poeCount > 0 ? '#FFFBEB' : '#F8FAFC',
+                border: `1px solid ${allDone ? '#A7F3D0' : poeCount > 0 ? '#FDE68A' : '#E2E8F0'}`,
+                borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left',
+              }}
+            >
+              <div style={{
+                width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                background: allDone ? '#10B981' : poeCount > 0 ? '#F59E0B' : '#E2E8F0',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <span style={{ color: '#fff', fontSize: '0.875rem' }}>{allDone ? '✓' : poeCount}</span>
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>
+                  POE: {poeCount}/{planItems.length} boards submitted
+                  {allDone && ' — all done!'}
+                </p>
+                <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0 }}>
+                  {allDone
+                    ? 'Click to review, verify, and download the POE deck'
+                    : poeCount === 0
+                      ? 'Click to send POE links to media partners'
+                      : 'Click to review photos and chase remaining boards'}
+                </p>
+              </div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+          );
+        })()}
 
         {/* Awaiting client approval banner */}
         {campaign.status === 'pending' && campaign.client_id && (
@@ -718,6 +748,7 @@ export default function CampaignPlanPage() {
         <div style={{ display: 'flex', gap: 4, background: '#F1F5F9', padding: 4, borderRadius: 10, width: 'fit-content', marginBottom: '1.25rem' }}>
           {[
             { key: 'plan',        label: `Plan (${planItems.length})` },
+            { key: 'poe',         label: `POE (${planItems.filter(i => complianceByBooking[i.id]).length}/${planItems.length})`, badge: planItems.length > 0 && planItems.filter(i => complianceByBooking[i.id]).length < planItems.length },
             { key: 'timeline',    label: 'Timeline' },
             { key: 'summary',     label: 'Plan summary' },
             { key: 'arcon',       label: 'ARCON', badge: !campaign.arcon_status || campaign.arcon_status === 'not_submitted' || campaign.arcon_status === 'rejected' || campaign.arcon_status === 'expired' },
@@ -996,6 +1027,23 @@ export default function CampaignPlanPage() {
 
         {activeTab === 'activity' && (
           <CampaignActivityTimeline campaignId={id} refreshKey={activityKey} />
+        )}
+
+        {/* POE Tracker tab */}
+        {activeTab === 'poe' && (
+          <POETracker
+            campaignId={campaign.id}
+            campaignName={campaign.name}
+            clientName={campaign.client_name || ''}
+            planItems={planItems}
+            complianceByBooking={complianceByBooking}
+            onUpdate={(bookingId, patch) => {
+              setComplianceByBooking(prev => ({
+                ...prev,
+                [bookingId]: { ...prev[bookingId], ...patch } as any,
+              }));
+            }}
+          />
         )}
 
         {/* ── Timeline Tab ── */}
