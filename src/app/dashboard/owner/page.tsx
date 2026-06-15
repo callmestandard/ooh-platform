@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import DownloadInvoice from '@/components/invoice/DownloadInvoice';
+import LocationPinPickerLoader from './post-board/LocationPinPickerLoader';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { supabase } from '@/lib/supabase';
 import { SkeletonGrid, SkeletonTable } from '@/components/ui/Skeleton';
@@ -1775,22 +1776,19 @@ function OwnerContent() {
                 </label>
               </div>
 
-              {/* Location */}
-              <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 12px' }}>GPS coordinates <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional — needed for map visibility)</span></p>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 8 }}>
-                <div>
-                  <FieldLabel>Latitude</FieldLabel>
-                  <FieldInput type="number" value={form.latitude} onChange={v => setForm(f => ({ ...f, latitude: v }))} placeholder="e.g. 6.5244" />
-                </div>
-                <div>
-                  <FieldLabel>Longitude</FieldLabel>
-                  <FieldInput type="number" value={form.longitude} onChange={v => setForm(f => ({ ...f, longitude: v }))} placeholder="e.g. 3.3792" />
-                </div>
-              </div>
-              <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '0 0 24px' }}>
-                Open Google Maps, right-click your board location, and copy the coordinates.
+              {/* Location pin picker */}
+              <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>
+                Map pin <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(tap the map to pin your board's exact location)</span>
               </p>
+              <div style={{ marginBottom: 20 }}>
+                <LocationPinPickerLoader
+                  lat={form.latitude ? parseFloat(form.latitude) : null}
+                  lng={form.longitude ? parseFloat(form.longitude) : null}
+                  city={form.city}
+                  onChange={(la, lo) => setForm(f => ({ ...f, latitude: la.toFixed(6), longitude: lo.toFixed(6) }))}
+                  onClear={() => setForm(f => ({ ...f, latitude: '', longitude: '' }))}
+                />
+              </div>
 
               <button
                 onClick={saveBoard}
