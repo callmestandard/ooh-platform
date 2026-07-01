@@ -22,7 +22,7 @@ type Booking = {
     state: string;
     format: string;
     asking_rate: number;
-    photos: string[];
+    photo_urls: string[] | null;
   };
   campaigns: {
     id: string;
@@ -246,7 +246,7 @@ export default function NegotiationsPage() {
         <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden' }}>
           {filtered.map((booking, i) => {
             const cfg = STATUS[booking.status] || STATUS.pending;
-            const photo = booking.boards?.photos?.[0];
+            const photo = booking.boards?.photo_urls?.[0];
             const savingsPct = booking.agreed_rate && booking.boards?.asking_rate
               ? Math.round(((booking.boards.asking_rate - booking.agreed_rate) / booking.boards.asking_rate) * 100)
               : null;

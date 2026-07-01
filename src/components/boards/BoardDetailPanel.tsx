@@ -13,7 +13,7 @@ type Board = {
   height?: number;
   format?: string;
   asking_rate?: number;
-  photos?: string[];
+  photo_urls?: string[];
   status: 'available' | 'booked' | 'maintenance';
   state?: string;
   city?: string;
@@ -99,7 +99,7 @@ export default function BoardDetailPanel({ board, onClose, onBookingRequest, aud
   const [enrichError, setEnrichError] = useState<string | null>(null);
 
   const status = STATUS_CONFIG[board.status] || STATUS_CONFIG.available;
-  const photos = board.photos || [];
+  const photos = board.photo_urls || [];
   const activeProfile = localProfile || audienceProfile || null;
 
   useEffect(() => {

@@ -20,7 +20,7 @@ type Board = {
   longitude: number | null;
   status: string;
   notes: string | null;
-  photos: string[] | null;
+  photo_urls: string[] | null;
   contact_phone: string | null;
 };
 
@@ -78,7 +78,7 @@ export default function PublicBoardPage() {
     );
   }
 
-  const photos = (board.photos || []).filter(Boolean);
+  const photos = (board.photo_urls || []).filter(Boolean);
   const wa = board.contact_phone?.replace(/\D/g, '').replace(/^0/, '234');
   const waMsg = encodeURIComponent(`Hi, I saw your board "${board.name}" on OOH Platform and I'm interested. Can we discuss availability?`);
   const mapsUrl = board.latitude && board.longitude

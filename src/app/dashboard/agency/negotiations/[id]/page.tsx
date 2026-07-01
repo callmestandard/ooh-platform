@@ -30,7 +30,7 @@ type Booking = {
     asking_rate: number;
     width: number;
     height: number;
-    photos: string[];
+    photo_urls: string[] | null;
     contact_phone: string | null;
   };
   campaigns: {
@@ -395,7 +395,7 @@ export default function NegotiationDetailPage() {
 
   const statusCfg = STATUS[booking.status] || STATUS.pending;
   const isResolved = ['agreed', 'signed', 'live', 'completed', 'declined'].includes(booking.status);
-  const photo = booking.boards?.photos?.[0];
+  const photo = booking.boards?.photo_urls?.[0];
   const savingsAmt = booking.agreed_rate && booking.boards?.asking_rate
     ? booking.boards.asking_rate - booking.agreed_rate : null;
   const savingsPct = savingsAmt && booking.boards?.asking_rate
