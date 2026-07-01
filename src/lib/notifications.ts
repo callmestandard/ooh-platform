@@ -1,33 +1,3 @@
-/**
- * Notification helpers for OOH Platform.
- *
- * ── Required database setup ──────────────────────────────────────────────────
- * Run this SQL once in the Supabase SQL editor:
- *
- *   create table if not exists public.notifications (
- *     id             uuid default gen_random_uuid() primary key,
- *     recipient_role text not null check (recipient_role in ('agency', 'client', 'owner')),
- *     type           text not null,
- *     title          text not null,
- *     body           text,
- *     link           text,
- *     read           boolean default false,
- *     created_at     timestamptz default now()
- *   );
- *
- *   alter table public.notifications enable row level security;
- *
- *   -- Allow any authenticated user (or anon for demo) to read/write notifications
- *   create policy "Anyone can read notifications"
- *     on public.notifications for select using (true);
- *
- *   create policy "Anyone can insert notifications"
- *     on public.notifications for insert with check (true);
- *
- *   create policy "Anyone can update notifications"
- *     on public.notifications for update using (true);
- */
-
 import { supabase } from './supabase';
 import type { DemoRole } from './constants';
 
@@ -49,6 +19,7 @@ export type NotificationType =
 export type Notification = {
   id: string;
   recipient_role: DemoRole;
+  recipient_user_id: string | null;
   type: NotificationType;
   title: string;
   body: string | null;
@@ -59,6 +30,7 @@ export type Notification = {
 
 export async function createNotification(params: {
   recipientRole: DemoRole;
+  recipientUserId?: string;
   type: NotificationType;
   title: string;
   body?: string;
@@ -66,6 +38,7 @@ export async function createNotification(params: {
 }) {
   const { error } = await supabase.from('notifications').insert({
     recipient_role: params.recipientRole,
+    recipient_user_id: params.recipientUserId ?? null,
     type: params.type,
     title: params.title,
     body: params.body ?? null,
@@ -74,19 +47,23 @@ export async function createNotification(params: {
   if (error) console.error('[notifications] insert failed:', error.message);
 }
 
-export async function markAllRead(role: DemoRole) {
-  await supabase
+export async function markAllRead(role: DemoRole, userId?: string) {
+  const q = supabase
     .from('notifications')
     .update({ read: true })
-    .eq('recipient_role', role)
     .eq('read', false);
+
+  if (userId) {
+    await q.or(`recipient_user_id.eq.${userId},and(recipient_user_id.is.null,recipient_role.eq.${role})`);
+  } else {
+    await q.eq('recipient_role', role);
+  }
 }
 
 export async function markOneRead(id: string) {
   await supabase.from('notifications').update({ read: true }).eq('id', id);
 }
 
-/** Icon emoji per notification type — used in the bell dropdown. */
 export const NOTIF_ICONS: Record<NotificationType, string> = {
   new_booking:      '📋',
   counter_offer:    '🔄',

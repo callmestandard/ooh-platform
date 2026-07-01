@@ -23,33 +23,67 @@ export default function NotificationBell({ role }: Props) {
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  // Initial fetch
+  // Resolve current auth user ID once
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setUserId(data.session?.user.id ?? null);
+    });
+  }, []);
+
+  // Fetch on mount + when role/userId resolves
   useEffect(() => {
     fetchNotifications();
-  }, [role]);
+  }, [role, userId]);
 
-  // Real-time subscription — new rows for this role appear instantly
+  // Real-time: two channels — user-specific + role-broadcast
   useEffect(() => {
-    const channel = supabase
-      .channel(`notifs-${role}-${Math.random().toString(36).slice(2, 7)}`)
+    const tag = Math.random().toString(36).slice(2, 7);
+
+    // Role-broadcast (recipient_user_id IS NULL for this role)
+    const roleCh = supabase
+      .channel(`notifs-role-${role}-${tag}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
         table: 'notifications',
         filter: `recipient_role=eq.${role}`,
       }, payload => {
-        setNotifications(prev => [payload.new as Notification, ...prev].slice(0, 30));
+        const n = payload.new as Notification;
+        // Only show if it's a broadcast (no specific user) or meant for us
+        if (n.recipient_user_id === null || n.recipient_user_id === userId) {
+          setNotifications(prev => [n, ...prev].slice(0, 30));
+        }
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [role]);
+    // User-specific channel (only when authenticated)
+    let userCh: ReturnType<typeof supabase.channel> | null = null;
+    if (userId) {
+      userCh = supabase
+        .channel(`notifs-user-${userId}-${tag}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `recipient_user_id=eq.${userId}`,
+        }, payload => {
+          setNotifications(prev => [payload.new as Notification, ...prev].slice(0, 30));
+        })
+        .subscribe();
+    }
 
-  // Close dropdown when clicking outside
+    return () => {
+      supabase.removeChannel(roleCh);
+      if (userCh) supabase.removeChannel(userCh);
+    };
+  }, [role, userId]);
+
+  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -61,17 +95,27 @@ export default function NotificationBell({ role }: Props) {
   }, [open]);
 
   async function fetchNotifications() {
-    const { data } = await supabase
+    let q = supabase
       .from('notifications')
       .select('*')
-      .eq('recipient_role', role)
       .order('created_at', { ascending: false })
       .limit(30);
+
+    if (userId) {
+      // Authenticated: personal notifications OR role-broadcast for this role
+      q = q.or(
+        `recipient_user_id.eq.${userId},and(recipient_user_id.is.null,recipient_role.eq.${role})`
+      );
+    } else {
+      // Demo/anon: role filter only (RLS returns all, we filter client-side)
+      q = q.eq('recipient_role', role);
+    }
+
+    const { data } = await q;
     if (data) setNotifications(data as Notification[]);
   }
 
   async function handleNotifClick(notif: Notification) {
-    // Mark read
     if (!notif.read) {
       await markOneRead(notif.id);
       setNotifications(prev =>
@@ -83,7 +127,7 @@ export default function NotificationBell({ role }: Props) {
   }
 
   async function handleMarkAllRead() {
-    await markAllRead(role);
+    await markAllRead(role, userId ?? undefined);
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   }
 
@@ -179,7 +223,6 @@ export default function NotificationBell({ role }: Props) {
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = notif.read ? '#F8FAFC' : '#E0EFFE'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = notif.read ? '#fff' : '#F0F7FF'; }}
                 >
-                  {/* Icon */}
                   <div style={{
                     width: 32, height: 32, borderRadius: '8px',
                     background: notif.read ? '#F1F5F9' : '#DBEAFE',
@@ -189,7 +232,6 @@ export default function NotificationBell({ role }: Props) {
                     {NOTIF_ICONS[notif.type] || '🔔'}
                   </div>
 
-                  {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{
                       fontSize: '0.8125rem', fontWeight: notif.read ? 400 : 600,
@@ -208,7 +250,6 @@ export default function NotificationBell({ role }: Props) {
                     </p>
                   </div>
 
-                  {/* Unread dot */}
                   {!notif.read && (
                     <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#1B4F8A', flexShrink: 0, marginTop: 6 }} />
                   )}
