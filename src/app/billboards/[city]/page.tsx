@@ -589,14 +589,14 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                           <div style={{ color: '#94A3B8', fontSize: '0.6875rem', marginTop: 2 }}>per month</div>
                         </div>
                         <Link
-                          href={campaignUrl}
+                          href={`/boards/${board.id}`}
                           style={{
                             background: '#EFF6FF', color: '#1D4ED8', textDecoration: 'none',
                             padding: '6px 12px', borderRadius: 7, fontSize: '0.75rem', fontWeight: 600,
                             flexShrink: 0,
                           }}
                         >
-                          Book now →
+                          View board →
                         </Link>
                       </div>
                     </div>

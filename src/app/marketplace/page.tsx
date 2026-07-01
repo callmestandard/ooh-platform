@@ -232,16 +232,17 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
           </div>
 
           {board.status === 'available' ? (
-            <button
-              onClick={onRequestQuote}
+            <a
+              href={`/boards/${board.id}`}
               style={{
-                width: '100%', padding: '12px', background: '#1B4F8A', color: '#fff',
+                display: 'block', width: '100%', padding: '12px', background: '#1B4F8A', color: '#fff',
                 border: 'none', borderRadius: 10, fontSize: '0.9375rem', fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit',
+                cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', textAlign: 'center',
+                boxSizing: 'border-box',
               }}
             >
-              Request a quote — {formatNaira(board.asking_rate)}/mo
-            </button>
+              View full listing — {formatNaira(board.asking_rate)}/mo
+            </a>
           ) : (
             <div style={{ background: '#F8FAFC', borderRadius: 10, padding: '12px 16px', textAlign: 'center' }}>
               <p style={{ fontSize: '0.875rem', color: '#64748B', margin: 0 }}>
