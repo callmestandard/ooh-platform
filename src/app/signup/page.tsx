@@ -68,6 +68,7 @@ export default function SignupPage() {
       email: email.trim().toLowerCase(),
       password,
       options: {
+        emailRedirectTo: `${window.location.origin}/auth/login`,
         data: {
           full_name:    fullName.trim(),
           company_name: company.trim(),

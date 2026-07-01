@@ -28,6 +28,7 @@ type Board = {
   longitude: number | null;
   status: 'available' | 'booked' | 'maintenance';
   rate_card: RateCardData | null;
+  photo_urls: string[] | null;
   created_at: string;
 };
 
@@ -608,6 +609,8 @@ function OwnerContent() {
   const [saving, setSaving] = useState(false);
   const { toast: showToast } = useToast();
   const [copiedBoardId, setCopiedBoardId] = useState<string | null>(null);
+  const [panelPhotos, setPanelPhotos] = useState<string[]>([]);
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -672,6 +675,7 @@ function OwnerContent() {
   function openAdd() {
     setEditingBoard(null);
     setForm(EMPTY_FORM);
+    setPanelPhotos([]);
     setShowPanel(true);
   }
 
@@ -691,6 +695,7 @@ function OwnerContent() {
       latitude: board.latitude != null ? String(board.latitude) : '',
       longitude: board.longitude != null ? String(board.longitude) : '',
     });
+    setPanelPhotos(board.photo_urls ?? []);
     setShowPanel(true);
   }
 
@@ -711,6 +716,7 @@ function OwnerContent() {
       illuminated: form.illuminated,
       latitude: form.latitude ? parseFloat(form.latitude) : null,
       longitude: form.longitude ? parseFloat(form.longitude) : null,
+      photo_urls: panelPhotos.length > 0 ? panelPhotos : null,
     };
 
     if (editingBoard) {
@@ -1788,6 +1794,68 @@ function OwnerContent() {
                   onChange={(la, lo) => setForm(f => ({ ...f, latitude: la.toFixed(6), longitude: lo.toFixed(6) }))}
                   onClear={() => setForm(f => ({ ...f, latitude: '', longitude: '' }))}
                 />
+              </div>
+
+              {/* ── Board photos ── */}
+              <div style={{ marginBottom: 20 }}>
+                <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>
+                  Board photos <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: '#CBD5E1' }}>· agencies and buyers see these on the map</span>
+                </p>
+
+                {/* Existing photos */}
+                {panelPhotos.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                    {panelPhotos.map((url, i) => (
+                      <div key={url} style={{ position: 'relative', width: 72, height: 56, borderRadius: 8, overflow: 'hidden', border: '1px solid #E2E8F0', flexShrink: 0 }}>
+                        <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        {i === 0 && (
+                          <div style={{ position: 'absolute', top: 2, left: 2, background: '#1B4F8A', color: '#fff', fontSize: '0.5rem', fontWeight: 700, padding: '1px 5px', borderRadius: 3 }}>COVER</div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setPanelPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                          style={{ position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}
+                        >✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Upload button */}
+                {panelPhotos.length < 6 && (
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#F8FAFC', border: '1.5px dashed #CBD5E1', borderRadius: 8, cursor: photoUploading ? 'not-allowed' : 'pointer', transition: 'border-color 0.15s' }}
+                    onMouseEnter={e => { if (!photoUploading) (e.currentTarget as HTMLElement).style.borderColor = '#7C3AED'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#CBD5E1'; }}>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      style={{ display: 'none' }}
+                      disabled={photoUploading}
+                      onChange={async (e) => {
+                        const files = Array.from(e.target.files || []);
+                        if (!files.length) return;
+                        setPhotoUploading(true);
+                        const uploaded: string[] = [];
+                        for (const file of files.slice(0, 6 - panelPhotos.length)) {
+                          const path = `boards/${Date.now()}-${file.name.replace(/\s+/g, '_')}`;
+                          const { data, error } = await supabase.storage.from('board-photos').upload(path, file, { cacheControl: '3600', upsert: false });
+                          if (!error && data) {
+                            const { data: { publicUrl } } = supabase.storage.from('board-photos').getPublicUrl(data.path);
+                            uploaded.push(publicUrl);
+                          }
+                        }
+                        setPanelPhotos(prev => [...prev, ...uploaded]);
+                        setPhotoUploading(false);
+                        e.target.value = '';
+                      }}
+                    />
+                    {photoUploading
+                      ? <><div style={{ width: 13, height: 13, border: '2px solid #E2E8F0', borderTopColor: '#7C3AED', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} /><span style={{ fontSize: '0.8125rem', color: '#64748B' }}>Uploading…</span></>
+                      : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span style={{ fontSize: '0.8125rem', color: '#64748B' }}>Add photos <span style={{ color: '#94A3B8' }}>({6 - panelPhotos.length} remaining)</span></span></>
+                    }
+                  </label>
+                )}
               </div>
 
               <button

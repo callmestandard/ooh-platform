@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, MouseEvent as RMouseEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { getSession, getCurrentProfile } from '@/lib/auth';
 
 /* ═══════════════════════════════════════════════════════════
    DATA
@@ -1270,7 +1272,18 @@ function Footer() {
 ═══════════════════════════════════════════════════════════ */
 
 export default function LandingPage() {
+  const router = useRouter();
   const [scrolled, setScrolled] = useState(false);
+
+  // Redirect authenticated users straight to their dashboard
+  useEffect(() => {
+    getSession().then(session => {
+      if (!session) return;
+      getCurrentProfile().then(profile => {
+        if (profile) router.replace(`/dashboard/${profile.role}`);
+      });
+    });
+  }, [router]);
 
   useEffect(() => {
     // IntersectionObserver is scroll-container-agnostic — avoids window.scrollY

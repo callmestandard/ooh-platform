@@ -5,6 +5,73 @@ import Map, { Marker, NavigationControl, Source, Layer, MapRef } from 'react-map
 import type { MapMouseEvent } from 'maplibre-gl';
 import type { Board } from '@/app/dashboard/agency/boards-map/page';
 
+// ── Mini-map tile helpers ─────────────────────────────────────────────────────
+
+function latLngToTileXY(lat: number, lng: number, zoom: number) {
+  const x = Math.floor((lng + 180) / 360 * Math.pow(2, zoom));
+  const latRad = lat * Math.PI / 180;
+  const y = Math.floor(
+    (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, zoom)
+  );
+  return { x, y };
+}
+
+function latLngToPixelOffset(lat: number, lng: number, zoom: number) {
+  const { x: tileX, y: tileY } = latLngToTileXY(lat, lng, zoom);
+  const totalTiles = Math.pow(2, zoom);
+  const pixelX = (lng + 180) / 360 * totalTiles * 256;
+  const latRad = lat * Math.PI / 180;
+  const pixelY = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * totalTiles * 256;
+  return { offsetX: pixelX - tileX * 256, offsetY: pixelY - tileY * 256 };
+}
+
+function BoardMiniMap({ lat, lng }: { lat: number; lng: number }) {
+  const ZOOM = 15;
+  const W = 236;
+  const H = 128;
+  const { x: tx, y: ty } = latLngToTileXY(lat, lng, ZOOM);
+  const { offsetX, offsetY } = latLngToPixelOffset(lat, lng, ZOOM);
+
+  // 3×3 grid of 256px tiles, translated so the board is centred
+  const dx = -(256 + offsetX - W / 2);
+  const dy = -(256 + offsetY - H / 2);
+
+  return (
+    <div style={{ width: W, height: H, overflow: 'hidden', position: 'relative', borderRadius: '10px 10px 0 0', background: '#E8EDF2' }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 256px)',
+        transform: `translate(${dx}px, ${dy}px)`,
+        pointerEvents: 'none',
+        willChange: 'transform',
+      }}>
+        {[-1, 0, 1].flatMap(row =>
+          [-1, 0, 1].map(col => (
+            <img
+              key={`${row}-${col}`}
+              src={`https://basemaps.cartocdn.com/rastertiles/voyager/${ZOOM}/${tx + col}/${ty + row}.png`}
+              width={256}
+              height={256}
+              style={{ display: 'block' }}
+              loading="lazy"
+              alt=""
+            />
+          ))
+        )}
+      </div>
+      {/* Pin centred exactly on the board location */}
+      <div style={{ position: 'absolute', left: W / 2, top: H / 2, transform: 'translate(-50%, -100%)', pointerEvents: 'none', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))' }}>
+        <svg width="22" height="28" viewBox="0 0 22 28" fill="none">
+          <path d="M11 0C4.925 0 0 4.925 0 11c0 8.25 11 17 11 17s11-8.75 11-17C22 4.925 17.075 0 11 0z" fill="#1B4F8A"/>
+          <circle cx="11" cy="11" r="4.5" fill="white"/>
+        </svg>
+      </div>
+      {/* Subtle vignette to soften tile edges */}
+      <div style={{ position: 'absolute', inset: 0, borderRadius: '10px 10px 0 0', boxShadow: 'inset 0 0 20px rgba(0,0,0,0.12)', pointerEvents: 'none' }} />
+    </div>
+  );
+}
+
 export type OverlayLayer = 'universities' | 'youth' | 'traffic';
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
@@ -80,9 +147,21 @@ type Props = {
   onSearchPin?: (pin: SearchPin | null) => void;
 };
 
+const FORMAT_LABELS: Record<string, string> = {
+  billboard: 'Billboard', unipole: 'Unipole', gantry: 'Gantry',
+  bridge_panel: 'Bridge Panel', wall_drape: 'Wall Drape',
+};
+
+function fmtNaira(n: number) {
+  if (n >= 1_000_000) return '₦' + (n / 1_000_000).toFixed(1) + 'M';
+  return '₦' + n.toLocaleString('en-NG');
+}
+
 export default function BoardsMapView({ boards, selectedBoard, onSelectBoard, activeLayers, cityFilter, onSearchPin }: Props) {
   const mapRef = useRef<MapRef>(null);
   const [mapStyle, setMapStyle] = useState<keyof typeof MAP_STYLES>('streets');
+  const [hoveredBoardId, setHoveredBoardId] = useState<string | null>(null);
+  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Search state ──────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery]     = useState('');
@@ -260,6 +339,7 @@ export default function BoardsMapView({ boards, selectedBoard, onSelectBoard, ac
         .maplibregl-ctrl-attrib, .maplibregl-ctrl-logo { display: none !important; }
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes slideIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes hoverCardIn { from { opacity:0; transform:translateX(-50%) translateY(4px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
       `}</style>
 
       {/* ── Search bar ── */}
@@ -498,10 +578,12 @@ export default function BoardsMapView({ boards, selectedBoard, onSelectBoard, ac
         {/* ── Board markers ── */}
         {boards.map(board => {
           if (!board.latitude || !board.longitude) return null;
-          const color     = STATUS_COLORS[board.status] || STATUS_COLORS.available;
-          const isSelected = selectedBoard?.id === board.id;
-          const inRoute    = routeBoards.some(b => b.id === board.id);
-          const routeIdx   = routeBoards.findIndex(b => b.id === board.id);
+          const color      = STATUS_COLORS[board.status] || STATUS_COLORS.available;
+          const isSelected  = selectedBoard?.id === board.id;
+          const isHovered   = hoveredBoardId === board.id;
+          const inRoute     = routeBoards.some(b => b.id === board.id);
+          const routeIdx    = routeBoards.findIndex(b => b.id === board.id);
+          const showCard    = isHovered && !routeMode && !isSelected;
 
           return (
             <Marker
@@ -519,7 +601,6 @@ export default function BoardsMapView({ boards, selectedBoard, onSelectBoard, ac
               }}
             >
               <div
-                title={routeMode ? `${inRoute ? 'Remove' : 'Add'} ${board.name}` : board.name}
                 style={{
                   width:  isSelected || inRoute ? 24 : 14,
                   height: isSelected || inRoute ? 24 : 14,
@@ -530,15 +611,91 @@ export default function BoardsMapView({ boards, selectedBoard, onSelectBoard, ac
                     ? `0 0 0 4px rgba(27,79,138,0.3), 0 4px 14px rgba(0,0,0,0.3)`
                     : isSelected
                     ? `0 0 0 5px ${color}35, 0 4px 14px rgba(0,0,0,0.3)`
+                    : isHovered
+                    ? `0 0 0 4px ${color}30, 0 4px 14px rgba(0,0,0,0.3)`
                     : '0 2px 6px rgba(0,0,0,0.25)',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease',
+                  transition: 'all 0.15s ease',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   position: 'relative',
                   fontSize: '0.5625rem', fontWeight: 800, color: '#fff',
+                  zIndex: isHovered ? 10 : 'auto',
+                }}
+                onMouseEnter={() => {
+                  if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+                  setHoveredBoardId(board.id);
+                }}
+                onMouseLeave={() => {
+                  hoverTimeout.current = setTimeout(() => setHoveredBoardId(null), 120);
                 }}
               >
                 {inRoute && routeIdx + 1}
+
+                {/* ── Hover card ── */}
+                {showCard && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: 22,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: 236,
+                      background: '#fff',
+                      borderRadius: 12,
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.1)',
+                      overflow: 'hidden',
+                      pointerEvents: 'none',
+                      zIndex: 999,
+                      animation: 'hoverCardIn 0.15s ease',
+                    }}
+                    onMouseEnter={() => { if (hoverTimeout.current) clearTimeout(hoverTimeout.current); }}
+                    onMouseLeave={() => { hoverTimeout.current = setTimeout(() => setHoveredBoardId(null), 120); }}
+                  >
+                    {/* Board photo or mini-map fallback */}
+                    {board.photo_urls?.[0] ? (
+                      <div style={{ width: 236, height: 128, overflow: 'hidden', borderRadius: '10px 10px 0 0', position: 'relative', background: '#0F172A' }}>
+                        <img
+                          src={board.photo_urls[0]}
+                          alt={board.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                        {/* Photo count badge */}
+                        {(board.photo_urls.length > 1) && (
+                          <div style={{ position: 'absolute', bottom: 7, right: 7, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '0.625rem', fontWeight: 700, padding: '2px 7px', borderRadius: 5, backdropFilter: 'blur(4px)' }}>
+                            +{board.photo_urls.length - 1} more
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <BoardMiniMap lat={board.latitude} lng={board.longitude} />
+                    )}
+
+                    {/* Info strip */}
+                    <div style={{ padding: '10px 12px 11px' }}>
+                      <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {board.name}
+                      </p>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                          <span style={{ fontSize: '0.6875rem', color: '#64748B', fontWeight: 500 }}>
+                            {(board.format ? FORMAT_LABELS[board.format] || board.format : '—')} · {board.city || '—'}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#1B4F8A', fontFamily: 'monospace', flexShrink: 0 }}>
+                          {board.asking_rate != null ? fmtNaira(board.asking_rate) : '—'}<span style={{ fontSize: '0.625rem', fontWeight: 500, color: '#94A3B8' }}>/mo</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Arrow tip */}
+                    <div style={{ position: 'absolute', bottom: -7, left: '50%', transform: 'translateX(-50%)', width: 14, height: 7, overflow: 'hidden' }}>
+                      <div style={{ width: 14, height: 14, background: '#fff', transform: 'rotate(45deg)', transformOrigin: 'top left', boxShadow: '2px 2px 4px rgba(0,0,0,0.1)', marginTop: -7, marginLeft: 1 }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Selected label (kept as before) */}
                 {(isSelected && !inRoute) && (
                   <div style={{ position: 'absolute', bottom: 28, left: '50%', transform: 'translateX(-50%)', background: 'rgba(255,255,255,0.98)', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, padding: '4px 10px', whiteSpace: 'nowrap', fontSize: '0.6875rem', fontWeight: 600, color: '#0F172A', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', pointerEvents: 'none' }}>
                     {board.name}

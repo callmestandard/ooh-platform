@@ -32,7 +32,7 @@ export type Board = {
   height?: number;
   format?: string;
   asking_rate?: number;
-  photos?: string[];
+  photo_urls?: string[] | null;
   status: 'available' | 'booked' | 'maintenance';
   state?: string;
   city?: string;
@@ -86,7 +86,7 @@ export default function BoardsMapPage() {
   async function fetchBoards() {
     const { data } = await supabase
       .from('boards')
-      .select('id, name, address, city, state, format, asking_rate, status, latitude, longitude, width, height, photos')
+      .select('id, name, address, city, state, format, asking_rate, status, latitude, longitude, width, height, photo_urls')
       .order('created_at', { ascending: false })
       .limit(500);
     setBoards((data as Board[]) || []);

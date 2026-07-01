@@ -260,7 +260,7 @@ export default function LocationIntelPanel({ lat, lng, name, nearbyBoards, onClo
                   {nearbyBoards.length} board{nearbyBoards.length !== 1 ? 's' : ''} within 5km
                 </p>
                 {nearbyBoards.map(board => {
-                  const photo = board.photos?.[0];
+                  const photo = board.photo_urls?.[0];
                   const statusColor = STATUS_COLORS[board.status] || STATUS_COLORS.available;
                   const dist = Math.round(
                     Math.sqrt(
