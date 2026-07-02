@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 import type { DemoRole } from '@/lib/constants';
 
 const DONE_KEY = (role: DemoRole) => `ooh_onboarding_${role}_done`;
@@ -89,7 +90,7 @@ export default function OnboardingWizard({ role, userName }: { role: DemoRole; u
     setVisible(false);
   }
 
-  function saveAndNext() {
+  async function saveAndNext() {
     const current = steps[step];
 
     if (role === 'agency' && current.id === 'profile') {
@@ -97,10 +98,28 @@ export default function OnboardingWizard({ role, userName }: { role: DemoRole; u
         localStorage.setItem('ooh_company_name', companyName.trim());
         localStorage.setItem(`ooh_settings_agency_profile`, JSON.stringify({ company: companyName.trim(), city, phone }));
       }
+      // Persist to Supabase if authenticated
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('profiles').update({
+          company_name: companyName.trim() || undefined,
+          city: city.trim() || undefined,
+          phone: phone.trim() || undefined,
+        }).eq('id', user.id);
+      }
     }
+
     if (role === 'owner' && current.id === 'contact') {
       if (phone.trim()) localStorage.setItem(`ooh_settings_owner_phone`, phone.trim());
       if (city.trim())  localStorage.setItem(`ooh_settings_owner_city`, city.trim());
+      // Persist to Supabase if authenticated
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('profiles').update({
+          phone: phone.trim() || undefined,
+          city: city.trim() || undefined,
+        }).eq('id', user.id);
+      }
     }
 
     if (step < steps.length - 1) {
