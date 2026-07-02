@@ -318,6 +318,14 @@ export default function SettingsPage() {
           if (!data) return;
           const row = data as Record<string, string | null>;
           if (row.avatar_url) setAvatarUrl(row.avatar_url);
+          // Hydrate core profile fields from Supabase for all roles
+          setProfile(p => ({
+            ...p,
+            displayName: row.full_name    || p.displayName,
+            company:     row.company_name || p.company,
+            phone:       row.phone        || p.phone,
+            email:       row.email        || p.email,
+          }));
           if (role === 'agency') {
             if (row.erp_vendor_code) setProfile(p => ({ ...p, erpVendorCode: row.erp_vendor_code || '' }));
             setBranding(prev => ({
@@ -342,23 +350,33 @@ export default function SettingsPage() {
     saveJSON(getStorageKey(role, 'profile'), profile);
     saveJSON(getStorageKey(role, 'notif_prefs'), notifPrefs);
     if (role === 'owner') saveJSON(getStorageKey(role, 'payout'), payout);
-    if (role === 'agency') {
-      saveJSON(getStorageKey(role, 'branding'), branding);
-      if (agencyProfileId) {
-        const { error: updateErr } = await supabase.from('profiles').update({
-          brand_accent_color: branding.accentColor,
-          brand_tagline: branding.tagline || null,
-          brand_website: branding.companyWebsite || null,
-          brand_logo_url: branding.logoUrl || null,
-          erp_vendor_code: profile.erpVendorCode.trim() || null,
-        }).eq('id', agencyProfileId);
-        if (updateErr) {
-          setSaving(false);
-          showToast('Failed to save branding — database error');
-          return;
-        }
+    if (role === 'agency') saveJSON(getStorageKey(role, 'branding'), branding);
+
+    // Persist to Supabase when authenticated
+    if (profileUserId) {
+      const profileUpdate: Record<string, string | null> = {
+        full_name:    profile.displayName.trim() || null,
+        company_name: profile.company.trim()     || null,
+        phone:        profile.phone.trim()        || null,
+      };
+      if (role === 'agency') {
+        profileUpdate.brand_accent_color = branding.accentColor;
+        profileUpdate.brand_tagline      = branding.tagline        || null;
+        profileUpdate.brand_website      = branding.companyWebsite || null;
+        profileUpdate.brand_logo_url     = branding.logoUrl        || null;
+        profileUpdate.erp_vendor_code    = profile.erpVendorCode.trim() || null;
+      }
+      const { error: updateErr } = await supabase
+        .from('profiles')
+        .update(profileUpdate)
+        .eq('id', profileUserId);
+      if (updateErr) {
+        setSaving(false);
+        showToast('Failed to save — database error');
+        return;
       }
     }
+
     setSaving(false);
     setSaved(true);
     showToast('Settings saved successfully');
