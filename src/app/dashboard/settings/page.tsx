@@ -77,7 +77,19 @@ const NOTIF_LABELS: Record<NotificationType, { label: string; desc: string; role
 function getStorageKey(role: string, key: string) { return `ooh_settings_${role}_${key}`; }
 
 function loadJSON<T>(key: string, fallback: T): T {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+  try {
+    const v = localStorage.getItem(key);
+    if (!v) return fallback;
+    const parsed = JSON.parse(v);
+    // Merge over fallback so fields added after a value was last saved
+    // (e.g. a new profile field) come back as their default, not undefined —
+    // an undefined value on a controlled input throws a React warning.
+    return (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+      ? { ...fallback, ...parsed }
+      : parsed;
+  } catch {
+    return fallback;
+  }
 }
 
 function saveJSON(key: string, val: unknown) {
