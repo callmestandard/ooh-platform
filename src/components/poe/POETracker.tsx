@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import SharePOELink from './SharePOELink';
 import GeneratePOEDeck from './GeneratePOEDeck';
+import POEReportPreview from './POEReportPreview';
 
 export type POECompliance = {
   id: string;
@@ -22,6 +23,7 @@ export type POEPlanItem = {
   id: string;
   boards: {
     name: string;
+    address?: string | null;
     city: string;
     format: string;
   } | null;
@@ -31,6 +33,8 @@ type Props = {
   campaignId:          string;
   campaignName:        string;
   clientName:          string;
+  startDate:           string | null;
+  endDate:             string | null;
   planItems:           POEPlanItem[];
   complianceByBooking: Record<string, POECompliance>;
   onUpdate:            (bookingId: string, patch: Partial<POECompliance>) => void;
@@ -127,10 +131,11 @@ function FlagModal({ onConfirm, onCancel }: FlagModalProps) {
   );
 }
 
-export default function POETracker({ campaignId, campaignName, clientName, planItems, complianceByBooking, onUpdate }: Props) {
+export default function POETracker({ campaignId, campaignName, clientName, startDate, endDate, planItems, complianceByBooking, onUpdate }: Props) {
   const [lightbox, setLightbox]     = useState<{ url: string; name: string } | null>(null);
   const [flagging, setFlagging]     = useState<string | null>(null); // bookingId
   const [saving, setSaving]         = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
 
   const submitted = planItems.filter(i => complianceByBooking[i.id]);
   const pending   = planItems.filter(i => !complianceByBooking[i.id]);
@@ -221,7 +226,22 @@ export default function POETracker({ campaignId, campaignName, clientName, planI
 
       {/* ── POE deck download ── */}
       <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '18px 24px', marginBottom: 24 }}>
-        <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', margin: '0 0 12px' }}>Generate POE Report</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12 }}>
+          <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>Generate POE Report</p>
+          <button
+            onClick={() => setShowPreview(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0,
+              padding: '6px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: 7,
+              fontSize: '0.75rem', fontWeight: 600, color: '#1B4F8A', cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+            Preview report
+          </button>
+        </div>
         <GeneratePOEDeck
           campaignId={campaignId}
           campaignName={campaignName}
@@ -230,6 +250,18 @@ export default function POETracker({ campaignId, campaignName, clientName, planI
           poeCount={submitted.length}
         />
       </div>
+
+      {showPreview && (
+        <POEReportPreview
+          campaignName={campaignName}
+          clientName={clientName}
+          startDate={startDate}
+          endDate={endDate}
+          planItems={planItems}
+          complianceByBooking={complianceByBooking}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
 
       {/* ── Submitted boards ── */}
       {submitted.length > 0 && (

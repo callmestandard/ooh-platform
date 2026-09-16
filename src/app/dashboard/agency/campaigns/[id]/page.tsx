@@ -1308,6 +1308,8 @@ export default function CampaignPlanPage() {
             campaignId={campaign.id}
             campaignName={campaign.name}
             clientName={campaign.client_name || ''}
+            startDate={campaign.start_date}
+            endDate={campaign.end_date}
             planItems={planItems}
             complianceByBooking={complianceByBooking}
             onUpdate={(bookingId, patch) => {
