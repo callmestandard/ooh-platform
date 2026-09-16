@@ -39,6 +39,15 @@ const NIGERIAN_STATES = [
   'Enugu', 'Kaduna', 'Kwara', 'Cross River',
 ];
 
+const BUDGET_BANDS = [
+  { label: 'Any budget',      value: Infinity },
+  { label: 'Under ₦500K/mo',  value: 500_000 },
+  { label: 'Under ₦1M/mo',    value: 1_000_000 },
+  { label: 'Under ₦3M/mo',    value: 3_000_000 },
+  { label: 'Under ₦5M/mo',    value: 5_000_000 },
+  { label: 'Under ₦10M/mo',   value: 10_000_000 },
+];
+
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -252,10 +261,21 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
             >
               View full listing — {formatNaira(board.asking_rate)}/mo
             </a>
+          ) : board.status === 'booked' ? (
+            <button
+              onClick={onRequestQuote}
+              style={{
+                display: 'block', width: '100%', padding: '12px', background: '#fff', color: '#1B4F8A',
+                border: '1.5px solid #BFDBFE', borderRadius: 10, fontSize: '0.9375rem', fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', boxSizing: 'border-box',
+              }}
+            >
+              This board is currently booked — join waitlist →
+            </button>
           ) : (
             <div style={{ background: '#F8FAFC', borderRadius: 10, padding: '12px 16px', textAlign: 'center' }}>
               <p style={{ fontSize: '0.875rem', color: '#64748B', margin: 0 }}>
-                {board.status === 'booked' ? 'This board is currently booked. Join waitlist →' : 'Currently unavailable — check back soon.'}
+                Currently unavailable — check back soon.
               </p>
             </div>
           )}
@@ -275,9 +295,8 @@ function MarketplaceContent() {
   const [stateFilter, setStateFilter]   = useState('all');
   const [formatFilter, setFormatFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('available');
-  const [priceMax, setPriceMax]     = useState(10_000_000);
+  const [priceMax, setPriceMax]     = useState(Infinity);
   const [selected, setSelected]     = useState<Board | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -509,6 +528,21 @@ function MarketplaceContent() {
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
+
+            {/* Budget select */}
+            <select
+              value={priceMax === Infinity ? '' : priceMax}
+              onChange={e => setPriceMax(e.target.value ? Number(e.target.value) : Infinity)}
+              style={{
+                padding: '6px 10px', borderRadius: 8, border: '1px solid #E2E8F0',
+                fontSize: '0.8125rem', color: '#374151', background: '#fff',
+                fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
+              }}
+            >
+              {BUDGET_BANDS.map(b => (
+                <option key={b.label} value={b.value === Infinity ? '' : b.value}>{b.label}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -547,7 +581,7 @@ function MarketplaceContent() {
                 <p style={{ fontSize: '1rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No boards match your filters</p>
                 <p style={{ fontSize: '0.875rem', color: '#64748B', margin: '0 0 20px' }}>Try adjusting your search or clearing filters</p>
                 <button
-                  onClick={() => { setSearch(''); setStateFilter('all'); setFormatFilter('all'); setStatusFilter('available'); }}
+                  onClick={() => { setSearch(''); setStateFilter('all'); setFormatFilter('all'); setStatusFilter('available'); setPriceMax(Infinity); }}
                   style={{ padding: '8px 18px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
                 >
                   Clear all filters
