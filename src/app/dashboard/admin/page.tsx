@@ -282,14 +282,28 @@ function AdminContent() {
     setTogglingUser(null);
   }
 
-  // Resolves a board-authorization conflict: the chosen claim goes back to
-  // 'active' (re-triggers the conflict trigger, but it's harmless here
-  // since every other claim on this board is already 'disputed', not
-  // 'active'), and every other disputed claim on the same board is
-  // explicitly revoked so nothing is left in limbo.
+  // Resolves a board-authorization conflict. Order matters here: the losing
+  // claims must be revoked FIRST — the board-freeze trigger (025) refuses
+  // to let ANY claim on a board go active while another disputed claim
+  // still stands on it, specifically to stop someone resubmitting their
+  // way past an open dispute. If the winner were reactivated first, its
+  // own update would immediately re-freeze itself back to 'disputed'
+  // because the losers would still be sitting there disputed.
   async function resolveConflict(winningId: string, boardId: string) {
     setResolvingAuth(winningId);
     const losers = disputedAuths.filter(a => a.board_id === boardId && a.id !== winningId);
+
+    for (const loser of losers) {
+      const { error: loserErr } = await supabase
+        .from('board_authorizations')
+        .update({ status: 'revoked', dispute_notes: `[admin] Resolved in favor of authorization ${winningId} on ${new Date().toISOString()}` })
+        .eq('id', loser.id);
+      if (loserErr) {
+        showToast('Failed to resolve: ' + loserErr.message, 'error');
+        setResolvingAuth(null);
+        return;
+      }
+    }
 
     const { error: winErr } = await supabase
       .from('board_authorizations')
@@ -300,13 +314,6 @@ function AdminContent() {
       showToast('Failed to resolve: ' + winErr.message, 'error');
       setResolvingAuth(null);
       return;
-    }
-
-    for (const loser of losers) {
-      await supabase
-        .from('board_authorizations')
-        .update({ status: 'revoked', dispute_notes: `[admin] Resolved in favor of authorization ${winningId} on ${new Date().toISOString()}` })
-        .eq('id', loser.id);
     }
 
     setDisputedAuths(prev => prev.filter(a => a.board_id !== boardId));
