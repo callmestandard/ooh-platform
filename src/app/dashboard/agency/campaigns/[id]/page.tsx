@@ -261,9 +261,8 @@ export default function CampaignPlanPage() {
     const url = (targetUrlInput[bookingId] || '').trim();
     if (!url) return;
     setCreatingLinkFor(bookingId);
-    const res = await fetch('/api/tracking', {
+    const res = await authedFetch('/api/tracking', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         booking_id: bookingId,
         campaign_id: campaign?.id,

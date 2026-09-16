@@ -95,8 +95,10 @@ export default function NegotiationDetailPage() {
   const [counterRate, setCounterRate] = useState('');
   const [sending, setSending]       = useState(false);
   const [exportingMPO, setExportingMPO] = useState(false);
+  const [mpoError, setMpoError] = useState<string | null>(null);
   const [activityKey, setActivityKey] = useState(0);
   const [exportingContract, setExportingContract] = useState(false);
+  const [contractError, setContractError] = useState<string | null>(null);
   const [showPhone, setShowPhone] = useState(false);
 
   // Quick-log: record the outcome of an off-platform phone/WhatsApp
@@ -355,6 +357,7 @@ export default function NegotiationDetailPage() {
   async function handleRaiseMPO() {
     if (!booking) return;
     setExportingMPO(true);
+    setMpoError(null);
     try {
       const agencyName = (typeof localStorage !== 'undefined' && localStorage.getItem('ooh_company_name')) || 'OOH Platform Agency';
       const mpoNum = `OOH-MPO-${new Date().getFullYear()}-${booking.id.slice(0, 6).toUpperCase()}`;
@@ -421,7 +424,7 @@ export default function NegotiationDetailPage() {
       setBooking(prev => prev ? { ...prev, mpo_number: mpoNum, mpo_issued_at: new Date().toISOString(), mpo_agency_name: agencyName } : prev);
       setActivityKey(k => k + 1);
     } catch {
-      // silent — user will notice the download didn't happen
+      setMpoError('Could not generate the MPO PDF. Please try again.');
     } finally {
       setExportingMPO(false);
     }
@@ -430,6 +433,7 @@ export default function NegotiationDetailPage() {
   async function handleDownloadContract() {
     if (!booking) return;
     setExportingContract(true);
+    setContractError(null);
     try {
       const agencyName = (typeof localStorage !== 'undefined' && localStorage.getItem('ooh_company_name')) || 'OOH Platform Agency';
       const res = await authedFetch('/api/contract-pdf', {
@@ -464,7 +468,7 @@ export default function NegotiationDetailPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      // silent
+      setContractError('Could not generate the contract PDF. Please try again.');
     } finally {
       setExportingContract(false);
     }
@@ -788,6 +792,11 @@ export default function NegotiationDetailPage() {
                   </div>
                 </div>
               )}
+              {mpoError && (
+                <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '8px 12px' }}>
+                  <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#991B1B', margin: 0 }}>⚠ {mpoError}</p>
+                </div>
+              )}
               <button
                 onClick={handleRaiseMPO}
                 disabled={exportingMPO}
@@ -822,6 +831,11 @@ export default function NegotiationDetailPage() {
               </button>
 
               {/* Download contract */}
+              {contractError && (
+                <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '8px 12px' }}>
+                  <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#991B1B', margin: 0 }}>⚠ {contractError}</p>
+                </div>
+              )}
               <button
                 onClick={handleDownloadContract}
                 disabled={exportingContract}

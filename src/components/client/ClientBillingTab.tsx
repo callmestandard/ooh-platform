@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { authedFetch } from '@/lib/api';
 import type { Invoice } from '@/lib/types';
 import { formatNaira, formatDate } from './client-utils';
 
@@ -33,9 +34,8 @@ export function ClientBillingTab({ campaignId, clientName }: Props) {
   async function saveOracleRef(invoiceId: string) {
     const trimmed = refValue.trim();
     setSavingRef(true);
-    const res = await fetch(`/api/invoices/${invoiceId}`, {
+    const res = await authedFetch(`/api/invoices/${invoiceId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ client_invoice_number: trimmed || null }),
     });
     if (res.ok) {

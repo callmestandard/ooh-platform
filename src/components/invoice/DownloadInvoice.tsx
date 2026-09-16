@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { authedFetch } from '@/lib/api';
 
 type Props = {
   bookingId: string;
@@ -15,7 +16,7 @@ export default function DownloadInvoice({ bookingId, label, type = 'agency', var
   async function handleDownload() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/invoice?bookingId=${bookingId}&type=${type}`);
+      const res = await authedFetch(`/api/invoice?bookingId=${bookingId}&type=${type}`);
       if (!res.ok) throw new Error('Failed to generate invoice');
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);

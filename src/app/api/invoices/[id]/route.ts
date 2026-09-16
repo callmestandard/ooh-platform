@@ -15,30 +15,44 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Auth is optional here: /invoice/[id] is a shareable link (WhatsApp/copy
+  // link/Paystack pay), the same unguessable-UUID-as-access-token model
+  // already used for /api/report/[id] and /api/poe/[token] — anyone with
+  // the link can view/pay that one invoice, no account required. When a
+  // session IS present (the agency/client/owner dashboards), the stricter
+  // ownership check below still applies.
   const user = await requireAuth(req);
-  if (!user) return unauthorized();
   const { id } = await params;
 
   const { data, error } = await supabase
     .from('invoices')
-    .select('*, campaign:campaigns(id, name, erp_system, client_cost_centre, payment_terms, agency_id), items:invoice_items(*)')
+    .select('*, campaign:campaigns(id, name, erp_system, client_cost_centre, payment_terms, agency_id, client_id), items:invoice_items(*)')
     .eq('id', id)
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
 
-  // Scope: verify caller owns this invoice
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-  const inv = data as Record<string, unknown> & { campaign?: { agency_id?: string } | null; owner_id?: string | null; agency_id?: string | null };
-  if (profile?.role === 'agency' && inv.campaign?.agency_id !== user.id && inv.agency_id !== user.id) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-  if (profile?.role === 'owner' && inv.owner_id !== user.id) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (user) {
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    const inv = data as Record<string, unknown> & { campaign?: { agency_id?: string; client_id?: string } | null; owner_id?: string | null; agency_id?: string | null };
+    if (profile?.role === 'agency' && inv.campaign?.agency_id !== user.id && inv.agency_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (profile?.role === 'owner' && inv.owner_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (profile?.role === 'client' && inv.campaign?.client_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
   }
 
   return NextResponse.json(data);
 }
+
+// Only the agency that owns the campaign (or admin) may touch financial/
+// status fields — a client may only annotate their own ERP reference.
+const AGENCY_ONLY_FIELDS = ['status', 'paid_at', 'payment_ref', 'payment_url', 'due_date', 'notes', 'wht_rate'];
+const CLIENT_ALLOWED_FIELDS = ['client_email', 'client_invoice_number'];
 
 export async function PATCH(
   req: NextRequest,
@@ -49,14 +63,30 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json();
 
-  // Only allow safe status/payment fields
-  const allowed = ['status', 'paid_at', 'payment_ref', 'payment_url', 'due_date', 'notes', 'client_email', 'client_invoice_number', 'wht_rate'];
+  const { data: existing } = await supabase
+    .from('invoices')
+    .select('agency_id, campaign:campaigns(agency_id, client_id)')
+    .eq('id', id)
+    .single();
+  const existingCampaign = existing?.campaign as unknown as { agency_id?: string; client_id?: string } | null;
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const isAdmin = profile?.role === 'admin';
+  const isOwningAgency = existingCampaign?.agency_id === user.id || existing?.agency_id === user.id;
+  const isOwningClient = existingCampaign?.client_id === user.id;
+
+  if (!isAdmin && !isOwningAgency && !isOwningClient) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const allowed = (isAdmin || isOwningAgency)
+    ? [...AGENCY_ONLY_FIELDS, ...CLIENT_ALLOWED_FIELDS]
+    : CLIENT_ALLOWED_FIELDS; // client-only session: reference fields only
   const updates: Record<string, unknown> = {};
   for (const key of allowed) {
     if (key in body) updates[key] = body[key];
   }
 
-  if (body.status === 'paid' && !updates.paid_at) {
+  if (updates.status === 'paid' && !updates.paid_at) {
     updates.paid_at = new Date().toISOString();
   }
 
@@ -128,9 +158,14 @@ export async function DELETE(
 
   const { data: inv } = await supabase
     .from('invoices')
-    .select('id, invoice_number, status, campaign_id')
+    .select('id, invoice_number, status, campaign_id, agency_id, campaign:campaigns(agency_id)')
     .eq('id', id)
     .single();
+
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const invCampaign = inv?.campaign as unknown as { agency_id?: string } | null;
+  const authorized = profile?.role === 'admin' || invCampaign?.agency_id === user.id || inv?.agency_id === user.id;
+  if (!authorized) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { error } = await supabase
     .from('invoices')

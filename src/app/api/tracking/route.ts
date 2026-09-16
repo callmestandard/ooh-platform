@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 export const runtime = 'nodejs';
 
@@ -12,12 +13,26 @@ function generateCode(): string {
   return Math.random().toString(36).slice(2, 8);
 }
 
-// POST — create a tracking link for a booking
+// POST — create a tracking link for a booking. tracking_links/tracking_events
+// are admin-only under RLS (no legitimate client-side table access at all —
+// see migration 017); this route only exists for the agency's own campaign
+// page, so it requires the requesting agency to actually own the campaign.
 export async function POST(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
+
   const { booking_id, campaign_id, target_url, label } = await req.json();
 
   if (!booking_id || !target_url) {
     return NextResponse.json({ error: 'booking_id and target_url are required' }, { status: 400 });
+  }
+
+  if (campaign_id) {
+    const { data: campaign } = await supabase.from('campaigns').select('agency_id').eq('id', campaign_id).single();
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    if (profile?.role !== 'admin' && campaign?.agency_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
   }
 
   // Return existing link if one already exists for this booking
@@ -49,10 +64,19 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(data, { status: 201 });
 }
 
-// GET — list tracking links for a campaign with scan counts
+// GET — list tracking links for one campaign/booking with scan counts.
+// Deliberately anonymous-accessible (no requireAuth): the public share-report
+// page (/report/[id]) shows these stats to unauthenticated viewers, same
+// unguessable-ID model as the rest of that route. What must NOT happen is an
+// unscoped call returning every tracking link on the platform, so campaign_id
+// or booking_id is required.
 export async function GET(req: NextRequest) {
   const campaignId = req.nextUrl.searchParams.get('campaign_id');
   const bookingId  = req.nextUrl.searchParams.get('booking_id');
+
+  if (!campaignId && !bookingId) {
+    return NextResponse.json({ error: 'campaign_id or booking_id is required' }, { status: 400 });
+  }
 
   let query = supabase
     .from('tracking_links')

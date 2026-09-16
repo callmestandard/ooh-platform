@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,6 +35,9 @@ function invoiceNumber(bookingId: string, createdAt: string) {
 // ── Route ────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
+  const user = await requireAuth(req);
+  if (!user) return unauthorized();
+
   try {
     const { searchParams } = new URL(req.url);
     const bookingId = searchParams.get('bookingId');
@@ -48,8 +52,8 @@ export async function GET(req: NextRequest) {
       .from('bookings')
       .select(`
         *,
-        campaigns ( id, name, client_name, start_date, end_date, total_budget ),
-        boards    ( id, name, address, city, state, format, asking_rate, width, height )
+        campaigns ( id, name, client_name, start_date, end_date, total_budget, agency_id, client_id ),
+        boards    ( id, name, address, city, state, format, asking_rate, width, height, owner_id )
       `)
       .eq('id', bookingId)
       .single();
@@ -57,6 +61,20 @@ export async function GET(req: NextRequest) {
     if (error || !booking) {
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     }
+
+    // type='agency' is the bill sent to the campaign's agency/client;
+    // type='owner' is the payout statement sent to the board's owner —
+    // only the actual party on that side of the booking (or an admin)
+    // may pull it.
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    const isAdmin = profile?.role === 'admin';
+    const campaign = booking.campaigns as { agency_id?: string; client_id?: string } | null;
+    const board = booking.boards as { owner_id?: string } | null;
+    const authorized = isAdmin
+      || (type === 'agency' && (campaign?.agency_id === user.id || campaign?.client_id === user.id))
+      || (type === 'owner' && board?.owner_id === user.id);
+
+    if (!authorized) return unauthorized();
 
     const pdfBuffer = await generateInvoicePDF(booking, type);
 

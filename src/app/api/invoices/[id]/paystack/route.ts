@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 export const runtime = 'nodejs';
 
@@ -9,12 +8,14 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// No auth required — same public-share-link model as GET /api/invoices/[id]:
+// whoever holds the invoice link (e.g. a client paying their bill) should
+// be able to trigger a Paystack checkout for that one invoice by its
+// unguessable UUID, without needing a platform account.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await requireAuth(req);
-  if (!user) return unauthorized();
   const { id } = await params;
 
   // Fetch invoice

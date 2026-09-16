@@ -208,6 +208,7 @@ type ParsedBrief = {
 export default function CampaignPlannerPage() {
   const router = useRouter();
   const [boards, setBoards] = useState<Board[]>([]);
+  const [boardsError, setBoardsError] = useState<string | null>(null);
   const [audienceProfiles, setAudienceProfiles] = useState<Record<string, AudienceProfile>>({});
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -241,7 +242,10 @@ export default function CampaignPlannerPage() {
       .not('latitude', 'is', null)
       .not('longitude', 'is', null)
       .then(({ data, error }) => {
-        if (error) { console.error('[campaign-planner] boards fetch failed:', error.message); }
+        if (error) {
+          console.error('[campaign-planner] boards fetch failed:', error.message);
+          setBoardsError('Could not load board inventory — ' + error.message + '. Try refreshing the page.');
+        }
         setBoards((data as Board[]) || []);
         setLoading(false);
       });
@@ -418,7 +422,9 @@ export default function CampaignPlannerPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brief: briefText }),
       });
-      const parsed: ParsedBrief = await res.json();
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error || 'Failed to parse brief');
+      const parsed: ParsedBrief = body;
       setParsedBrief(parsed);
       // Pre-fill form
       setForm({
@@ -443,8 +449,8 @@ export default function CampaignPlannerPage() {
       } else {
         showToast(`Brief parsed (${parsed.confidence}% confidence) — review details below`);
       }
-    } catch {
-      showToast('Failed to parse brief', 'error');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to parse brief', 'error');
     } finally {
       setParsing(false);
     }
@@ -897,6 +903,13 @@ export default function CampaignPlannerPage() {
           {/* ── Step 2: Board selection ── */}
           {step === 2 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+              {/* Distinct from "no boards exist yet" — this means the load itself failed */}
+              {boardsError && (
+                <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px' }}>
+                  <p style={{ fontSize: '0.75rem', color: '#991B1B', margin: 0, fontWeight: 500 }}>⚠ {boardsError}</p>
+                </div>
+              )}
 
               {/* Campaign summary pill */}
               <div style={{ background: '#EFF6FF', borderRadius: '10px', padding: '12px 14px' }}>

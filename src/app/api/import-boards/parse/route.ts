@@ -23,8 +23,14 @@ export async function POST(req: NextRequest) {
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'buffer', cellDates: false, sheetStubs: true });
 
-    const sheetName = wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
+    // The official template (GET /api/import-boards/template) puts an
+    // "Instructions" sheet first and the real data on a "Boards" sheet —
+    // reading SheetNames[0] would parse the instructions text as board
+    // rows for every user who follows the template as given. Prefer a
+    // sheet actually named "Boards" (case-insensitive); fall back to the
+    // first sheet only for a file that never had an Instructions sheet.
+    const boardsSheetName = wb.SheetNames.find(n => n.trim().toLowerCase() === 'boards') || wb.SheetNames[0];
+    const ws = wb.Sheets[boardsSheetName];
     if (!ws) return NextResponse.json({ error: 'Workbook appears to be empty' }, { status: 400 });
 
     const allRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, {

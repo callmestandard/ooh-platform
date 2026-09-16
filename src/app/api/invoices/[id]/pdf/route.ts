@@ -37,18 +37,31 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Auth optional — same public-share-link model as GET /api/invoices/[id]
+  // (see that route for why). Ownership is only enforced when a session
+  // is actually present.
   const user = await requireAuth(req);
-  if (!user) return unauthorized();
   const { id } = await params;
 
   const { data: invoice, error } = await supabase
     .from('invoices')
-    .select('*, campaign:campaigns(id, name), items:invoice_items(*)')
+    .select('*, campaign:campaigns(id, name, agency_id, client_id), items:invoice_items(*)')
     .eq('id', id)
     .single();
 
   if (error || !invoice) {
     return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+  }
+
+  if (user) {
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    const inv = invoice as Record<string, unknown> & { campaign?: { agency_id?: string; client_id?: string } | null; owner_id?: string | null; agency_id?: string | null };
+    const isAdmin = profile?.role === 'admin';
+    const authorized = isAdmin
+      || (profile?.role === 'agency' && (inv.campaign?.agency_id === user.id || inv.agency_id === user.id))
+      || (profile?.role === 'owner' && inv.owner_id === user.id)
+      || (profile?.role === 'client' && inv.campaign?.client_id === user.id);
+    if (!authorized) return unauthorized();
   }
 
   const PDFDocument = (await import('pdfkit')).default;

@@ -8,6 +8,7 @@ import { computeTaxBreakdown } from '@/lib/erp-export';
 import { supabase } from '@/lib/supabase';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
+import { authedFetch } from '@/lib/api';
 
 type FullInvoice = Invoice & {
   campaign?: { id: string; name: string };
@@ -64,7 +65,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => { fetchInvoice(); }, [id]);
 
   async function fetchInvoice() {
-    const res = await fetch(`/api/invoices/${id}`);
+    const res = await authedFetch(`/api/invoices/${id}`);
     if (res.ok) {
       const data = await res.json() as FullInvoice;
       setInvoice(data);
@@ -82,9 +83,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   async function saveErpFields() {
     if (!invoice) return;
     setSavingErp(true);
-    const res = await fetch(`/api/invoices/${id}`, {
+    const res = await authedFetch(`/api/invoices/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         client_invoice_number: erpForm.client_invoice_number.trim() || null,
         wht_rate: parseFloat(erpForm.wht_rate) || 5,
@@ -122,8 +122,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   async function patch(updates: Record<string, unknown>) {
     setUpdating(true);
-    const res = await fetch(`/api/invoices/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    const res = await authedFetch(`/api/invoices/${id}`, {
+      method: 'PATCH',
       body: JSON.stringify(updates),
     });
     const data = await res.json();
@@ -170,6 +170,26 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     if (!invoice) return;
     const text = `Hello, please find your invoice ${invoice.invoice_number} for ${fmtNaira(invoice.total_amount)} from OOH Platform.\n\nPay securely here: ${link}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  }
+
+  const [downloading, setDownloading] = useState<string | null>(null);
+  async function downloadFile(url: string, fallbackName: string) {
+    setDownloading(url);
+    try {
+      const res = await authedFetch(url);
+      if (!res.ok) throw new Error('download failed');
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = res.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] || fallbackName;
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      showToast('Could not download the file. Please try again.', false);
+    } finally {
+      setDownloading(null);
+    }
   }
 
   if (loading) return (
@@ -224,19 +244,22 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           ← Invoices
         </button>
         <div style={{ flex: 1 }} />
-        <a href={`/api/invoices/${invoice.id}/erp-export?format=csv`}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: '0.8125rem', fontWeight: 600, color: '#475569', textDecoration: 'none' }}>
-          Export CSV
-        </a>
-        <a href={`/api/invoices/${invoice.id}/erp-export?format=xml`}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: '0.8125rem', fontWeight: 600, color: '#475569', textDecoration: 'none' }}>
-          Export XML
-        </a>
-        <a href={`/api/invoices/${invoice.id}/pdf`} target="_blank"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: '0.8125rem', fontWeight: 600, color: '#1B4F8A', textDecoration: 'none' }}>
+        <button onClick={() => downloadFile(`/api/invoices/${invoice.id}/erp-export?format=csv`, `${invoice.invoice_number}.csv`)}
+          disabled={!!downloading}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: '0.8125rem', fontWeight: 600, color: '#475569', cursor: downloading ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+          {downloading?.includes('csv') ? 'Exporting…' : 'Export CSV'}
+        </button>
+        <button onClick={() => downloadFile(`/api/invoices/${invoice.id}/erp-export?format=xml`, `${invoice.invoice_number}.xml`)}
+          disabled={!!downloading}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: '0.8125rem', fontWeight: 600, color: '#475569', cursor: downloading ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
+          {downloading?.includes('xml') ? 'Exporting…' : 'Export XML'}
+        </button>
+        <button onClick={() => downloadFile(`/api/invoices/${invoice.id}/pdf`, `${invoice.invoice_number}.pdf`)}
+          disabled={!!downloading}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', fontSize: '0.8125rem', fontWeight: 600, color: '#1B4F8A', cursor: downloading ? 'wait' : 'pointer', fontFamily: 'inherit' }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Download PDF
-        </a>
+          {downloading?.includes('/pdf') ? 'Downloading…' : 'Download PDF'}
+        </button>
       </div>
 
       <div className="resp-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, animation: 'fadeIn 0.25s both' }}>
@@ -412,11 +435,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 </button>
               )}
 
-              <a href={`/api/invoices/${invoice.id}/pdf`} target="_blank"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '10px 0', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: '0.875rem', fontWeight: 600, color: '#1B4F8A', textDecoration: 'none' }}>
+              <button onClick={() => downloadFile(`/api/invoices/${invoice.id}/pdf`, `${invoice.invoice_number}.pdf`)}
+                disabled={!!downloading}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '10px 0', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: '0.875rem', fontWeight: 600, color: '#1B4F8A', cursor: downloading ? 'wait' : 'pointer', fontFamily: 'inherit', width: '100%' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Download PDF
-              </a>
+                {downloading?.includes('/pdf') ? 'Downloading…' : 'Download PDF'}
+              </button>
 
               <a href={`/invoice/${invoice.id}`} target="_blank"
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '10px 0', borderRadius: 9, border: '1px solid #E2E8F0', background: '#fff', fontSize: '0.875rem', fontWeight: 600, color: '#64748B', textDecoration: 'none' }}>
