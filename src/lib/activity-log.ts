@@ -1,7 +1,7 @@
 /**
  * Append-only activity / audit log.
  *
- * Requires: supabase-add-activity-events.sql
+ * Requires: supabase/legacy/supabase-add-activity-events.sql (applied; see supabase/migrations/ for schema changes since)
  * Hook map: docs/ACTIVITY_HOOKS.md
  */
 
