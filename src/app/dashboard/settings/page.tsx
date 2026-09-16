@@ -206,7 +206,7 @@ function Avatar({ name, role, avatarUrl, onUpload, uploading }: {
   uploading?: boolean;
 }) {
   const roleColors: Record<DemoRole, string> = {
-    agency: '#1B4F8A', client: '#059669', owner: '#7C3AED', admin: '#DC2626',
+    agency: '#1B4F8A', client: '#059669', owner: '#7C3AED', admin: '#DC2626', agent: '#D97706',
   };
   const initials = (name || '').split(' ').map(n => n[0] || '').join('').slice(0, 2).toUpperCase();
   return (
@@ -359,9 +359,13 @@ export default function SettingsPage() {
               ...p,
               salesContactName: row.sales_contact_name || p.salesContactName,
             }));
+          }
+          if (role === 'owner' || role === 'agent') {
             // CAC/TIN live in their own table (partner_kyc), not profiles —
             // profiles is broadly readable in this app, so sensitive KYC
-            // data can't live there. See migration 011.
+            // data can't live there. See migration 011. Agents need this
+            // same identity verification even when the board owner they
+            // claim to represent isn't itself a verified platform user.
             supabase
               .from('partner_kyc')
               .select('cac_number, tin_number')
@@ -420,7 +424,7 @@ export default function SettingsPage() {
         return;
       }
 
-      if (role === 'owner' && (profile.cacNumber.trim() || profile.tinNumber.trim())) {
+      if ((role === 'owner' || role === 'agent') && (profile.cacNumber.trim() || profile.tinNumber.trim())) {
         const { error: kycErr } = await supabase
           .from('partner_kyc')
           .upsert({
@@ -552,20 +556,20 @@ export default function SettingsPage() {
 
   const tabs: { key: typeof activeTab; label: string; roles: DemoRole[] }[] = (
     [
-      { key: 'profile'       as const, label: 'Profile',        roles: ['agency', 'client', 'owner', 'admin'] as DemoRole[] },
-      { key: 'notifications' as const, label: 'Notifications',  roles: ['agency', 'client', 'owner', 'admin'] as DemoRole[] },
+      { key: 'profile'       as const, label: 'Profile',        roles: ['agency', 'client', 'owner', 'admin', 'agent'] as DemoRole[] },
+      { key: 'notifications' as const, label: 'Notifications',  roles: ['agency', 'client', 'owner', 'admin', 'agent'] as DemoRole[] },
       { key: 'payout'        as const, label: 'Payouts',        roles: ['owner'] as DemoRole[] },
       { key: 'team'          as const, label: 'Team',           roles: ['agency'] as DemoRole[] },
       { key: 'branding'      as const, label: 'Branding',       roles: ['agency'] as DemoRole[] },
-      { key: 'security'      as const, label: 'Security',       roles: ['agency', 'client', 'owner', 'admin'] as DemoRole[] },
+      { key: 'security'      as const, label: 'Security',       roles: ['agency', 'client', 'owner', 'admin', 'agent'] as DemoRole[] },
     ]
   ).filter(t => t.roles.includes(role));
 
   const roleColors: Record<DemoRole, string> = {
-    agency: '#1B4F8A', client: '#059669', owner: '#7C3AED', admin: '#DC2626',
+    agency: '#1B4F8A', client: '#059669', owner: '#7C3AED', admin: '#DC2626', agent: '#D97706',
   };
   const roleLabels: Record<DemoRole, string> = {
-    agency: 'Agency', client: 'Client', owner: 'Board Owner', admin: 'Platform Admin',
+    agency: 'Agency', client: 'Client', owner: 'Board Owner', admin: 'Platform Admin', agent: 'Agent',
   };
 
   return (
@@ -662,6 +666,16 @@ export default function SettingsPage() {
                         <Input value={profile.salesContactName} onChange={v => setProfile(p => ({ ...p, salesContactName: v }))} placeholder="e.g. Chidi Okafor" />
                       </Field>
                       <Field label="CAC registration number" hint="Kept private — never shown to agencies.">
+                        <Input value={profile.cacNumber} onChange={v => setProfile(p => ({ ...p, cacNumber: v }))} placeholder="RC1234567" />
+                      </Field>
+                      <Field label="TIN (Tax ID)" hint="Kept private — never shown to agencies.">
+                        <Input value={profile.tinNumber} onChange={v => setProfile(p => ({ ...p, tinNumber: v }))} placeholder="12345678-0001" />
+                      </Field>
+                    </>
+                  )}
+                  {role === 'agent' && (
+                    <>
+                      <Field label="CAC registration number" hint="Your own identity as a broker — required even when the board owner you represent isn't a verified platform user yet. Kept private.">
                         <Input value={profile.cacNumber} onChange={v => setProfile(p => ({ ...p, cacNumber: v }))} placeholder="RC1234567" />
                       </Field>
                       <Field label="TIN (Tax ID)" hint="Kept private — never shown to agencies.">

@@ -37,6 +37,7 @@ export type Board = {
   state?: string;
   city?: string;
   notes?: string | null;
+  activeListing?: { id: string; sell_price: number; badge: import('@/lib/agent-listings').TrustBadge } | null;
 };
 
 type SearchPin = { lat: number; lng: number; name: string };

@@ -31,6 +31,7 @@ const DEMO_ROLES: { role: DemoRole; label: string; sub: string; color: string; b
   { role: 'agency', label: 'Agency',       sub: 'Full platform access',     color: '#1B4F8A', bg: '#EFF6FF' },
   { role: 'client', label: 'MTN (Client)', sub: 'Campaign visibility only', color: '#059669', bg: '#ECFDF5' },
   { role: 'owner',  label: 'Board Owner',  sub: 'Board & earnings view',    color: '#7C3AED', bg: '#F5F3FF' },
+  { role: 'agent',  label: 'Agent',        sub: 'Broker boards, set markup', color: '#D97706', bg: '#FFFBEB' },
 ];
 
 function LoginContent() {

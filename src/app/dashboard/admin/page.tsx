@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { formatNaira, formatDate } from '@/lib/utils';
 import type { ActivityEvent } from '@/lib/activity-log';
 import { useToast } from '@/components/ui/Toast';
+import { computeTrustBadge, TrustBadgePill } from '@/lib/agent-listings';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,34 @@ type Profile = {
   company_name: string | null;
   created_at: string;
   is_suspended?: boolean;
+};
+
+type DisputedAuthorization = {
+  id: string;
+  board_id: string;
+  agent_id: string;
+  floor_rate: number;
+  owner_verified: boolean;
+  owner_id: string | null;
+  status: string;
+  dispute_notes: string | null;
+  created_at: string;
+  boards: { name: string; city: string } | null;
+  agent: { full_name: string | null; company_name: string | null; email: string | null } | null;
+};
+
+type AgentPayoutRow = {
+  id: string;
+  booking_id: string;
+  effective_rate: number;
+  floor_rate: number;
+  owner_payout_amount: number;
+  agent_payout_amount: number;
+  owner_payout_status: string;
+  agent_payout_status: string;
+  bookings: { boards: { name: string; city: string } | null; campaigns: { name: string } | null } | null;
+  agent: { full_name: string | null; company_name: string | null } | null;
+  owner: { full_name: string | null; company_name: string | null } | null;
 };
 
 type AdminSettings = {
@@ -163,7 +192,7 @@ function BarChart({ data, color = '#1B4F8A', height = 80 }: { data: { label: str
 
 // ── Main content ───────────────────────────────────────────────────────────
 
-type AdminTab = 'overview' | 'inventory' | 'bookings' | 'users' | 'compliance' | 'revenue' | 'analytics' | 'settings';
+type AdminTab = 'overview' | 'inventory' | 'bookings' | 'users' | 'compliance' | 'revenue' | 'analytics' | 'settings' | 'agent-conflicts';
 
 function AdminContent() {
   const [boards, setBoards] = useState<Board[]>([]);
@@ -172,6 +201,9 @@ function AdminContent() {
   const [compliance, setCompliance] = useState<ComplianceCheck[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
+  const [disputedAuths, setDisputedAuths] = useState<DisputedAuthorization[]>([]);
+  const [resolvingAuth, setResolvingAuth] = useState<string | null>(null);
+  const [agentPayouts, setAgentPayouts] = useState<AgentPayoutRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [togglingUser, setTogglingUser] = useState<string | null>(null);
@@ -193,7 +225,7 @@ function AdminContent() {
 
   useEffect(() => {
     const tab = searchParams.get('tab') as AdminTab | null;
-    const valid: AdminTab[] = ['overview','inventory','bookings','users','compliance','revenue','analytics','settings'];
+    const valid: AdminTab[] = ['overview','inventory','bookings','users','compliance','revenue','analytics','settings','agent-conflicts'];
     if (tab && valid.includes(tab)) setActiveTab(tab);
   }, [searchParams]);
 
@@ -209,13 +241,15 @@ function AdminContent() {
 
   async function fetchAll() {
     try {
-      const [bRes, bookRes, campRes, compRes, profRes, actRes] = await Promise.all([
+      const [bRes, bookRes, campRes, compRes, profRes, actRes, disputedRes, payoutsRes] = await Promise.all([
         supabase.from('boards').select('id, name, address, city, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at').order('created_at', { ascending: false }).limit(200),
         supabase.from('bookings').select('id, status, offered_rate, agreed_rate, start_date, end_date, duration_months, created_at, boards(name, city, format), campaigns(name, client_name)').order('created_at', { ascending: false }).limit(200),
         supabase.from('campaigns').select('id, name, client_name, status, total_budget, start_date, end_date, agency_id, created_at').order('created_at', { ascending: false }).limit(100),
         supabase.from('compliance_checks').select('id, booking_id, status, submitted_at, photo_url, notes').order('submitted_at', { ascending: false }).limit(100),
         supabase.from('profiles').select('id, role, full_name, company_name, created_at').order('created_at', { ascending: false }).limit(200),
         supabase.from('activity_events').select('id, entity_type, entity_id, campaign_id, actor_id, actor_role, actor_name, action, summary, created_at').order('created_at', { ascending: false }).limit(50),
+        supabase.from('board_authorizations').select('id, board_id, agent_id, floor_rate, owner_verified, owner_id, status, dispute_notes, created_at, boards(name, city), agent:agent_id(full_name, company_name, email)').eq('status', 'disputed').order('created_at', { ascending: false }),
+        supabase.from('booking_payouts').select('id, booking_id, effective_rate, floor_rate, owner_payout_amount, agent_payout_amount, owner_payout_status, agent_payout_status, bookings(boards(name, city), campaigns(name)), agent:agent_id(full_name, company_name), owner:owner_id(full_name, company_name)').order('updated_at', { ascending: false }),
       ]);
       if (bRes.error) throw bRes.error;
       if (bRes.data) setBoards(bRes.data as Board[]);
@@ -224,6 +258,8 @@ function AdminContent() {
       if (compRes.data) setCompliance(compRes.data as ComplianceCheck[]);
       if (profRes.data && profRes.data.length > 0) setProfiles(profRes.data as Profile[]);
       if (actRes.data) setActivityEvents(actRes.data as ActivityEvent[]);
+      if (disputedRes.data) setDisputedAuths(disputedRes.data as unknown as DisputedAuthorization[]);
+      if (payoutsRes.data) setAgentPayouts(payoutsRes.data as unknown as AgentPayoutRow[]);
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Failed to load admin data');
     } finally {
@@ -244,6 +280,38 @@ function AdminContent() {
       showToast(!currentlySuspended ? 'User suspended' : 'User reactivated');
     }
     setTogglingUser(null);
+  }
+
+  // Resolves a board-authorization conflict: the chosen claim goes back to
+  // 'active' (re-triggers the conflict trigger, but it's harmless here
+  // since every other claim on this board is already 'disputed', not
+  // 'active'), and every other disputed claim on the same board is
+  // explicitly revoked so nothing is left in limbo.
+  async function resolveConflict(winningId: string, boardId: string) {
+    setResolvingAuth(winningId);
+    const losers = disputedAuths.filter(a => a.board_id === boardId && a.id !== winningId);
+
+    const { error: winErr } = await supabase
+      .from('board_authorizations')
+      .update({ status: 'active', dispute_notes: null })
+      .eq('id', winningId);
+
+    if (winErr) {
+      showToast('Failed to resolve: ' + winErr.message, 'error');
+      setResolvingAuth(null);
+      return;
+    }
+
+    for (const loser of losers) {
+      await supabase
+        .from('board_authorizations')
+        .update({ status: 'revoked', dispute_notes: `[admin] Resolved in favor of authorization ${winningId} on ${new Date().toISOString()}` })
+        .eq('id', loser.id);
+    }
+
+    setDisputedAuths(prev => prev.filter(a => a.board_id !== boardId));
+    showToast('Conflict resolved');
+    setResolvingAuth(null);
   }
 
   async function verifyCompliance(id: string) {
@@ -531,6 +599,7 @@ function AdminContent() {
           { key: 'compliance', label: `Compliance`, badge: flaggedCompliance.length },
           { key: 'revenue',    label: 'Revenue' },
           { key: 'analytics',  label: 'Analytics' },
+          { key: 'agent-conflicts', label: 'Agent Conflicts', badge: disputedAuths.length },
           { key: 'settings',   label: 'Settings' },
         ] as { key: AdminTab; label: string; badge?: number }[]).map(tab => (
           <button
@@ -1131,6 +1200,51 @@ function AdminContent() {
               </table>
             )}
           </div>
+
+          {/* Agent-brokered payout splits — never opaque: owner, agent, and
+              platform amounts are all shown separately for every booking
+              that went through an agent's listing. */}
+          {agentPayouts.length > 0 && (
+            <div className="table-scroll" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, overflow: 'hidden', marginTop: 16 }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid #F1F5F9' }}>
+                <h2 style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>Agent-brokered payout splits</h2>
+                <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>Owner floor-rate payout, agent margin, and platform fee — shown separately for every booking made against an agent's listing</p>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#F8FAFC' }}>
+                    {['Board', 'Agent', 'Owner', 'Rate collected', 'Owner payout', 'Agent margin', 'Owner status'].map(h => (
+                      <th key={h} style={{ padding: '10px 16px', fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'left', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {agentPayouts.map(p => (
+                    <tr key={p.id} style={{ borderBottom: '1px solid #F8FAFC' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>{p.bookings?.boards?.name || '—'}</p>
+                        <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>{p.bookings?.campaigns?.name || ''}</p>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.8125rem', color: '#374151' }}>{p.agent?.company_name || p.agent?.full_name || '—'}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '0.8125rem', color: '#374151' }}>{p.owner?.company_name || p.owner?.full_name || 'Not on platform'}</td>
+                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>{formatNaira(p.effective_rate)}</td>
+                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 700, color: '#7C3AED', whiteSpace: 'nowrap' }}>{formatNaira(p.owner_payout_amount)}</td>
+                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 700, color: '#D97706', whiteSpace: 'nowrap' }}>{formatNaira(p.agent_payout_amount)}</td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{
+                          fontSize: '0.6875rem', fontWeight: 700, padding: '3px 9px', borderRadius: 999,
+                          background: p.owner_payout_status === 'ready' ? '#ECFDF5' : p.owner_payout_status === 'paid' ? '#EFF6FF' : '#FFFBEB',
+                          color: p.owner_payout_status === 'ready' ? '#065F46' : p.owner_payout_status === 'paid' ? '#1D4ED8' : '#92400E',
+                        }}>
+                          {p.owner_payout_status === 'pending_verification' ? 'Pending owner verification' : p.owner_payout_status === 'ready' ? 'Ready' : 'Paid'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -1232,6 +1346,66 @@ function AdminContent() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ═══ TAB: AGENT CONFLICTS ═══ */}
+      {activeTab === 'agent-conflicts' && (
+        <div>
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px' }}>Disputed board authorizations</p>
+            <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0 }}>
+              Two or more agents have claimed selling rights to the same board. These are never auto-resolved — pick which claim is legitimate to reactivate it; every other claim on that board is revoked.
+            </p>
+          </div>
+
+          {disputedAuths.length === 0 ? (
+            <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '3rem', textAlign: 'center' }}>
+              <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>No conflicts to review.</p>
+            </div>
+          ) : (
+            Object.entries(
+              disputedAuths.reduce((acc, a) => {
+                (acc[a.board_id] ||= []).push(a);
+                return acc;
+              }, {} as Record<string, DisputedAuthorization[]>)
+            ).map(([boardId, claims]) => (
+              <div key={boardId} style={{ background: '#fff', border: '1px solid #FCA5A5', borderRadius: 12, padding: '16px 20px', marginBottom: 14 }}>
+                <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#991B1B', margin: '0 0 2px' }}>
+                  ⚠ {claims[0].boards?.name || 'Unknown board'}
+                </p>
+                <p style={{ fontSize: '0.75rem', color: '#7F1D1D', margin: '0 0 12px' }}>
+                  {claims[0].boards?.city} · {claims.length} conflicting claims
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${claims.length}, 1fr)`, gap: 10 }}>
+                  {claims.map(c => (
+                    <div key={c.id} style={{ border: '1px solid #FECACA', borderRadius: 10, padding: '12px 14px', background: '#FEF2F2' }}>
+                      <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>
+                        {c.agent?.company_name || c.agent?.full_name || 'Unknown agent'}
+                      </p>
+                      <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '0 0 8px' }}>{c.agent?.email}</p>
+                      <p style={{ fontSize: '0.75rem', color: '#374151', margin: '0 0 2px' }}>
+                        Floor rate: <strong style={{ fontFamily: 'monospace' }}>{formatNaira(c.floor_rate)}</strong>
+                      </p>
+                      <p style={{ fontSize: '0.75rem', color: '#374151', margin: '0 0 10px' }}>
+                        Owner: {c.owner_id ? (c.owner_verified ? 'Verified platform user' : 'Linked, awaiting confirmation') : 'Not on platform (self-declared)'}
+                      </p>
+                      <button
+                        onClick={() => resolveConflict(c.id, boardId)}
+                        disabled={resolvingAuth === c.id}
+                        style={{
+                          width: '100%', padding: '7px', background: '#991B1B', color: '#fff', border: 'none',
+                          borderRadius: 7, fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        {resolvingAuth === c.id ? 'Resolving…' : 'This one is legitimate →'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
 

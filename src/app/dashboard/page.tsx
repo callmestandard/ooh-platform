@@ -22,7 +22,7 @@ export default function DashboardRedirectPage() {
 
       // Fallback: localStorage demo mode
       const raw = localStorage.getItem(ROLE_STORAGE_KEY) as DemoRole | null;
-      if (raw === "agency" || raw === "client" || raw === "owner" || raw === "admin") {
+      if (raw === "agency" || raw === "client" || raw === "owner" || raw === "admin" || raw === "agent") {
         router.replace(`/dashboard/${raw}`);
         return;
       }

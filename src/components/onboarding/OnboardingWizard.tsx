@@ -32,11 +32,17 @@ const CLIENT_STEPS: Step[] = [
   { id: 'done',     title: 'All caught up.',                subtitle: 'Your agency keeps this dashboard updated for you.' },
 ];
 
+const AGENT_STEPS: Step[] = [
+  { id: 'welcome',  title: 'Welcome, Agent',                subtitle: 'Broker boards on an owner’s behalf and set your own markup — honestly, with a visible trust badge.' },
+  { id: 'done',     title: 'Ready to claim your first board.', subtitle: 'Every claim and listing you create is tied to your verified identity.' },
+];
+
 const STEPS: Record<DemoRole, Step[]> = {
   agency: AGENCY_STEPS,
   owner:  OWNER_STEPS,
   client: CLIENT_STEPS,
   admin:  [],
+  agent:  AGENT_STEPS,
 };
 
 /* ── Quick-action cards shown on the Done step ─────────────────────────── */
@@ -57,11 +63,17 @@ const CLIENT_ACTIONS = [
   { icon: 'M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11', label: 'Compliance', sub: 'Check proof of posting', href: '/dashboard/client?tab=compliance', color: '#1B4F8A' },
 ];
 
+const AGENT_ACTIONS = [
+  { icon: 'M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11', label: 'Claim a board', sub: 'Declare a floor rate with the owner', href: '/dashboard/agent?tab=claim', color: '#D97706' },
+  { icon: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10', label: 'My listings', sub: 'Set your sell price', href: '/dashboard/agent?tab=listings', color: '#1B4F8A' },
+];
+
 const ACTIONS: Record<DemoRole, typeof AGENCY_ACTIONS> = {
   agency: AGENCY_ACTIONS,
   owner:  OWNER_ACTIONS,
   client: CLIENT_ACTIONS,
   admin:  [],
+  agent:  AGENT_ACTIONS,
 };
 
 /* ── Component ─────────────────────────────────────────────────────────── */

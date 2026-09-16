@@ -10,6 +10,7 @@ import { formatNaira } from '@/lib/utils';
 import { useToast } from '@/components/ui/Toast';
 import type { Board } from '@/app/dashboard/agency/boards-map/page';
 import type { AudienceProfile } from '@/lib/types';
+import { computeTrustBadge, TrustBadgePill } from '@/lib/agent-listings';
 
 type ImportRow = {
   row_index:    number;
@@ -236,17 +237,27 @@ export default function CampaignPlannerPage() {
   const [importMode, setImportMode] = useState(false);
 
   useEffect(() => {
-    supabase
-      .from('boards')
-      .select('id, name, address, latitude, longitude, width, height, format, asking_rate, photo_urls, status, state, city, notes')
-      .not('latitude', 'is', null)
-      .not('longitude', 'is', null)
-      .then(({ data, error }) => {
+    Promise.all([
+      supabase
+        .from('boards')
+        .select('id, name, address, latitude, longitude, width, height, format, asking_rate, photo_urls, status, state, city, notes')
+        .not('latitude', 'is', null)
+        .not('longitude', 'is', null),
+      supabase.from('listings').select('id, board_id, sell_price, agent_id, board_authorizations(owner_verified)').eq('status', 'active'),
+    ]).then(([{ data, error }, listingsRes]) => {
         if (error) {
           console.error('[campaign-planner] boards fetch failed:', error.message);
           setBoardsError('Could not load board inventory — ' + error.message + '. Try refreshing the page.');
         }
-        setBoards((data as Board[]) || []);
+        const listingsByBoard = new Map<string, any>();
+        (listingsRes.data || []).forEach((l: any) => { if (!listingsByBoard.has(l.board_id)) listingsByBoard.set(l.board_id, l); });
+        const withBadges = ((data as Board[]) || []).map(b => {
+          const l = listingsByBoard.get(b.id);
+          if (!l) return b;
+          const badge = computeTrustBadge({ agent_id: l.agent_id }, l.board_authorizations);
+          return { ...b, activeListing: { id: l.id, sell_price: l.sell_price, badge } };
+        });
+        setBoards(withBadges);
         setLoading(false);
       });
 
@@ -1014,12 +1025,13 @@ export default function CampaignPlannerPage() {
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#0F172A', margin: '0 0 1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{board.name}</p>
-                          <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>
+                          <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '0 0 3px' }}>
                             {board.format || 'Board'} · {board.city || board.state || '—'}
                           </p>
+                          {board.activeListing && <TrustBadgePill badge={board.activeListing.badge} small />}
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1B4F8A', margin: '0 0 1px' }}>{formatNaira(board.asking_rate || 0)}</p>
+                          <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1B4F8A', margin: '0 0 1px' }}>{formatNaira(board.activeListing ? board.activeListing.sell_price : (board.asking_rate || 0))}</p>
                           {days > 0 && (
                             <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>
                               ~{(estimateImpressions(board, days) / 1000).toFixed(0)}K impr.

@@ -16,6 +16,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { formatNaira, formatDate } from '@/lib/utils';
 import { getMarketRate, type MarketRate } from '@/lib/rate-intelligence';
+import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 
 type Campaign = {
   id: string;
@@ -61,6 +62,7 @@ type Board = {
   face_count: number;
   latitude: number;
   longitude: number;
+  activeListing?: { id: string; sell_price: number; badge: TrustBadge } | null;
 };
 
 type PlanItem = {
@@ -317,10 +319,11 @@ export default function CampaignPlanPage() {
     setLoading(true);
     setFetchError(null);
     try {
-      const [campRes, itemsRes, boardsRes] = await Promise.all([
+      const [campRes, itemsRes, boardsRes, listingsRes] = await Promise.all([
         supabase.from('campaigns').select('*').eq('id', id).single(),
         supabase.from('bookings').select('*, boards(*)').eq('campaign_id', id).order('created_at'),
         supabase.from('boards').select('*').eq('status', 'available').order('name'),
+        supabase.from('listings').select('id, board_id, sell_price, agent_id, board_authorizations(owner_verified)').eq('status', 'active'),
       ]);
       if (campRes.error) throw campRes.error;
       if (campRes.data) {
@@ -356,7 +359,22 @@ export default function CampaignPlanPage() {
           }
         }
       }
-      if (boardsRes.data) setAllBoards(boardsRes.data as Board[]);
+      if (boardsRes.data) {
+        const boards = boardsRes.data as Board[];
+        const listingsByBoard = new Map<string, { id: string; sell_price: number; agent_id: string | null; board_authorizations: { owner_verified: boolean } | null }>();
+        (listingsRes.data || []).forEach((l: any) => {
+          // multiple listings per board shouldn't normally happen, but if
+          // they do, prefer the first — this is a display concern, not a
+          // security one (the DB triggers are what actually enforce things)
+          if (!listingsByBoard.has(l.board_id)) listingsByBoard.set(l.board_id, l);
+        });
+        setAllBoards(boards.map(b => {
+          const l = listingsByBoard.get(b.id);
+          if (!l) return b;
+          const badge = computeTrustBadge({ agent_id: l.agent_id }, l.board_authorizations);
+          return { ...b, activeListing: { id: l.id, sell_price: l.sell_price, badge } };
+        }));
+      }
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Failed to load campaign');
     } finally {
@@ -477,6 +495,10 @@ export default function CampaignPlanPage() {
       notes: addForm.notes || null,
       is_in_plan: true,
       replaces_booking_id: isReplacement ? replacingItemId : null,
+      // links this booking to the agent's listing (if any) so the DB
+      // trigger computes the owner/agent/platform split automatically —
+      // stays null for the existing direct-owner flow, unchanged
+      listing_id: board?.activeListing?.id || null,
     }).select('id').single();
 
     if (!error && newItem) {
@@ -1931,7 +1953,8 @@ export default function CampaignPlanPage() {
                   key={board.id}
                   className="board-row"
                   onClick={() => {
-                    setAddForm(f => ({ ...f, boardId: board.id, rate: String(Math.round(board.asking_rate * 0.85)) }));
+                    const rate = board.activeListing ? board.activeListing.sell_price : Math.round(board.asking_rate * 0.85);
+                    setAddForm(f => ({ ...f, boardId: board.id, rate: String(rate) }));
                   }}
                   style={{
                     padding: '14px 24px', borderBottom: '1px solid #F8FAFC',
@@ -1944,15 +1967,16 @@ export default function CampaignPlanPage() {
                     <div>
                       <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 3px' }}>{board.name}</p>
                       <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 4px' }}>{board.address}</p>
-                      <div style={{ display: 'flex', gap: 6 }}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#475569', background: '#F1F5F9', padding: '1px 6px', borderRadius: 3 }}>
                           {FORMAT_LABELS[board.format] || board.format}
                         </span>
                         <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>{board.city}</span>
+                        {board.activeListing && <TrustBadgePill badge={board.activeListing.badge} small />}
                       </div>
                     </div>
                     <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', fontFamily: 'monospace' }}>
-                      {formatNaira(board.asking_rate)}
+                      {formatNaira(board.activeListing ? board.activeListing.sell_price : board.asking_rate)}
                     </span>
                   </div>
                 </div>

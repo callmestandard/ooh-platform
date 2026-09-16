@@ -16,6 +16,7 @@ const roleLabelMap: Record<DemoRole, string> = {
   client: "Client",
   owner:  "Board Owner",
   admin:  "Platform Admin",
+  agent:  "Agent",
 };
 
 // Fallback display names used when the profiles table has no name set
@@ -24,6 +25,7 @@ const demoNames: Record<DemoRole, string> = {
   client: "MTN Nigeria",
   owner:  "Alhaji Sule",
   admin:  "Tunde Adeyemi",
+  agent:  "Chidi Nwosu",
 };
 
 function SidebarFallback() {

@@ -9,6 +9,7 @@ const ROLES: { role: DemoRole; label: string; desc: string; color: string; bg: s
   { role: 'agency', label: 'Agency',      desc: 'Plan campaigns, book boards, manage clients', color: '#1B4F8A', bg: '#EFF6FF' },
   { role: 'owner',  label: 'Board Owner', desc: 'List your boards, manage bookings, earn revenue', color: '#7C3AED', bg: '#F5F3FF' },
   { role: 'client', label: 'Advertiser',  desc: 'Track campaigns and view compliance reports', color: '#059669', bg: '#ECFDF5' },
+  { role: 'agent',  label: 'Agent',       desc: 'Broker boards on an owner’s behalf and set your own markup', color: '#D97706', bg: '#FFFBEB' },
 ];
 
 function OOHLogo() {
@@ -61,6 +62,8 @@ export default function SignupPage() {
     if (!company.trim())           { setError('Company name is required.'); return; }
     if (role === 'owner' && !cacNumber.trim()) { setError('CAC registration number is required for media partners.'); return; }
     if (role === 'owner' && !tinNumber.trim()) { setError('TIN (Tax Identification Number) is required for media partners.'); return; }
+    if (role === 'agent' && !cacNumber.trim()) { setError('CAC registration number is required to register as an agent.'); return; }
+    if (role === 'agent' && !tinNumber.trim()) { setError('TIN (Tax Identification Number) is required to register as an agent.'); return; }
     if (!email.trim())             { setError('Email is required.'); return; }
     if (password.length < 8)      { setError('Password must be at least 8 characters.'); return; }
     if (password !== confirm)      { setError('Passwords do not match.'); return; }
@@ -77,7 +80,7 @@ export default function SignupPage() {
           full_name:    fullName.trim(),
           company_name: company.trim(),
           role,
-          ...(role === 'owner' ? { cac_number: cacNumber.trim(), tin_number: tinNumber.trim() } : {}),
+          ...(role === 'owner' || role === 'agent' ? { cac_number: cacNumber.trim(), tin_number: tinNumber.trim() } : {}),
         },
       },
     });
