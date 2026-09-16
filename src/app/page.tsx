@@ -58,14 +58,14 @@ const FEATURES_DATA = [
 ];
 
 const PRICING_DATA = [
-  { tag: 'Agencies', amount: 'Free', free: true, per: '', featured: false,
-    desc: 'Plan, search and pitch — every planning tool, zero monthly fees.',
-    feats: ['Unlimited board search', 'Campaign planning tools', 'Audience intelligence', 'AI brief parsing', 'Media plan PDF export'],
-    cta: 'Get started' },
-  { tag: 'Board Owners', amount: '10%', free: false, per: 'commission on bookings', featured: true, ribbon: 'Most popular',
-    desc: 'List for free. Pay only when a booking completes — nothing before.',
+  { tag: 'Board Owners', amount: 'Free', free: true, per: 'forever — no commission', featured: false,
+    desc: 'List for free, always. You receive 100% of every agreed rate — we never take a cut from media partners.',
     feats: ['List unlimited boards', 'Receive booking requests', 'Negotiation threads', 'Automated invoicing', 'Earnings analytics'],
     cta: 'Start listing' },
+  { tag: 'Agencies', amount: '10%', free: false, per: 'service fee on managed spend', featured: true, ribbon: 'Most popular',
+    desc: 'Every planning tool included. A service fee is added on top of media cost — never deducted from board owners.',
+    feats: ['Unlimited board search', 'Campaign planning tools', 'Audience intelligence', 'AI brief parsing', 'Media plan PDF export'],
+    cta: 'Get started' },
   { tag: 'Brands', amount: 'Free', free: true, per: '', featured: false,
     desc: 'Full campaign visibility — track every board you run, live.',
     feats: ['Real-time campaign map', 'Compliance dashboard', 'POP photo verification', 'Budget tracking', 'Performance reports'],
@@ -1060,7 +1060,7 @@ function Pricing() {
         <div ref={ref} className={`lp-section-head${inView ? ' lp-in' : ''}`}>
           <span className="lp-eyebrow">Pricing</span>
           <h2>Simple, transparent pricing</h2>
-          <p>We take a 10% commission on completed bookings. No monthly fees, no hidden charges.</p>
+          <p>Free forever for media owners. A 10% service fee applies to agencies on managed spend — no monthly fees, no hidden charges.</p>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 20, maxWidth: 980, margin: '0 auto', alignItems: 'stretch' }} className="lp-price-grid">

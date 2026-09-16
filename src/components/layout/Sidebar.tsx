@@ -46,6 +46,7 @@ const agencyNav: NavItem[] = [
   { id: "marketplace",  label: "Find Boards",  path: "/dashboard/agency/marketplace",      icon: <Icon path="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z M12 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" /> },
   { id: "campaigns",    label: "Campaigns",    path: "/dashboard/agency/campaigns",        icon: <Icon path="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2 M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2 M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2" /> },
   { id: "boards-map",   label: "Boards Map",   path: "/dashboard/agency/boards-map",       icon: <Icon path="M1 6l7-4 8 4 7-4v16l-7 4-8-4-7 4V6 M8 2v16 M16 6v16" /> },
+  { id: "boards",       label: "Board Inventory", path: "/dashboard/agency/boards",        icon: <Icon path="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10" /> },
   { id: "planner",     label: "Campaign Planner", path: "/dashboard/agency/campaign-planner", icon: <Icon path="M12 20h9 M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /> },
   { id: "negotiations",label: "Negotiations", path: "/dashboard/agency/negotiations", icon: <Icon path="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /> },
   { id: "compliance",  label: "Compliance",   path: "/dashboard/agency/compliance",   icon: <Icon path="M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /> },

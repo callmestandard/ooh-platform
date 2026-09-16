@@ -97,7 +97,7 @@ export default function OwnerNegotiationDetailPage() {
         method: 'POST',
         body: JSON.stringify({
           booking_id:    booking.id,
-          agency_name:   booking.campaigns?.client_name || 'Agency',
+          agency_name:   booking.campaigns?.name || 'Agency',
           owner_name:    'Board Owner',
           board_name:    booking.boards?.name || '',
           board_address: booking.boards?.address || '',

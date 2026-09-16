@@ -15,7 +15,7 @@ type Board = {
   state: string | null;
   format: string;
   asking_rate: number;
-  status: 'available' | 'booked' | 'maintenance';
+  status: 'available' | 'booked' | 'unavailable' | 'decommissioned';
 };
 
 type Booking = {
@@ -371,7 +371,8 @@ export default function AvailabilityPage() {
             { key: 'all', label: 'All' },
             { key: 'available', label: 'Available' },
             { key: 'booked', label: 'Booked' },
-            { key: 'maintenance', label: 'Maintenance' },
+            { key: 'unavailable', label: 'Unavailable' },
+            { key: 'decommissioned', label: 'Decommissioned' },
           ].map(f => (
             <button
               key={f.key}

@@ -90,7 +90,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_OUT") {
         localStorage.removeItem(ROLE_STORAGE_KEY);
-        router.replace("/");
+        router.replace("/auth/login");
       }
     });
 
@@ -103,7 +103,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   async function handleLogout() {
     await signOut();
     localStorage.removeItem(ROLE_STORAGE_KEY);
-    router.push("/");
+    router.push("/auth/login");
   }
 
   if (!mounted || !role) {

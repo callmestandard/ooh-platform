@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -174,48 +173,23 @@ export default function CampaignReportPage() {
   }, [id]);
 
   async function fetchReport() {
-    const { data: camp } = await supabase
-      .from('campaigns')
-      .select('id, name, client_name, status, start_date, end_date, total_budget, objective, target_cities, plan_notes, agency_id')
-      .eq('id', id)
-      .single();
+    // This is a public, no-login-required share link, so it goes through a
+    // server-side route (service role key) rather than querying Supabase
+    // directly from the browser — campaigns/bookings/profiles now require
+    // auth+ownership under RLS (see migration 012).
+    const res = await fetch(`/api/report/${id}`);
+    if (!res.ok) { setNotFound(true); setLoading(false); return; }
+    const data = await res.json();
 
-    if (!camp) { setNotFound(true); setLoading(false); return; }
-    setCampaign(camp as Campaign);
+    setCampaign(data.campaign as Campaign);
+    if (data.agencyBranding) setAgencyBranding(data.agencyBranding as AgencyBranding);
 
-    // Fetch agency branding
-    if (camp.agency_id) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('full_name, company_name, brand_logo_url, brand_accent_color, brand_tagline, brand_website')
-        .eq('id', camp.agency_id)
-        .single();
-      if (profile) {
-        setAgencyBranding({
-          name: profile.company_name || profile.full_name || 'Your Agency',
-          logoUrl: profile.brand_logo_url || null,
-          accentColor: profile.brand_accent_color || '#1B4F8A',
-          tagline: profile.brand_tagline || null,
-          website: profile.brand_website || null,
-        });
-      }
-    }
-
-    const { data: bookData } = await supabase
-      .from('bookings')
-      .select('id, status, offered_rate, agreed_rate, start_date, end_date, duration_months, boards(name, address, city, state, format, illuminated, face_count, width, height)')
-      .eq('campaign_id', id as string)
-      .order('created_at');
-
-    const bks = (bookData as unknown as Booking[]) || [];
+    const bks = (data.bookings as Booking[]) || [];
     setBookings(bks);
+    setCompliance((data.compliance as ComplianceCheck[]) || []);
 
     if (bks.length > 0) {
-      const [compRes, trackRes] = await Promise.all([
-        supabase.from('compliance_checks').select('*').in('booking_id', bks.map(b => b.id)),
-        fetch(`/api/tracking?campaign_id=${id}`).then(r => r.ok ? r.json() : []),
-      ]);
-      setCompliance((compRes.data as ComplianceCheck[]) || []);
+      const trackRes = await fetch(`/api/tracking?campaign_id=${id}`).then(r => r.ok ? r.json() : []);
       setTrackingLinks((trackRes as TrackingLink[]) || []);
     }
 

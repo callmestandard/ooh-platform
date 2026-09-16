@@ -33,9 +33,10 @@ export type Board = {
   format?: string;
   asking_rate?: number;
   photo_urls?: string[] | null;
-  status: 'available' | 'booked' | 'maintenance';
+  status: 'available' | 'booked' | 'unavailable' | 'decommissioned';
   state?: string;
   city?: string;
+  notes?: string | null;
 };
 
 type SearchPin = { lat: number; lng: number; name: string };
@@ -55,10 +56,11 @@ const FORMAT_LABELS: Record<string, string> = {
 };
 
 const STATUS_CONFIG = [
-  { value: 'all',         label: 'All',         dot: '#94A3B8' },
-  { value: 'available',   label: 'Available',   dot: '#10B981' },
-  { value: 'booked',      label: 'Booked',      dot: '#3B82F6' },
-  { value: 'maintenance', label: 'Maintenance', dot: '#F59E0B' },
+  { value: 'all',            label: 'All',            dot: '#94A3B8' },
+  { value: 'available',      label: 'Available',      dot: '#10B981' },
+  { value: 'booked',         label: 'Booked',         dot: '#3B82F6' },
+  { value: 'unavailable',    label: 'Unavailable',    dot: '#F59E0B' },
+  { value: 'decommissioned', label: 'Decommissioned', dot: '#94A3B8' },
 ];
 
 const LAYER_CONFIG: { key: OverlayLayer; label: string; color: string; bg: string; icon: string }[] = [
@@ -138,10 +140,11 @@ export default function BoardsMapPage() {
   const hasActiveFilters = filters.status !== 'all' || filters.format !== 'all' || filters.city !== 'all' || filters.audience !== 'all';
 
   const stats = {
-    total:       boards.length,
-    available:   boards.filter(b => b.status === 'available').length,
-    booked:      boards.filter(b => b.status === 'booked').length,
-    maintenance: boards.filter(b => b.status === 'maintenance').length,
+    total:          boards.length,
+    available:      boards.filter(b => b.status === 'available').length,
+    booked:         boards.filter(b => b.status === 'booked').length,
+    unavailable:    boards.filter(b => b.status === 'unavailable').length,
+    decommissioned: boards.filter(b => b.status === 'decommissioned').length,
   };
 
   const rightPanelOpen = !!selectedBoard || !!bookingBoard || !!searchPin;
@@ -165,10 +168,11 @@ export default function BoardsMapPage() {
           {/* Stats */}
           <div style={{ display: 'flex', gap: 8 }}>
             {[
-              { label: 'Total',       value: stats.total,       color: '#0F172A' },
-              { label: 'Available',   value: stats.available,   color: '#10B981' },
-              { label: 'Booked',      value: stats.booked,      color: '#3B82F6' },
-              { label: 'Maintenance', value: stats.maintenance, color: '#F59E0B' },
+              { label: 'Total',          value: stats.total,          color: '#0F172A' },
+              { label: 'Available',      value: stats.available,      color: '#10B981' },
+              { label: 'Booked',         value: stats.booked,         color: '#3B82F6' },
+              { label: 'Unavailable',    value: stats.unavailable,    color: '#F59E0B' },
+              { label: 'Decommissioned', value: stats.decommissioned, color: '#94A3B8' },
             ].map(({ label, value, color }) => (
               <div key={label} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '6px 12px', textAlign: 'center' }}>
                 <p style={{ fontSize: '0.5625rem', color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 2px' }}>{label}</p>
@@ -307,7 +311,8 @@ export default function BoardsMapPage() {
               {[
                 { dot: '#10B981', label: 'Available' },
                 { dot: '#3B82F6', label: 'Booked' },
-                { dot: '#F59E0B', label: 'Maintenance' },
+                { dot: '#F59E0B', label: 'Unavailable' },
+                { dot: '#94A3B8', label: 'Decommissioned' },
               ].map(({ dot, label }) => (
                 <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: dot }} />

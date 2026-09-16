@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { SkeletonGrid, SkeletonTable } from '@/components/ui/Skeleton';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import { useToast } from '@/components/ui/Toast';
+import { getActivityActor, logActivity } from '@/lib/activity-log';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -26,9 +27,10 @@ type Board = {
   face_count: number;
   latitude: number | null;
   longitude: number | null;
-  status: 'available' | 'booked' | 'maintenance';
+  status: 'available' | 'booked' | 'unavailable' | 'decommissioned';
   rate_card: RateCardData | null;
   photo_urls: string[] | null;
+  contact_phone: string | null;
   created_at: string;
 };
 
@@ -73,12 +75,13 @@ type BoardForm = {
   illuminated: boolean;
   latitude: string;
   longitude: string;
+  contact_phone: string;
 };
 
 const EMPTY_FORM: BoardForm = {
   name: '', format: 'billboard', address: '', city: '', state: '',
   width: '', height: '', asking_rate: '', face_count: '1',
-  illuminated: false, latitude: '', longitude: '',
+  illuminated: false, latitude: '', longitude: '', contact_phone: '',
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -126,9 +129,10 @@ const NIGERIA_STATES = [
 
 function BoardStatusPill({ status }: { status: string }) {
   const map: Record<string, { bg: string; color: string; dot: string; label: string }> = {
-    available:   { bg: '#ECFDF5', color: '#065F46', dot: '#10B981', label: 'Available' },
-    booked:      { bg: '#EFF6FF', color: '#1E3A8A', dot: '#3B82F6', label: 'Booked' },
-    maintenance: { bg: '#FFFBEB', color: '#92400E', dot: '#F59E0B', label: 'Maintenance' },
+    available:      { bg: '#ECFDF5', color: '#065F46', dot: '#10B981', label: 'Available' },
+    booked:         { bg: '#EFF6FF', color: '#1E3A8A', dot: '#3B82F6', label: 'Booked' },
+    unavailable:    { bg: '#FFFBEB', color: '#92400E', dot: '#F59E0B', label: 'Unavailable' },
+    decommissioned: { bg: '#F1F5F9', color: '#475569', dot: '#94A3B8', label: 'Decommissioned' },
   };
   const cfg = map[status] || map.available;
   return (
@@ -694,6 +698,7 @@ function OwnerContent() {
       illuminated: board.illuminated || false,
       latitude: board.latitude != null ? String(board.latitude) : '',
       longitude: board.longitude != null ? String(board.longitude) : '',
+      contact_phone: board.contact_phone || '',
     });
     setPanelPhotos(board.photo_urls ?? []);
     setShowPanel(true);
@@ -717,6 +722,7 @@ function OwnerContent() {
       latitude: form.latitude ? parseFloat(form.latitude) : null,
       longitude: form.longitude ? parseFloat(form.longitude) : null,
       photo_urls: panelPhotos.length > 0 ? panelPhotos : null,
+      contact_phone: form.contact_phone.trim() || null,
     };
 
     if (editingBoard) {
@@ -739,11 +745,20 @@ function OwnerContent() {
 
   async function toggleBoardStatus(board: Board) {
     if (board.status === 'booked') return; // can't toggle booked boards
-    const next = board.status === 'available' ? 'maintenance' : 'available';
+    const next = board.status === 'available' ? 'unavailable' : 'available';
     const { error } = await supabase.from('boards').update({ status: next }).eq('id', board.id);
     if (!error) {
       setBoards(prev => prev.map(b => b.id === board.id ? { ...b, status: next as Board['status'] } : b));
       showToast(`${board.name} set to ${next}`);
+      const actor = await getActivityActor();
+      await logActivity({
+        entityType: 'board',
+        entityId: board.id,
+        action: 'board.status_changed',
+        summary: `${board.name} marked ${next}`,
+        ...actor,
+        changes: { status: { from: board.status, to: next } },
+      });
     }
   }
 
@@ -1002,10 +1017,10 @@ function OwnerContent() {
                         >
                           Edit
                         </button>
-                        {board.status !== 'booked' && (
+                        {(board.status === 'available' || board.status === 'unavailable') && (
                           <button
                             onClick={() => toggleBoardStatus(board)}
-                            title={board.status === 'available' ? 'Mark as maintenance' : 'Mark as available'}
+                            title={board.status === 'available' ? 'Mark as unavailable' : 'Mark as available'}
                             style={{
                               background: board.status === 'available' ? '#FFFBEB' : '#ECFDF5',
                               color: board.status === 'available' ? '#92400E' : '#065F46',
@@ -1013,7 +1028,7 @@ function OwnerContent() {
                               borderRadius: '6px', fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit',
                             }}
                           >
-                            {board.status === 'available' ? 'Maintenance' : 'Available'}
+                            {board.status === 'available' ? 'Unavailable' : 'Available'}
                           </button>
                         )}
                       </div>
@@ -1723,6 +1738,11 @@ function OwnerContent() {
               <div style={{ marginBottom: 14 }}>
                 <FieldLabel>Street address</FieldLabel>
                 <FieldInput value={form.address} onChange={v => setForm(f => ({ ...f, address: v }))} placeholder="e.g. Along Airport Road, Ikeja" />
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <FieldLabel>WhatsApp / contact phone</FieldLabel>
+                <FieldInput value={form.contact_phone} onChange={v => setForm(f => ({ ...f, contact_phone: v }))} placeholder="e.g. 08012345678" />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>

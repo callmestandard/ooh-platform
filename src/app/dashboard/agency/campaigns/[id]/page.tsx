@@ -35,6 +35,7 @@ type Campaign = {
   arcon_approved_at: string | null;
   arcon_expiry_date: string | null;
   arcon_notes: string | null;
+  plan_version: number;
 };
 
 type ClientProfile = {
@@ -75,6 +76,10 @@ type PlanItem = {
   creative_type: string;
   print_required: boolean;
   notes: string | null;
+  gross_rate: number | null;
+  discount_pct: number | null;
+  production_cost: number | null;
+  replaces_booking_id: string | null;
   boards: Board;
 };
 
@@ -89,6 +94,8 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string; 
   agreed:      { label: 'Agreed',      bg: '#ECFDF5', color: '#065F46', dot: '#10B981' },
   signed:      { label: 'Signed',      bg: '#F5F3FF', color: '#3730A3', dot: '#8B5CF6' },
   declined:    { label: 'Declined',    bg: '#FEF2F2', color: '#7F1D1D', dot: '#EF4444' },
+  needs_replacement: { label: 'Needs replacement', bg: '#FEF2F2', color: '#991B1B', dot: '#EF4444' },
+  replaced:    { label: 'Replaced',    bg: '#F1F5F9', color: '#475569', dot: '#94A3B8' },
 };
 
 function StatusPill({ status }: { status: string }) {
@@ -200,6 +207,16 @@ export default function CampaignPlanPage() {
     printRequired: false,
     notes: '',
   });
+
+  // Board-swap flow: "needs replacement" → attach a candidate → approve
+  const [replacingItemId, setReplacingItemId] = useState<string | null>(null);
+  const [swapConfirm, setSwapConfirm] = useState<PlanItem | null>(null);
+  const [approvingSwapFor, setApprovingSwapFor] = useState<string | null>(null);
+
+  // Per-line financials (gross / discount / production)
+  const [financialsItem, setFinancialsItem] = useState<PlanItem | null>(null);
+  const [financialsForm, setFinancialsForm] = useState({ grossRate: '', discountPct: '', productionCost: '' });
+  const [savingFinancials, setSavingFinancials] = useState(false);
 
 
   async function saveArcon() {
@@ -411,14 +428,34 @@ export default function CampaignPlanPage() {
     setSendingToClient(false);
   }
 
+  // Active plan lines — excludes superseded ("replaced") lines and pending
+  // *unresolved* replacement candidates (still 'pending' review — those only
+  // appear in the swap-review section). Once a candidate is approved its
+  // status moves off 'pending' via approveSwap(), so it re-enters the main
+  // table normally even though replaces_booking_id stays set for history.
+  const mainTableItems = planItems.filter(i =>
+    i.status !== 'replaced' && !(i.replaces_booking_id && i.status === 'pending')
+  );
+  const needsReplacementItems = mainTableItems.filter(i => i.status === 'needs_replacement');
+  const candidatesByOriginal = planItems.reduce((acc, i) => {
+    if (i.replaces_booking_id) (acc[i.replaces_booking_id] ||= []).push(i);
+    return acc;
+  }, {} as Record<string, PlanItem[]>);
+
   // Derived financials
-  const totalPlanCost = planItems.reduce((sum, item) => {
+  const totalPlanCost = mainTableItems.reduce((sum, item) => {
     const rate = item.agreed_rate || item.offered_rate;
     return sum + (rate * (item.duration_months || 1));
   }, 0);
+  const totalGrossCost = mainTableItems.reduce((sum, item) => {
+    const gross = item.gross_rate ?? (item.agreed_rate || item.offered_rate);
+    return sum + (gross * (item.duration_months || 1));
+  }, 0);
+  const totalProductionCost = mainTableItems.reduce((sum, item) => sum + (item.production_cost || 0), 0);
+  const grandTotal = totalPlanCost + totalProductionCost;
 
-  const agreedCount = planItems.filter(i => ['agreed', 'signed'].includes(i.status)).length;
-  const pendingCount = planItems.filter(i => i.status === 'pending').length;
+  const agreedCount = mainTableItems.filter(i => ['agreed', 'signed'].includes(i.status)).length;
+  const pendingCount = mainTableItems.filter(i => i.status === 'pending').length;
 
   async function addBoardToPlan() {
     if (!addForm.boardId || !addForm.rate) return;
@@ -426,6 +463,7 @@ export default function CampaignPlanPage() {
     const board = allBoards.find(b => b.id === addForm.boardId);
     const startDate = addForm.startDate || campaign?.start_date;
     const endDate = addForm.endDate || campaign?.end_date;
+    const isReplacement = !!replacingItemId;
 
     const { data: newItem, error } = await supabase.from('bookings').insert({
       campaign_id: id,
@@ -439,6 +477,7 @@ export default function CampaignPlanPage() {
       print_required: addForm.printRequired,
       notes: addForm.notes || null,
       is_in_plan: true,
+      replaces_booking_id: isReplacement ? replacingItemId : null,
     }).select('id').single();
 
     if (!error && newItem) {
@@ -448,7 +487,9 @@ export default function CampaignPlanPage() {
         entityId: newItem.id,
         campaignId: id,
         action: 'booking.added_to_plan',
-        summary: `${board?.name} added to plan at ${formatNaira(parseFloat(addForm.rate))}/mo`,
+        summary: isReplacement
+          ? `${board?.name} attached as a replacement candidate at ${formatNaira(parseFloat(addForm.rate))}/mo`
+          : `${board?.name} added to plan at ${formatNaira(parseFloat(addForm.rate))}/mo`,
         ...actor,
       });
       setActivityKey(k => k + 1);
@@ -462,8 +503,9 @@ export default function CampaignPlanPage() {
       });
       await fetchData();
       setShowAddBoard(false);
+      setReplacingItemId(null);
       setAddForm({ boardId: '', rate: '', startDate: '', endDate: '', durationMonths: '1', creativeType: 'static', printRequired: false, notes: '' });
-      showToast(`${board?.name} added to plan`);
+      showToast(isReplacement ? `${board?.name} attached as a replacement candidate` : `${board?.name} added to plan`);
     } else {
       showToast('Failed to add board', 'error');
     }
@@ -512,6 +554,112 @@ export default function CampaignPlanPage() {
     setPlanItems(prev => prev.map(i => i.id === itemId ? { ...i, offered_rate: newRate } : i));
     setEditingItem(null);
     showToast('Rate updated');
+  }
+
+  // ── Board swap: mark a line as needing a replacement ──────────────────────
+
+  async function confirmMarkNeedsReplacement() {
+    if (!swapConfirm) return;
+    const item = swapConfirm;
+    setSwapConfirm(null);
+    const { error } = await supabase.from('bookings').update({ status: 'needs_replacement' }).eq('id', item.id);
+    if (error) { showToast('Failed to flag board', 'error'); return; }
+    const actor = await getActivityActor();
+    await logActivity({
+      entityType: 'booking', entityId: item.id, campaignId: id,
+      action: 'booking.status_changed',
+      summary: `${item.boards?.name} flagged — needs replacement`,
+      ...actor, changes: { status: { from: item.status, to: 'needs_replacement' } },
+    });
+    setActivityKey(k => k + 1);
+    setPlanItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'needs_replacement' } : i));
+    showToast(`${item.boards?.name} marked as needing a replacement`);
+  }
+
+  function openAttachReplacement(item: PlanItem) {
+    setReplacingItemId(item.id);
+    setBoardSearch('');
+    setAddForm({
+      boardId: '', rate: '',
+      startDate: item.start_date, endDate: item.end_date,
+      durationMonths: String(item.duration_months || 1),
+      creativeType: (item.creative_type as 'static' | 'led' | 'digital') || 'static',
+      printRequired: item.print_required, notes: '',
+    });
+    setShowAddBoard(true);
+  }
+
+  async function rejectReplacementCandidate(candidateId: string, boardName: string) {
+    const { error } = await supabase.from('bookings').delete().eq('id', candidateId);
+    if (error) { showToast('Failed to remove candidate', 'error'); return; }
+    setPlanItems(prev => prev.filter(i => i.id !== candidateId));
+    showToast(`Removed ${boardName} as a candidate`);
+  }
+
+  async function approveSwap(original: PlanItem, replacement: PlanItem) {
+    setApprovingSwapFor(replacement.id);
+    const { error: err1 } = await supabase.from('bookings').update({ status: 'replaced' }).eq('id', original.id);
+    const { error: err2 } = await supabase.from('bookings').update({ status: 'agreed' }).eq('id', replacement.id);
+    if (err1 || err2) { showToast('Failed to approve swap', 'error'); setApprovingSwapFor(null); return; }
+
+    const nextVersion = (campaign?.plan_version || 1) + 1;
+    await supabase.from('campaigns').update({ plan_version: nextVersion }).eq('id', id);
+
+    const actor = await getActivityActor();
+    await logActivity({
+      entityType: 'booking', entityId: original.id, campaignId: id,
+      action: 'booking.status_changed',
+      summary: `${original.boards?.name} replaced by ${replacement.boards?.name}`,
+      ...actor, changes: { status: { from: 'needs_replacement', to: 'replaced' } },
+    });
+    await logActivity({
+      entityType: 'booking', entityId: replacement.id, campaignId: id,
+      action: 'booking.status_changed',
+      summary: `${replacement.boards?.name} approved as replacement for ${original.boards?.name}`,
+      ...actor, changes: { status: { from: replacement.status, to: 'agreed' } },
+    });
+    await logActivity({
+      entityType: 'campaign', entityId: id, campaignId: id,
+      action: 'campaign.status_changed',
+      summary: `Plan updated to v${nextVersion} — ${original.boards?.name} → ${replacement.boards?.name}`,
+      ...actor, changes: { plan_version: { from: campaign?.plan_version || 1, to: nextVersion } },
+    });
+
+    setCampaign(prev => prev ? { ...prev, plan_version: nextVersion } : prev);
+    setPlanItems(prev => prev.map(i =>
+      i.id === original.id ? { ...i, status: 'replaced' } :
+      i.id === replacement.id ? { ...i, status: 'agreed' } : i
+    ));
+    setActivityKey(k => k + 1);
+    setApprovingSwapFor(null);
+    showToast(`Swap approved — plan is now v${nextVersion}. Raise a fresh MPO for ${replacement.boards?.name} from its negotiation page.`);
+  }
+
+  // ── Per-line financials ─────────────────────────────────────────────────
+
+  function openFinancials(item: PlanItem) {
+    setFinancialsItem(item);
+    setFinancialsForm({
+      grossRate: item.gross_rate != null ? String(item.gross_rate) : '',
+      discountPct: item.discount_pct != null ? String(item.discount_pct) : '',
+      productionCost: item.production_cost != null ? String(item.production_cost) : '',
+    });
+  }
+
+  async function saveFinancials() {
+    if (!financialsItem) return;
+    setSavingFinancials(true);
+    const payload = {
+      gross_rate: financialsForm.grossRate ? parseFloat(financialsForm.grossRate) : null,
+      discount_pct: financialsForm.discountPct ? parseFloat(financialsForm.discountPct) : 0,
+      production_cost: financialsForm.productionCost ? parseFloat(financialsForm.productionCost) : 0,
+    };
+    const { error } = await supabase.from('bookings').update(payload).eq('id', financialsItem.id);
+    setSavingFinancials(false);
+    if (error) { showToast('Failed to save financials', 'error'); return; }
+    setPlanItems(prev => prev.map(i => i.id === financialsItem.id ? { ...i, ...payload } : i));
+    showToast(`Financials updated for ${financialsItem.boards?.name}`);
+    setFinancialsItem(null);
   }
 
   async function approvePlan() {
@@ -599,6 +747,11 @@ export default function CampaignPlanPage() {
                 {campaign.name}
               </h1>
               <StatusPill status={campaign.status} />
+              {campaign.plan_version > 1 && (
+                <span style={{ fontSize: '0.6875rem', color: '#7C3AED', fontWeight: 700, background: '#F5F3FF', padding: '2px 8px', borderRadius: 4 }} title="Plan has been revised via a board swap">
+                  Plan v{campaign.plan_version}
+                </span>
+              )}
               {campaign.approved_at && (
                 <span style={{ fontSize: '0.6875rem', color: '#10B981', fontWeight: 600, background: '#ECFDF5', padding: '2px 8px', borderRadius: 4 }}>
                   ✓ Client approved
@@ -647,7 +800,7 @@ export default function CampaignPlanPage() {
               </button>
             )}
             <button
-              onClick={() => setShowAddBoard(true)}
+              onClick={() => { setReplacingItemId(null); setShowAddBoard(true); }}
               style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#1B4F8A', color: '#fff', border: 'none', padding: '9px 16px', borderRadius: '8px', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
             >
               <span style={{ fontSize: '1rem', lineHeight: 1 }}>+</span> Add board to plan
@@ -660,7 +813,7 @@ export default function CampaignPlanPage() {
           {[
             { label: 'Total budget', value: formatNaira(campaign.total_budget), bar: '#1B4F8A' },
             { label: 'Plan cost', value: formatNaira(totalPlanCost), bar: totalPlanCost > campaign.total_budget ? '#EF4444' : '#10B981' },
-            { label: 'Boards in plan', value: String(planItems.length), bar: '#3B82F6' },
+            { label: 'Boards in plan', value: String(mainTableItems.length), bar: '#3B82F6' },
             { label: 'Agreed', value: String(agreedCount), bar: '#10B981' },
             { label: 'Pending', value: String(pendingCount), bar: '#F59E0B' },
           ].map(({ label, value, bar }) => (
@@ -775,7 +928,74 @@ export default function CampaignPlanPage() {
         {/* Plan tab */}
         {activeTab === 'plan' && (
           <>
-            {planItems.length === 0 ? (
+            {/* ── Swap review — lines flagged "needs replacement" ── */}
+            {needsReplacementItems.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: '1.25rem' }}>
+                {needsReplacementItems.map(original => {
+                  const candidates = candidatesByOriginal[original.id] || [];
+                  return (
+                    <div key={original.id} style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 12, padding: '14px 18px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: candidates.length > 0 ? 12 : 4 }}>
+                        <div>
+                          <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#991B1B', margin: '0 0 2px' }}>
+                            ⚠ {original.boards?.name} needs a replacement
+                          </p>
+                          <p style={{ fontSize: '0.75rem', color: '#7F1D1D', margin: 0 }}>
+                            {original.boards?.city} · {FORMAT_LABELS[original.boards?.format] || original.boards?.format} · was {formatNaira(original.agreed_rate || original.offered_rate)}/mo
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => openAttachReplacement(original)}
+                          style={{ background: '#991B1B', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: 8, fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                        >
+                          + Attach candidate board
+                        </button>
+                      </div>
+
+                      {candidates.map(candidate => (
+                        <div key={candidate.id} style={{ background: '#fff', border: '1px solid #FECACA', borderRadius: 10, padding: '12px 14px', marginTop: 8 }}>
+                          <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>
+                            Old board vs. candidate
+                          </p>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 10, alignItems: 'center' }}>
+                            <div>
+                              <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#94A3B8', margin: '0 0 2px', textDecoration: 'line-through' }}>{original.boards?.name}</p>
+                              <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>{original.boards?.address}</p>
+                              <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '2px 0 0' }}>{original.boards?.width}m × {original.boards?.height}m</p>
+                              <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#94A3B8', margin: '4px 0 0', fontFamily: 'monospace' }}>{formatNaira(original.agreed_rate || original.offered_rate)}/mo</p>
+                            </div>
+                            <span style={{ color: '#CBD5E1', fontSize: '1.25rem' }}>→</span>
+                            <div>
+                              <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>{candidate.boards?.name}</p>
+                              <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0 }}>{candidate.boards?.address}</p>
+                              <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0' }}>{candidate.boards?.width}m × {candidate.boards?.height}m</p>
+                              <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', margin: '4px 0 0', fontFamily: 'monospace' }}>{formatNaira(candidate.offered_rate)}/mo</p>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                            <button
+                              onClick={() => approveSwap(original, candidate)}
+                              disabled={approvingSwapFor === candidate.id}
+                              style={{ flex: 1, background: '#059669', color: '#fff', border: 'none', padding: '9px 0', borderRadius: 8, fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                            >
+                              {approvingSwapFor === candidate.id ? 'Approving…' : 'Approve replacement'}
+                            </button>
+                            <button
+                              onClick={() => rejectReplacementCandidate(candidate.id, candidate.boards?.name)}
+                              style={{ background: '#fff', color: '#64748B', border: '1px solid #E2E8F0', padding: '9px 14px', borderRadius: 8, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {mainTableItems.length === 0 ? (
               <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', padding: '4rem 2rem', textAlign: 'center' }}>
                 <div style={{ width: 48, height: 48, background: '#F1F5F9', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -789,7 +1009,7 @@ export default function CampaignPlanPage() {
                   Add boards from your inventory to build the media plan
                 </p>
                 <button
-                  onClick={() => setShowAddBoard(true)}
+                  onClick={() => { setReplacingItemId(null); setShowAddBoard(true); }}
                   style={{ background: '#1B4F8A', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
                 >
                   + Add first board
@@ -806,13 +1026,13 @@ export default function CampaignPlanPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {planItems.map((item, i) => {
+                    {mainTableItems.map((item, i) => {
                       const rate = item.agreed_rate || item.offered_rate;
                       const total = rate * (item.duration_months || 1);
                       const isEditing = editingItem === item.id;
 
                       return (
-                        <tr key={item.id} className="row-hover" style={{ borderBottom: i < planItems.length - 1 ? '1px solid #F8FAFC' : 'none', transition: 'background 0.1s' }}>
+                        <tr key={item.id} className="row-hover" style={{ borderBottom: i < mainTableItems.length - 1 ? '1px solid #F8FAFC' : 'none', transition: 'background 0.1s' }}>
                           <td style={{ padding: '12px 14px' }}>
                             <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px', whiteSpace: 'nowrap' }}>
                               {item.boards?.name || 'Unknown'}
@@ -839,10 +1059,19 @@ export default function CampaignPlanPage() {
                                 />
                               </form>
                             ) : (
-                              <button onClick={() => setEditingItem(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 600, color: item.agreed_rate ? '#10B981' : '#0F172A', padding: 0 }}>
-                                {formatNaira(rate)}
-                                {item.agreed_rate && <span style={{ fontSize: '0.625rem', color: '#10B981', marginLeft: 4 }}>agreed</span>}
-                              </button>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <button onClick={() => setEditingItem(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 600, color: item.agreed_rate ? '#10B981' : '#0F172A', padding: 0 }}>
+                                  {formatNaira(rate)}
+                                  {item.agreed_rate && <span style={{ fontSize: '0.625rem', color: '#10B981', marginLeft: 4 }}>agreed</span>}
+                                </button>
+                                <button
+                                  onClick={() => openFinancials(item)}
+                                  title="Gross / discount / production cost"
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.75rem', opacity: item.gross_rate || item.production_cost ? 1 : 0.35 }}
+                                >
+                                  💰
+                                </button>
+                              </div>
                             )}
                           </td>
                           <td style={{ padding: '12px 14px', fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 700, color: '#0F172A' }}>
@@ -925,15 +1154,28 @@ export default function CampaignPlanPage() {
                             </div>
                           </td>
                           <td style={{ padding: '12px 14px' }}>
-                            <button
-                              className="remove-btn"
-                              onClick={() => removeFromPlan(item.id, item.boards?.name)}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', display: 'flex', padding: 4 }}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-                              </svg>
-                            </button>
+                            <div className="remove-btn" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              {['agreed', 'signed', 'live'].includes(item.status) && (
+                                <button
+                                  onClick={() => setSwapConfirm(item)}
+                                  title="Mark as needing a replacement"
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#F59E0B', display: 'flex', padding: 4 }}
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                                  </svg>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => removeFromPlan(item.id, item.boards?.name)}
+                                title="Remove from plan"
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#EF4444', display: 'flex', padding: 4 }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                                </svg>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -942,15 +1184,37 @@ export default function CampaignPlanPage() {
                   <tfoot>
                     <tr style={{ background: '#F8FAFC', borderTop: '2px solid #E8EDF2' }}>
                       <td colSpan={5} style={{ padding: '12px 14px', fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>
-                        Total plan cost
+                        Total media cost{totalProductionCost > 0 ? ' (excl. production)' : ''}
                       </td>
                       <td style={{ padding: '12px 14px', fontFamily: 'monospace', fontSize: '1rem', fontWeight: 800, color: totalPlanCost > campaign.total_budget ? '#EF4444' : '#0F172A' }}>
                         {formatNaira(totalPlanCost)}
                       </td>
                       <td colSpan={4} style={{ padding: '12px 14px', fontSize: '0.75rem', color: '#94A3B8' }}>
-                        {planItems.length} board{planItems.length !== 1 ? 's' : ''} · Budget: {formatNaira(campaign.total_budget)}
+                        {mainTableItems.length} board{mainTableItems.length !== 1 ? 's' : ''} · Budget: {formatNaira(campaign.total_budget)}
                       </td>
                     </tr>
+                    {totalProductionCost > 0 && (
+                      <tr style={{ background: '#F8FAFC' }}>
+                        <td colSpan={5} style={{ padding: '8px 14px', fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>
+                          + Production cost
+                        </td>
+                        <td style={{ padding: '8px 14px', fontFamily: 'monospace', fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A' }}>
+                          {formatNaira(totalProductionCost)}
+                        </td>
+                        <td colSpan={4} />
+                      </tr>
+                    )}
+                    {totalProductionCost > 0 && (
+                      <tr style={{ background: '#F1F5F9', borderTop: '1px solid #E2E8F0' }}>
+                        <td colSpan={5} style={{ padding: '10px 14px', fontSize: '0.8125rem', fontWeight: 800, color: '#0F172A' }}>
+                          Grand total
+                        </td>
+                        <td style={{ padding: '10px 14px', fontFamily: 'monospace', fontSize: '1rem', fontWeight: 800, color: '#0F172A' }}>
+                          {formatNaira(grandTotal)}
+                        </td>
+                        <td colSpan={4} />
+                      </tr>
+                    )}
                   </tfoot>
                 </table>
               </div>
@@ -969,12 +1233,21 @@ export default function CampaignPlanPage() {
                 { label: 'Client', value: campaign.client_name || '—' },
                 { label: 'Duration', value: `${formatDate(campaign.start_date)} → ${formatDate(campaign.end_date)}` },
                 { label: 'Total budget', value: formatNaira(campaign.total_budget) },
-                { label: 'Plan cost', value: formatNaira(totalPlanCost) },
-                { label: 'Remaining budget', value: formatNaira(campaign.total_budget - totalPlanCost) },
-                { label: 'Boards in plan', value: String(planItems.length) },
-                { label: 'Static boards', value: String(planItems.filter(i => i.creative_type === 'static').length) },
-                { label: 'LED/Digital boards', value: String(planItems.filter(i => ['led', 'digital'].includes(i.creative_type)).length) },
-                { label: 'Print required', value: String(planItems.filter(i => i.print_required).length) + ' boards' },
+                ...(totalGrossCost !== totalPlanCost ? [
+                  { label: 'Gross media cost', value: formatNaira(totalGrossCost) },
+                  { label: 'Net media cost (after discount)', value: formatNaira(totalPlanCost) },
+                ] : [
+                  { label: 'Plan cost', value: formatNaira(totalPlanCost) },
+                ]),
+                ...(totalProductionCost > 0 ? [
+                  { label: 'Production cost', value: formatNaira(totalProductionCost) },
+                  { label: 'Grand total', value: formatNaira(grandTotal) },
+                ] : []),
+                { label: 'Remaining budget', value: formatNaira(campaign.total_budget - grandTotal) },
+                { label: 'Boards in plan', value: String(mainTableItems.length) },
+                { label: 'Static boards', value: String(mainTableItems.filter(i => i.creative_type === 'static').length) },
+                { label: 'LED/Digital boards', value: String(mainTableItems.filter(i => ['led', 'digital'].includes(i.creative_type)).length) },
+                { label: 'Print required', value: String(mainTableItems.filter(i => i.print_required).length) + ' boards' },
               ].map(({ label, value }) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #F8FAFC' }}>
                   <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>{label}</span>
@@ -987,7 +1260,7 @@ export default function CampaignPlanPage() {
             <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', padding: '20px' }}>
               <h2 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: '0 0 16px' }}>Boards by city</h2>
               {Object.entries(
-                planItems.reduce((acc, item) => {
+                mainTableItems.reduce((acc, item) => {
                   const city = item.boards?.city || 'Unknown';
                   if (!acc[city]) acc[city] = { count: 0, cost: 0 };
                   acc[city].count++;
@@ -1003,13 +1276,13 @@ export default function CampaignPlanPage() {
                   <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', fontFamily: 'monospace' }}>{formatNaira(data.cost)}</span>
                 </div>
               ))}
-              {planItems.length === 0 && <p style={{ fontSize: '0.8125rem', color: '#94A3B8', textAlign: 'center', padding: '2rem 0' }}>No boards in plan yet</p>}
+              {mainTableItems.length === 0 && <p style={{ fontSize: '0.8125rem', color: '#94A3B8', textAlign: 'center', padding: '2rem 0' }}>No boards in plan yet</p>}
 
               {/* Print dimensions */}
-              {planItems.filter(i => i.print_required).length > 0 && (
+              {mainTableItems.filter(i => i.print_required).length > 0 && (
                 <>
                   <h2 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: '20px 0 12px' }}>Print dimensions needed</h2>
-                  {planItems.filter(i => i.print_required).map(item => (
+                  {mainTableItems.filter(i => i.print_required).map(item => (
                     <div key={item.id} style={{ padding: '8px 0', borderBottom: '1px solid #F8FAFC' }}>
                       <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>{item.boards?.name}</p>
                       <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>
@@ -1614,15 +1887,21 @@ export default function CampaignPlanPage() {
       {/* Add board slide-in panel */}
       {showAddBoard && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', justifyContent: 'flex-end' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={() => setShowAddBoard(false)} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={() => { setShowAddBoard(false); setReplacingItemId(null); }} />
           <div style={{ position: 'relative', width: 480, background: '#fff', height: '100%', boxShadow: '-8px 0 32px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', fontFamily: 'inherit' }}>
             {/* Panel header */}
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>Add board to plan</h2>
-                <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>{campaign.name}</p>
+                <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>
+                  {replacingItemId ? 'Attach replacement board' : 'Add board to plan'}
+                </h2>
+                <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>
+                  {replacingItemId
+                    ? `Replacing ${planItems.find(i => i.id === replacingItemId)?.boards?.name || 'the flagged board'}`
+                    : campaign.name}
+                </p>
               </div>
-              <button onClick={() => setShowAddBoard(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '1.125rem', display: 'flex', padding: 4 }}>✕</button>
+              <button onClick={() => { setShowAddBoard(false); setReplacingItemId(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '1.125rem', display: 'flex', padding: 4 }}>✕</button>
             </div>
 
             {/* Board search */}
@@ -1814,7 +2093,7 @@ export default function CampaignPlanPage() {
                   disabled={saving || !addForm.rate}
                   style={{ width: '100%', padding: '11px', background: saving || !addForm.rate ? '#94A3B8' : '#1B4F8A', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.875rem', fontWeight: 600, cursor: saving || !addForm.rate ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
                 >
-                  {saving ? 'Adding...' : 'Add to plan'}
+                  {saving ? 'Adding...' : replacingItemId ? 'Attach as candidate' : 'Add to plan'}
                 </button>
               </div>
             )}
@@ -1872,6 +2151,70 @@ export default function CampaignPlanPage() {
         onConfirm={confirmApprovePlan}
         onCancel={() => setApproveConfirm(false)}
       />
+      <ConfirmDialog
+        open={!!swapConfirm}
+        title={`Mark ${swapConfirm?.boards?.name ?? 'this board'} as needing a replacement?`}
+        description="It'll be flagged in the plan and you can attach a candidate board to replace it. The original line stays until you approve a replacement."
+        confirmLabel="Flag for replacement"
+        variant="danger"
+        onConfirm={confirmMarkNeedsReplacement}
+        onCancel={() => setSwapConfirm(null)}
+      />
+
+      {/* Financials slide-in panel */}
+      {financialsItem && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={() => setFinancialsItem(null)} />
+          <div style={{ position: 'relative', width: 400, background: '#fff', height: '100%', boxShadow: '-8px 0 32px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', fontFamily: 'inherit' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>Line financials</h2>
+                <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>{financialsItem.boards?.name}</p>
+              </div>
+              <button onClick={() => setFinancialsItem(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '1.125rem', display: 'flex', padding: 4 }}>✕</button>
+            </div>
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: '#374151', marginBottom: 4 }}>Gross rate — rate-card value before discount (₦/mo)</label>
+                <input
+                  type="number" value={financialsForm.grossRate}
+                  onChange={e => setFinancialsForm(f => ({ ...f, grossRate: e.target.value }))}
+                  placeholder={String(financialsItem.boards?.asking_rate || '')}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #E2E8F0', borderRadius: '7px', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: '#374151', marginBottom: 4 }}>Discount off gross (%)</label>
+                <input
+                  type="number" value={financialsForm.discountPct}
+                  onChange={e => setFinancialsForm(f => ({ ...f, discountPct: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #E2E8F0', borderRadius: '7px', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: '#374151', marginBottom: 4 }}>Production cost — one-off print/install (₦)</label>
+                <input
+                  type="number" value={financialsForm.productionCost}
+                  onChange={e => setFinancialsForm(f => ({ ...f, productionCost: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid #E2E8F0', borderRadius: '7px', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div style={{ background: '#F8FAFC', borderRadius: 8, padding: '10px 12px' }}>
+                <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0 }}>
+                  Net rate (what&apos;s actually charged/negotiated) stays the agreed rate — {formatNaira(financialsItem.agreed_rate || financialsItem.offered_rate)}/mo. These fields are for reporting the gross/discount/production breakdown alongside it.
+                </p>
+              </div>
+              <button
+                onClick={saveFinancials}
+                disabled={savingFinancials}
+                style={{ width: '100%', padding: '11px', background: savingFinancials ? '#94A3B8' : '#1B4F8A', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.875rem', fontWeight: 600, cursor: savingFinancials ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
+              >
+                {savingFinancials ? 'Saving…' : 'Save financials'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </>
   );

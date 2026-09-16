@@ -9,7 +9,7 @@ import { supabase } from './supabase';
 import { getSupabaseAdmin } from './supabase-admin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export type ActivityEntityType = 'campaign' | 'booking' | 'invoice' | 'compliance_check';
+export type ActivityEntityType = 'campaign' | 'booking' | 'invoice' | 'compliance_check' | 'board';
 
 export type ActivityEvent = {
   id: string;

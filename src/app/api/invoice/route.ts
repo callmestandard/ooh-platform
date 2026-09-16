@@ -6,7 +6,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const PLATFORM_COMMISSION = 0.12;
+// Demand-side-only service fee — board owners are never charged a
+// commission and receive their full agreed rate. Matches the AdQuick
+// model: free forever for media owners, fee charged only to
+// agencies/advertisers for the convenience of the platform. This used to
+// be a 12% deduction taken from BOTH sides (agency paid +12%, owner
+// received -12%), netting the platform ~24% per booking — fixed.
+const PLATFORM_SERVICE_FEE = 0.10;
 
 function formatNaira(n: number) {
   return '₦' + n.toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -91,9 +97,9 @@ async function generateInvoicePDF(booking: any, type: 'agency' | 'owner'): Promi
     const rate         = booking.agreed_rate || booking.offered_rate || 0;
     const months       = booking.duration_months || 1;
     const mediaSubtotal = rate * months;
-    const commission   = Math.round(mediaSubtotal * PLATFORM_COMMISSION);
-    const ownerPayout  = mediaSubtotal - commission;
-    const agencyTotal  = mediaSubtotal + commission; // agency pays media + fee
+    const serviceFee    = Math.round(mediaSubtotal * PLATFORM_SERVICE_FEE);
+    const ownerPayout   = mediaSubtotal; // owners are never charged — full agreed rate, no deduction
+    const agencyTotal   = mediaSubtotal + serviceFee; // agency pays media + platform service fee
     const invNo        = invoiceNumber(booking.id, booking.created_at);
     const issueDate    = formatDate(new Date().toISOString());
     const dueDate      = formatDate(new Date(Date.now() + 30 * 86400000).toISOString());
@@ -222,12 +228,12 @@ async function generateInvoicePDF(booking: any, type: 'agency' | 'owner'): Promi
       type === 'agency'
         ? [
             { label: 'Media subtotal',       value: formatNaira(mediaSubtotal) },
-            { label: `Platform fee (${(PLATFORM_COMMISSION * 100).toFixed(0)}%)`, value: formatNaira(commission) },
+            { label: `Platform service fee (${(PLATFORM_SERVICE_FEE * 100).toFixed(0)}%)`, value: formatNaira(serviceFee) },
             { label: 'TOTAL DUE',            value: formatNaira(agencyTotal), bold: true, highlight: true },
           ]
         : [
             { label: 'Gross booking value',  value: formatNaira(mediaSubtotal) },
-            { label: `Platform fee (${(PLATFORM_COMMISSION * 100).toFixed(0)}%)`, value: `– ${formatNaira(commission)}` },
+            { label: 'Platform fee',         value: 'None — free for media partners' },
             { label: 'YOUR PAYOUT',          value: formatNaira(ownerPayout), bold: true, highlight: true },
           ];
 
@@ -261,7 +267,7 @@ async function generateInvoicePDF(booking: any, type: 'agency' | 'owner'): Promi
        .text(
          type === 'agency'
            ? `Transfer to: OOH Platform Trust Account · Zenith Bank · 1234567890 · Sort: 057\nRef: ${invNo} · Payment due within 30 days of invoice date`
-           : `Payout will be processed within 5 business days of campaign completion.\nRef: ${invNo} · OOH Platform will deduct the ${(PLATFORM_COMMISSION * 100).toFixed(0)}% platform fee automatically.`,
+           : `Payout will be processed within 5 business days of campaign completion.\nRef: ${invNo} · Full amount — OOH Platform never charges media partners a fee.`,
          M + 14, y + 22, { width: W - M * 2 - 28 }
        );
     y += 68;

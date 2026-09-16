@@ -28,9 +28,10 @@ const FORMAT_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  available:   '#10B981',
-  booked:      '#3B82F6',
-  maintenance: '#F59E0B',
+  available:      '#10B981',
+  booked:         '#3B82F6',
+  unavailable:    '#F59E0B',
+  decommissioned: '#94A3B8',
 };
 
 function ScoreBar({ label, value, color }: { label: string; value: number; color: string }) {

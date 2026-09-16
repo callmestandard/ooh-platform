@@ -132,11 +132,11 @@ export default function ReportsPage() {
 
   // Board utilization by format
   const byFormat = boards.reduce((acc, b) => {
-    acc[b.format] = acc[b.format] || { total: 0, booked: 0, available: 0, maintenance: 0 };
+    acc[b.format] = acc[b.format] || { total: 0, booked: 0, available: 0, unavailable: 0, decommissioned: 0 };
     acc[b.format].total++;
-    acc[b.format][b.status as 'booked' | 'available' | 'maintenance']++;
+    acc[b.format][b.status as 'booked' | 'available' | 'unavailable' | 'decommissioned']++;
     return acc;
-  }, {} as Record<string, { total: number; booked: number; available: number; maintenance: number }>);
+  }, {} as Record<string, { total: number; booked: number; available: number; unavailable: number; decommissioned: number }>);
 
   const FORMAT_LABELS: Record<string, string> = {
     billboard: 'Billboard', unipole: 'Unipole', gantry: 'Gantry',
@@ -475,7 +475,8 @@ export default function ReportsPage() {
                   {[
                     { label: 'Booked', count: bookedBoards, color: '#3B82F6' },
                     { label: 'Available', count: availableBoards, color: '#10B981' },
-                    { label: 'Maintenance', count: boards.filter(b => b.status === 'maintenance').length, color: '#F59E0B' },
+                    { label: 'Unavailable', count: boards.filter(b => b.status === 'unavailable').length, color: '#F59E0B' },
+                    { label: 'Decommissioned', count: boards.filter(b => b.status === 'decommissioned').length, color: '#94A3B8' },
                   ].map(({ label, count, color }) => (
                     <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <span style={{ width: 8, height: 8, borderRadius: '2px', background: color, flexShrink: 0 }} />
@@ -533,7 +534,7 @@ export default function ReportsPage() {
                   ))}
                 </div>
                 {boards.map((b, i) => {
-                  const statusColor = { available: '#10B981', booked: '#3B82F6', maintenance: '#F59E0B' }[b.status] || '#94A3B8';
+                  const statusColor = { available: '#10B981', booked: '#3B82F6', unavailable: '#F59E0B', decommissioned: '#94A3B8' }[b.status] || '#94A3B8';
                   return (
                     <div key={b.id} className="report-row" style={{
                       display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr',

@@ -67,6 +67,31 @@ const CITY_PRIORITY: Record<string, number> = {
   lagos: 10, abuja: 9, 'port harcourt': 8, kano: 7, ibadan: 6,
 };
 
+// Mirrors the hint tags from /api/campaign-brief's LOCATION_HINT_KEYWORDS —
+// used to boost boards whose notes/address/name match a brief's free-text
+// location vibe (e.g. "campus areas"). Keyword heuristic, not true location
+// understanding — boards without matching notes just don't get the boost.
+const LOCATION_HINT_KEYWORDS: Record<string, string[]> = {
+  campus: ['campus', 'university', 'polytechnic', 'college', 'school'],
+  youth: ['youth', 'student', 'gen z', 'young adult'],
+  mall: ['mall', 'shopping complex', 'shopping centre', 'shopping center'],
+  market: ['market', 'trade fair', 'trading hub'],
+  residential: ['residential', 'estate', 'gated community', 'housing'],
+  religious: ['church', 'mosque', 'worship'],
+  healthcare: ['hospital', 'clinic', 'medical'],
+  stadium: ['stadium', 'arena', 'sports complex'],
+  airport: ['airport', 'terminal'],
+  financial: ['financial district', 'business district', 'cbd', 'bank'],
+  transit: ['bus stop', 'bus terminal', 'motor park', 'train station', 'transit'],
+  nightlife: ['nightlife', 'bar', 'lounge', 'entertainment district'],
+};
+
+function boardMatchesHints(board: Board, hints: string[]): boolean {
+  if (hints.length === 0) return false;
+  const haystack = `${board.name} ${board.address} ${board.notes || ''}`.toLowerCase();
+  return hints.some(hint => (LOCATION_HINT_KEYWORDS[hint] || []).some(kw => haystack.includes(kw)));
+}
+
 const FORMAT_PRIORITY: Record<Objective, string[]> = {
   awareness:  ['unipole', 'gantry', 'billboard', 'bridge_panel', 'wall_drape'],
   launch:     ['gantry', 'unipole', 'bridge_panel', 'billboard', 'wall_drape'],
@@ -98,9 +123,22 @@ function smartSuggest(
   boards: Board[],
   budget: number,
   objective: Objective,
-  audienceProfiles?: Record<string, AudienceProfile>
+  audienceProfiles?: Record<string, AudienceProfile>,
+  briefCities?: string[],
+  briefFormats?: string[],
+  locationHints?: string[],
 ): string[] {
-  const available = boards.filter(b => b.status === 'available' && b.asking_rate);
+  let available = boards.filter(b => b.status === 'available' && b.asking_rate);
+
+  // Brief-derived city filter — hard filter, but only if it actually leaves
+  // candidates (a mis-parsed city shouldn't zero out the whole shortlist).
+  if (briefCities && briefCities.length > 0) {
+    const cityMatched = available.filter(b =>
+      briefCities.some(c => (b.city || '').toLowerCase() === c.toLowerCase())
+    );
+    if (cityMatched.length > 0) available = cityMatched;
+  }
+
   const fmtPriority = FORMAT_PRIORITY[objective];
 
   const scored = available.map(b => {
@@ -121,7 +159,15 @@ function smartSuggest(
       }
     }
 
-    const valueScore = (cityScore * 100 + normalizedFmt * 50 + audienceBonus) / (rate / 100000);
+    // Brief-derived format bonus — soft signal (formats can be sparse in
+    // inventory, so this boosts rather than excludes).
+    const briefFormatBonus = briefFormats && briefFormats.includes(b.format || '') ? 40 : 0;
+
+    // Brief-derived free-text location hint bonus (e.g. "campus areas") —
+    // keyword match against the board's own notes/address/name.
+    const hintBonus = boardMatchesHints(b, locationHints || []) ? 60 : 0;
+
+    const valueScore = (cityScore * 100 + normalizedFmt * 50 + audienceBonus + briefFormatBonus + hintBonus) / (rate / 100000);
     return { board: b, score: valueScore };
   });
 
@@ -153,6 +199,7 @@ type ParsedBrief = {
   end_date: string;
   cities: string[];
   formats: string[];
+  location_hints: string[];
   notes: string;
   confidence: number;
   warnings: string[];
@@ -190,10 +237,11 @@ export default function CampaignPlannerPage() {
   useEffect(() => {
     supabase
       .from('boards')
-      .select('id, name, address, latitude, longitude, width, height, format, asking_rate, photos, status, state, city')
+      .select('id, name, address, latitude, longitude, width, height, format, asking_rate, photo_urls, status, state, city, notes')
       .not('latitude', 'is', null)
       .not('longitude', 'is', null)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) { console.error('[campaign-planner] boards fetch failed:', error.message); }
         setBoards((data as Board[]) || []);
         setLoading(false);
       });
@@ -233,7 +281,7 @@ export default function CampaignPlannerPage() {
     setSuggesting(true);
     setTimeout(() => {
       const profileCount = Object.keys(audienceProfiles).length;
-      const ids = smartSuggest(boards, budget, form.objective as Objective, audienceProfiles);
+      const ids = smartSuggest(boards, budget, form.objective as Objective, audienceProfiles, parsedBrief?.cities, parsedBrief?.formats, parsedBrief?.location_hints);
       setSelectedIds(new Set(ids));
       setSuggesting(false);
       const suffix = profileCount > 0 ? ` (audience data from ${profileCount} enriched boards)` : '';
@@ -382,7 +430,19 @@ export default function CampaignPlannerPage() {
         end_date:     parsed.end_date || '',
       });
       setBriefMode(false);
-      showToast(`Brief parsed (${parsed.confidence}% confidence) — review details below`);
+
+      // Pre-filter the shortlist from the brief's cities/formats right away,
+      // so step 2 doesn't start from a blank map — instead of waiting for
+      // the user to separately hit Smart Suggest.
+      if (parsed.total_budget > 0 && boards.length > 0) {
+        const ids = smartSuggest(boards, parsed.total_budget, (parsed.objective || 'awareness') as Objective, audienceProfiles, parsed.cities, parsed.formats, parsed.location_hints);
+        setSelectedIds(new Set(ids));
+        const where = parsed.cities.length > 0 ? ` in ${parsed.cities.join(', ')}` : '';
+        const hintNote = parsed.location_hints.length > 0 ? ` (matched: ${parsed.location_hints.join(', ')})` : '';
+        showToast(`Brief parsed (${parsed.confidence}% confidence) — ${ids.length} boards pre-selected${where}${hintNote}`);
+      } else {
+        showToast(`Brief parsed (${parsed.confidence}% confidence) — review details below`);
+      }
     } catch {
       showToast('Failed to parse brief', 'error');
     } finally {

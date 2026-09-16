@@ -89,7 +89,7 @@ export default function NegotiationsPage() {
 
       const { data, error } = await supabase
         .from('bookings')
-        .select(`id, status, offered_rate, agreed_rate, start_date, end_date, created_at, campaign_id, board_id, boards (id, name, address, city, state, format, asking_rate, photos), campaigns!inner (id, name, agency_id)`)
+        .select(`id, status, offered_rate, agreed_rate, start_date, end_date, created_at, campaign_id, board_id, boards (id, name, address, city, state, format, asking_rate, photo_urls), campaigns!inner (id, name, agency_id)`)
         .eq('campaigns.agency_id', uid)
         .order('created_at', { ascending: false })
         .limit(150);

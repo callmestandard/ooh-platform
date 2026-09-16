@@ -39,6 +39,8 @@ export default function SignupPage() {
   const [role, setRole]           = useState<DemoRole | null>(null);
   const [fullName, setFullName]   = useState('');
   const [company, setCompany]     = useState('');
+  const [cacNumber, setCacNumber] = useState('');
+  const [tinNumber, setTinNumber] = useState('');
   const [email, setEmail]         = useState('');
   const [password, setPassword]   = useState('');
   const [confirm, setConfirm]     = useState('');
@@ -57,6 +59,8 @@ export default function SignupPage() {
     e.preventDefault();
     if (!fullName.trim())          { setError('Full name is required.'); return; }
     if (!company.trim())           { setError('Company name is required.'); return; }
+    if (role === 'owner' && !cacNumber.trim()) { setError('CAC registration number is required for media partners.'); return; }
+    if (role === 'owner' && !tinNumber.trim()) { setError('TIN (Tax Identification Number) is required for media partners.'); return; }
     if (!email.trim())             { setError('Email is required.'); return; }
     if (password.length < 8)      { setError('Password must be at least 8 characters.'); return; }
     if (password !== confirm)      { setError('Passwords do not match.'); return; }
@@ -73,6 +77,7 @@ export default function SignupPage() {
           full_name:    fullName.trim(),
           company_name: company.trim(),
           role,
+          ...(role === 'owner' ? { cac_number: cacNumber.trim(), tin_number: tinNumber.trim() } : {}),
         },
       },
     });
@@ -107,7 +112,7 @@ export default function SignupPage() {
           <p style={{ fontSize: '0.9375rem', color: '#64748B', margin: '0 0 24px', lineHeight: 1.6 }}>
             We&apos;ve sent a confirmation link to <strong style={{ color: '#0F172A' }}>{email}</strong>. Click the link to activate your account.
           </p>
-          <a href="/" style={{ display: 'inline-block', padding: '10px 24px', background: '#1B4F8A', color: '#fff', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, textDecoration: 'none' }}>
+          <a href="/auth/login" style={{ display: 'inline-block', padding: '10px 24px', background: '#1B4F8A', color: '#fff', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, textDecoration: 'none' }}>
             Back to sign in
           </a>
         </div>
@@ -247,6 +252,32 @@ export default function SignupPage() {
                 </div>
               </div>
 
+              {role === 'owner' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: 5 }}>CAC registration number *</label>
+                    <input
+                      value={cacNumber} onChange={e => { setCacNumber(e.target.value); setError(''); }}
+                      placeholder="RC1234567"
+                      style={inputStyle}
+                      onFocus={focusStyle} onBlur={blurStyle}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: 5 }}>TIN (Tax ID) *</label>
+                    <input
+                      value={tinNumber} onChange={e => { setTinNumber(e.target.value); setError(''); }}
+                      placeholder="12345678-0001"
+                      style={inputStyle}
+                      onFocus={focusStyle} onBlur={blurStyle}
+                    />
+                  </div>
+                  <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '-2px 0 0', gridColumn: '1 / -1' }}>
+                    Required to verify your business as a registered media partner. Kept private — never shown to agencies.
+                  </p>
+                </div>
+              )}
+
               <div style={{ marginBottom: 12 }}>
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: 5 }}>Work email *</label>
                 <input
@@ -320,7 +351,7 @@ export default function SignupPage() {
 
           <p style={{ textAlign: 'center', fontSize: '0.8125rem', color: '#94A3B8', margin: '20px 0 0' }}>
             Already have an account?{' '}
-            <a href="/" style={{ color: '#1B4F8A', fontWeight: 600, textDecoration: 'none' }}>Sign in</a>
+            <a href="/auth/login" style={{ color: '#1B4F8A', fontWeight: 600, textDecoration: 'none' }}>Sign in</a>
           </p>
         </div>
       </div>

@@ -54,37 +54,16 @@ export default function POEUploadPage() {
   }, [token]);
 
   async function fetchBooking() {
-    const { data, error } = await supabase
-      .from('bookings')
-      .select(`
-        id, status, poe_token, start_date, end_date,
-        boards (name, address, city, format, width, height),
-        campaigns (id, name, client_name)
-      `)
-      .eq('poe_token', token)
-      .single();
+    const res = await fetch(`/api/poe/${token}`);
+    const result = await res.json();
 
-    if (error || !data) {
+    if (!res.ok || result.status === 'invalid') {
       setStep('invalid');
       return;
     }
 
-    // Check if POE already submitted
-    const { data: existing } = await supabase
-      .from('compliance_checks')
-      .select('id, status')
-      .eq('booking_id', data.id)
-      .eq('status', 'verified')
-      .single();
-
-    if (existing) {
-      setStep('already_submitted');
-      setBooking(data as unknown as BookingInfo);
-      return;
-    }
-
-    setBooking(data as unknown as BookingInfo);
-    setStep('form');
+    setBooking(result.booking as BookingInfo);
+    setStep(result.status === 'already_submitted' ? 'already_submitted' : 'form');
   }
 
   function handlePhotoSelect(file: File) {
@@ -149,31 +128,31 @@ export default function POEUploadPage() {
       }
     }
 
-    const { data: newCheck, error: insertError } = await supabase.from('compliance_checks').insert({
-      booking_id: booking.id,
-      photo_url: photoUrl,
-      latitude: location?.lat,
-      longitude: location?.lng,
-      submitted_at: new Date().toISOString(),
-      submitted_by: submitterName,
-      submitted_name: submitterName,
-      status: 'submitted',
-      notes: notes || null,
-      device_info: navigator.userAgent,
-    }).select('id').single();
+    const completeRes = await fetch(`/api/poe/${token}/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        photoUrl,
+        latitude: location?.lat,
+        longitude: location?.lng,
+        submitterName,
+        notes: notes || null,
+        deviceInfo: navigator.userAgent,
+      }),
+    });
 
-    if (insertError) {
+    if (!completeRes.ok) {
       setStep('form');
       setErrors({ submit: 'Failed to submit. Please try again.' });
       return;
     }
 
-    await supabase.from('bookings').update({ status: 'live' }).eq('id', booking.id);
+    const { complianceCheckId } = await completeRes.json();
 
     const campaignId = (booking.campaigns as { id?: string } | null)?.id ?? null;
     await logActivity({
       entityType: 'compliance_check',
-      entityId: newCheck!.id,
+      entityId: complianceCheckId,
       campaignId,
       action: 'compliance.submitted',
       summary: `POE submitted for ${booking.boards?.name || 'board'} — ${booking.campaigns?.name || 'campaign'}`,

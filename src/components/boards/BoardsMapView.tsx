@@ -94,9 +94,10 @@ const MAP_STYLES = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  available:   '#10B981',
-  booked:      '#3B82F6',
-  maintenance: '#F59E0B',
+  available:      '#10B981',
+  booked:         '#3B82F6',
+  unavailable:    '#F59E0B',
+  decommissioned: '#94A3B8',
 };
 
 type IntelPoint = { id: string; name: string; lat: number; lng: number; city: string; reach: string; detail: string };

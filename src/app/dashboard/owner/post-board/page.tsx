@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { RoleGuard } from '@/components/layout/RoleGuard';
@@ -267,9 +267,23 @@ function PostBoardContent() {
   const [askingRate, setAskingRate] = useState('');
   const [availableFrom, setAvailableFrom] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState('');
+  const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
 
   const [error, setError] = useState('');
+
+  // Pre-fill the sales contact from the owner's registered profile — still
+  // editable per board in case a specific listing needs a different contact.
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return;
+      const { data } = await supabase.from('profiles').select('sales_contact_name, phone, full_name').eq('id', user.id).single();
+      if (data) {
+        setContactName(prev => prev || data.sales_contact_name || data.full_name || '');
+        setContactPhone(prev => prev || data.phone || '');
+      }
+    });
+  }, []);
 
   // ── GPS location ────────────────────────────────────────────────────────────
 
@@ -412,6 +426,7 @@ function PostBoardContent() {
       status: 'available',
       available_from: availableFrom || null,
       notes: notes.trim() || null,
+      contact_name: contactName.trim() || null,
       contact_phone: contactPhone.trim() || null,
       photo_urls: uploadedPhotos.length > 0 ? uploadedPhotos : null,
       owner_id: pbSession?.user?.id ?? null,
@@ -524,7 +539,7 @@ function PostBoardContent() {
               'Add photos — listings with photos get 3× more offers',
               'Set a competitive asking rate (agencies expect to negotiate down 10–20%)',
               'Keep your WhatsApp or phone number in the description so agencies can call',
-              'Update your board status to "Maintenance" when it\'s not available',
+              'Update your board status to "Unavailable" when it\'s not available',
             ].map(tip => (
               <li key={tip} style={{ fontSize: '0.8125rem', color: '#6D28D9', lineHeight: 1.5 }}>{tip}</li>
             ))}
@@ -884,17 +899,29 @@ function PostBoardContent() {
                   )}
                 </div>
 
-                {/* WhatsApp / contact phone */}
+                {/* Sales contact name + WhatsApp / contact phone */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <FieldLabel>Sales contact name</FieldLabel>
+                    <Input
+                      value={contactName}
+                      onChange={setContactName}
+                      placeholder="e.g. Chidi Okafor"
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>Contact WhatsApp / phone number</FieldLabel>
+                    <Input
+                      value={contactPhone}
+                      onChange={setContactPhone}
+                      placeholder="e.g. 08012345678"
+                      type="tel"
+                    />
+                  </div>
+                </div>
                 <div>
-                  <FieldLabel>Your WhatsApp / phone number</FieldLabel>
-                  <Input
-                    value={contactPhone}
-                    onChange={setContactPhone}
-                    placeholder="e.g. 08012345678"
-                    type="tel"
-                  />
                   <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '4px 0 0' }}>
-                    Agencies will use this to WhatsApp or call you directly about the board
+                    Agencies will use this to call, WhatsApp, or SMS you directly about the board
                   </p>
                 </div>
 

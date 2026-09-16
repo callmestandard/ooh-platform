@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -18,7 +19,8 @@ type Board = {
   height: number;
   illuminated: boolean;
   face_count: number;
-  status: 'available' | 'booked' | 'maintenance';
+  status: 'available' | 'booked' | 'unavailable' | 'decommissioned';
+  photo_urls: string[] | null;
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -131,9 +133,10 @@ function BoardMockup({ format, illuminated, status }: { format: string; illumina
 
 function StatusBadge({ status }: { status: string }) {
   const cfg: Record<string, { label: string; color: string; bg: string }> = {
-    available:   { label: 'Available',   color: '#059669', bg: '#ECFDF5' },
-    booked:      { label: 'Booked',      color: '#3B82F6', bg: '#EFF6FF' },
-    maintenance: { label: 'Maintenance', color: '#D97706', bg: '#FFFBEB' },
+    available:      { label: 'Available',      color: '#059669', bg: '#ECFDF5' },
+    booked:         { label: 'Booked',         color: '#3B82F6', bg: '#EFF6FF' },
+    unavailable:    { label: 'Unavailable',    color: '#D97706', bg: '#FFFBEB' },
+    decommissioned: { label: 'Decommissioned', color: '#475569', bg: '#F1F5F9' },
   };
   const { label, color, bg } = cfg[status] ?? cfg.available;
   return (
@@ -188,12 +191,18 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
         boxShadow: '0 24px 60px rgba(0,0,0,0.18)',
         overflow: 'hidden', animation: 'modalIn 0.2s ease',
       }}>
-        {/* Mockup header */}
-        <div style={{ background: '#F8FAFC', padding: '24px 24px 0', borderBottom: '1px solid #F1F5F9' }}>
-          <div style={{ maxWidth: 300, margin: '0 auto' }}>
-            <BoardMockup format={board.format} illuminated={board.illuminated} status={board.status} />
+        {/* Photo / Mockup header */}
+        {board.photo_urls?.[0] ? (
+          <div style={{ height: 200, overflow: 'hidden', background: '#0F172A' }}>
+            <img src={board.photo_urls[0]} alt={board.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.9 }} />
           </div>
-        </div>
+        ) : (
+          <div style={{ background: '#F8FAFC', padding: '24px 24px 0', borderBottom: '1px solid #F1F5F9' }}>
+            <div style={{ maxWidth: 300, margin: '0 auto' }}>
+              <BoardMockup format={board.format} illuminated={board.illuminated} status={board.status} />
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <div style={{ padding: 24 }}>
@@ -246,7 +255,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
           ) : (
             <div style={{ background: '#F8FAFC', borderRadius: 10, padding: '12px 16px', textAlign: 'center' }}>
               <p style={{ fontSize: '0.875rem', color: '#64748B', margin: 0 }}>
-                {board.status === 'booked' ? 'This board is currently booked. Join waitlist →' : 'Under maintenance — check back soon.'}
+                {board.status === 'booked' ? 'This board is currently booked. Join waitlist →' : 'Currently unavailable — check back soon.'}
               </p>
             </div>
           )}
@@ -258,7 +267,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
 
 // ── Main Page ──────────────────────────────────────────────────────────────
 
-export default function MarketplacePage() {
+function MarketplaceContent() {
   const router = useRouter();
   const [boards, setBoards]         = useState<Board[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -274,7 +283,7 @@ export default function MarketplacePage() {
     async function load() {
       const { data } = await supabase
         .from('boards')
-        .select('id, name, address, city, state, format, asking_rate, width, height, illuminated, face_count, status')
+        .select('id, name, address, city, state, format, asking_rate, width, height, illuminated, face_count, status, photo_urls')
         .order('created_at', { ascending: false });
 
       setBoards((data as Board[]) || []);
@@ -339,13 +348,13 @@ export default function MarketplacePage() {
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button
-            onClick={() => router.push('/')}
+            onClick={() => router.push('/auth/login')}
             style={{ padding: '8px 16px', background: 'none', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: '0.875rem', fontWeight: 500, color: '#0F172A', cursor: 'pointer', fontFamily: 'inherit' }}
           >
             Sign in
           </button>
           <button
-            onClick={() => router.push('/')}
+            onClick={() => router.push('/signup')}
             style={{ padding: '8px 16px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
           >
             Get started
@@ -650,7 +659,7 @@ export default function MarketplacePage() {
               ))}
             </div>
             <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push('/signup')}
               style={{
                 padding: '12px 28px', background: '#1B4F8A', color: '#fff',
                 border: 'none', borderRadius: 10, fontSize: '0.9375rem', fontWeight: 700,
@@ -668,5 +677,13 @@ export default function MarketplacePage() {
         <BoardModal board={selected} onClose={() => setSelected(null)} onRequestQuote={handleQuote} />
       )}
     </div>
+  );
+}
+
+export default function MarketplacePage() {
+  return (
+    <RequirePlatformAuth>
+      <MarketplaceContent />
+    </RequirePlatformAuth>
   );
 }

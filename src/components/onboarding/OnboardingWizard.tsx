@@ -78,6 +78,7 @@ export default function OnboardingWizard({ role, userName }: { role: DemoRole; u
   const [companyName, setCompanyName] = useState('');
   const [city,        setCity]        = useState('');
   const [phone,       setPhone]       = useState('');
+  const [salesContactName, setSalesContactName] = useState('');
 
   useEffect(() => {
     if (role === 'admin' || !steps.length) return;
@@ -118,6 +119,7 @@ export default function OnboardingWizard({ role, userName }: { role: DemoRole; u
         await supabase.from('profiles').update({
           phone: phone.trim() || undefined,
           city: city.trim() || undefined,
+          sales_contact_name: salesContactName.trim() || undefined,
         }).eq('id', user.id);
       }
     }
@@ -320,6 +322,16 @@ export default function OnboardingWizard({ role, userName }: { role: DemoRole; u
                 <p style={{ fontSize: '0.9375rem', color: '#64748B', margin: '0 0 24px', lineHeight: 1.6 }}>{current.subtitle}</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                   <div>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#374151', marginBottom: 6 }}>Sales contact name</label>
+                    <input
+                      className="wiz-input"
+                      type="text" value={salesContactName} onChange={e => setSalesContactName(e.target.value)}
+                      placeholder="e.g. Chidi Okafor"
+                      style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: '0.9375rem', color: '#0F172A', outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.15s, box-shadow 0.15s', boxSizing: 'border-box' }}
+                    />
+                    <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '6px 0 0' }}>The person agencies should ask for when they call or WhatsApp about your boards.</p>
+                  </div>
+                  <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#374151', marginBottom: 6 }}>Phone number</label>
                     <input
                       className="wiz-input"
@@ -327,7 +339,7 @@ export default function OnboardingWizard({ role, userName }: { role: DemoRole; u
                       placeholder="080xxxxxxxx"
                       style={{ width: '100%', padding: '10px 14px', border: '1.5px solid #E2E8F0', borderRadius: 10, fontSize: '0.9375rem', color: '#0F172A', outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.15s, box-shadow 0.15s', boxSizing: 'border-box' }}
                     />
-                    <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '6px 0 0' }}>Shown on your public board listing so agencies can WhatsApp you directly.</p>
+                    <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '6px 0 0' }}>Shown on your public board listing so agencies can call, WhatsApp, or SMS you directly.</p>
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#374151', marginBottom: 6 }}>Primary city</label>

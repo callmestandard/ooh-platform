@@ -31,13 +31,15 @@ const STATUSES = [
   { value: 'all', label: 'All Status' },
   { value: 'available', label: 'Available' },
   { value: 'booked', label: 'Booked' },
-  { value: 'maintenance', label: 'Maintenance' },
+  { value: 'unavailable', label: 'Unavailable' },
+  { value: 'decommissioned', label: 'Decommissioned' },
 ];
 
 const STATUS_DOTS: Record<string, string> = {
   available: 'bg-green-500',
   booked: 'bg-blue-500',
-  maintenance: 'bg-orange-500',
+  unavailable: 'bg-orange-500',
+  decommissioned: 'bg-gray-400',
   all: 'bg-gray-300',
 };
 
@@ -148,7 +150,8 @@ export default function BoardFilterSidebar({ filters, setFilters, boards }: Prop
           {[
             { color: 'bg-green-500', label: 'Available' },
             { color: 'bg-blue-500', label: 'Booked' },
-            { color: 'bg-orange-500', label: 'Maintenance' },
+            { color: 'bg-orange-500', label: 'Unavailable' },
+            { color: 'bg-gray-400', label: 'Decommissioned' },
           ].map(({ color, label }) => (
             <div key={label} className="flex items-center gap-2 text-xs text-gray-500">
               <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${color}`} />

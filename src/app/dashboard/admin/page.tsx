@@ -18,7 +18,7 @@ type Board = {
   state: string | null;
   format: string;
   asking_rate: number;
-  status: 'available' | 'booked' | 'maintenance';
+  status: 'available' | 'booked' | 'unavailable' | 'decommissioned';
   illuminated: boolean;
   face_count: number;
   owner_id: string | null;
@@ -178,7 +178,7 @@ function AdminContent() {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
 
   // inventory filter
-  const [invFilter, setInvFilter] = useState<'all' | 'available' | 'booked' | 'maintenance'>('all');
+  const [invFilter, setInvFilter] = useState<'all' | 'available' | 'booked' | 'unavailable' | 'decommissioned'>('all');
   // bookings filter
   const [bookFilter, setBookFilter] = useState<string>('all');
   // user role filter
@@ -261,7 +261,7 @@ function AdminContent() {
   }
 
   async function toggleBoardStatus(board: Board) {
-    const next = board.status === 'available' ? 'maintenance' : 'available';
+    const next = board.status === 'available' ? 'unavailable' : 'available';
     const { error } = await supabase.from('boards').update({ status: next }).eq('id', board.id);
     if (!error) {
       setBoards(prev => prev.map(b => b.id === board.id ? { ...b, status: next as Board['status'] } : b));
@@ -618,9 +618,10 @@ function AdminContent() {
             </div>
             <div style={{ padding: '16px 20px' }}>
               {[
-                { label: 'Available',   count: boards.filter(b => b.status === 'available').length,   color: '#10B981' },
-                { label: 'Booked',      count: boards.filter(b => b.status === 'booked').length,      color: '#3B82F6' },
-                { label: 'Maintenance', count: boards.filter(b => b.status === 'maintenance').length, color: '#F59E0B' },
+                { label: 'Available',      count: boards.filter(b => b.status === 'available').length,      color: '#10B981' },
+                { label: 'Booked',         count: boards.filter(b => b.status === 'booked').length,         color: '#3B82F6' },
+                { label: 'Unavailable',    count: boards.filter(b => b.status === 'unavailable').length,    color: '#F59E0B' },
+                { label: 'Decommissioned', count: boards.filter(b => b.status === 'decommissioned').length, color: '#94A3B8' },
               ].map(({ label, count, color }) => {
                 const pct = boards.length > 0 ? Math.round((count / boards.length) * 100) : 0;
                 return (
@@ -703,7 +704,7 @@ function AdminContent() {
               <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>Full platform inventory</p>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              {(['all', 'available', 'booked', 'maintenance'] as const).map(s => (
+              {(['all', 'available', 'booked', 'unavailable', 'decommissioned'] as const).map(s => (
                 <button
                   key={s}
                   className={`admin-filter-btn${invFilter === s ? ' active' : ''}`}
@@ -762,16 +763,16 @@ function AdminContent() {
                         {timeAgo(board.created_at)}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
-                        {board.status !== 'booked' && (
+                        {(board.status === 'available' || board.status === 'unavailable') && (
                           <button
                             onClick={() => toggleBoardStatus(board)}
                             style={{ background: board.status === 'available' ? '#FFFBEB' : '#ECFDF5', color: board.status === 'available' ? '#92400E' : '#065F46', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit' }}
                           >
-                            {board.status === 'available' ? 'Maintenance' : 'Available'}
+                            {board.status === 'available' ? 'Unavailable' : 'Available'}
                           </button>
                         )}
-                        {board.status === 'booked' && (
-                          <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>Booked</span>
+                        {(board.status === 'booked' || board.status === 'decommissioned') && (
+                          <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>{board.status.charAt(0).toUpperCase() + board.status.slice(1)}</span>
                         )}
                       </td>
                     </tr>
@@ -856,7 +857,7 @@ function AdminContent() {
                   <p style={{ fontSize: '1rem', fontWeight: 800, color: '#10B981', fontFamily: 'monospace', margin: 0 }}>{formatNaira(totalGMV)}</p>
                 </div>
                 <div>
-                  <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '0 0 2px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Platform commission ({settings.commissionRate}%)</p>
+                  <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '0 0 2px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Platform fee ({settings.commissionRate}%)</p>
                   <p style={{ fontSize: '1rem', fontWeight: 800, color: '#DC2626', fontFamily: 'monospace', margin: 0 }}>{formatNaira(platformCommission)}</p>
                 </div>
                 <div>
@@ -1069,12 +1070,12 @@ function AdminContent() {
             <div style={{ background: '#0F172A', border: '1px solid #1E293B', borderRadius: 12, padding: '20px' }}>
               <p style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>Platform Revenue ({settings.commissionRate}%)</p>
               <p style={{ fontSize: '2rem', fontWeight: 800, color: '#F59E0B', letterSpacing: '-0.03em', margin: '0 0 4px', fontFamily: 'monospace' }}>{formatNaira(platformCommission)}</p>
-              <p style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.25)', margin: 0 }}>Your commission from all agreed deals</p>
+              <p style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.25)', margin: 0 }}>Service fee charged to agencies, on top of GMV</p>
             </div>
             <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '20px' }}>
-              <p style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>Owner Payouts ({100 - settings.commissionRate}%)</p>
-              <p style={{ fontSize: '2rem', fontWeight: 800, color: '#7C3AED', letterSpacing: '-0.03em', margin: '0 0 4px', fontFamily: 'monospace' }}>{formatNaira(totalGMV - platformCommission)}</p>
-              <p style={{ fontSize: '0.6875rem', color: '#CBD5E1', margin: 0 }}>Owed to board owners</p>
+              <p style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 8px' }}>Owner Payouts (100%)</p>
+              <p style={{ fontSize: '2rem', fontWeight: 800, color: '#7C3AED', letterSpacing: '-0.03em', margin: '0 0 4px', fontFamily: 'monospace' }}>{formatNaira(totalGMV)}</p>
+              <p style={{ fontSize: '0.6875rem', color: '#CBD5E1', margin: 0 }}>Owed to board owners — full amount, never a fee</p>
             </div>
           </div>
 
@@ -1092,7 +1093,7 @@ function AdminContent() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#F8FAFC' }}>
-                    {['Deal', 'Board', 'Monthly rate', 'Duration', 'GMV', `Commission (${settings.commissionRate}%)`, 'Status'].map(h => (
+                    {['Deal', 'Board', 'Monthly rate', 'Duration', 'GMV', `Platform fee (${settings.commissionRate}%)`, 'Status'].map(h => (
                       <th key={h} style={{ padding: '10px 16px', fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'left', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -1238,13 +1239,15 @@ function AdminContent() {
       {activeTab === 'settings' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
 
-          {/* Commission settings */}
+          {/* Platform service fee settings */}
           <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, padding: '20px 24px' }}>
-            <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px' }}>Platform commission</h2>
-            <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: '0 0 20px' }}>Rate applied to all agreed bookings. Changes take effect on new calculations.</p>
+            <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px' }}>Platform service fee</h2>
+            <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: '0 0 20px' }}>
+              Charged to agencies on top of media spend. Board owners are never charged — they always receive 100% of the agreed rate.
+            </p>
 
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#374151', marginBottom: 6 }}>Commission rate (%)</label>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#374151', marginBottom: 6 }}>Service fee rate (%)</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <input
                   type="range" min={5} max={30} step={1}
@@ -1257,15 +1260,15 @@ function AdminContent() {
                 </span>
               </div>
               <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '6px 0 0' }}>
-                At {settings.commissionRate}%, platform earns {formatNaira(platformCommission)} on current GMV of {formatNaira(totalGMV)}
+                At {settings.commissionRate}%, platform earns {formatNaira(platformCommission)} on current GMV of {formatNaira(totalGMV)} — added to what agencies pay, not deducted from owners.
               </p>
             </div>
 
             <div style={{ background: '#F8FAFC', borderRadius: 10, padding: '14px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
               {[
-                { label: 'Platform gets', value: formatNaira(Math.round(totalGMV * settings.commissionRate / 100)), color: '#DC2626' },
-                { label: 'Owner gets', value: formatNaira(Math.round(totalGMV * (1 - settings.commissionRate / 100))), color: '#7C3AED' },
-                { label: 'Split', value: `${settings.commissionRate}/${100 - settings.commissionRate}`, color: '#0F172A' },
+                { label: 'Owner receives', value: formatNaira(totalGMV), color: '#7C3AED' },
+                { label: 'Platform fee revenue', value: formatNaira(platformCommission), color: '#DC2626' },
+                { label: 'Agency pays', value: formatNaira(totalGMV + platformCommission), color: '#0F172A' },
               ].map(item => (
                 <div key={item.label}>
                   <p style={{ fontSize: '0.6875rem', color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' }}>{item.label}</p>

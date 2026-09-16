@@ -13,8 +13,8 @@ type Board = {
   height?: number;
   format?: string;
   asking_rate?: number;
-  photo_urls?: string[];
-  status: 'available' | 'booked' | 'maintenance';
+  photo_urls?: string[] | null;
+  status: 'available' | 'booked' | 'unavailable' | 'decommissioned';
   state?: string;
   city?: string;
 };
@@ -38,9 +38,10 @@ type IntelData = {
 };
 
 const STATUS_CONFIG = {
-  available:   { label: 'Available',   dot: '#10B981', bg: '#ECFDF5', color: '#065F46' },
-  booked:      { label: 'Booked',      dot: '#3B82F6', bg: '#EFF6FF', color: '#1D4ED8' },
-  maintenance: { label: 'Maintenance', dot: '#F59E0B', bg: '#FFFBEB', color: '#92400E' },
+  available:     { label: 'Available',     dot: '#10B981', bg: '#ECFDF5', color: '#065F46' },
+  booked:        { label: 'Booked',        dot: '#3B82F6', bg: '#EFF6FF', color: '#1D4ED8' },
+  unavailable:   { label: 'Unavailable',   dot: '#F59E0B', bg: '#FFFBEB', color: '#92400E' },
+  decommissioned:{ label: 'Decommissioned',dot: '#94A3B8', bg: '#F1F5F9', color: '#475569' },
 };
 
 const FORMAT_LABELS: Record<string, string> = {
@@ -572,7 +573,7 @@ export default function BoardDetailPanel({ board, onClose, onBookingRequest, aud
           </button>
         ) : (
           <div style={{ textAlign: 'center', padding: '10px 0', background: '#F8FAFC', borderRadius: 10, fontSize: '0.8125rem', color: '#94A3B8', border: '1px solid #E2E8F0' }}>
-            {board.status === 'booked' ? 'Currently booked' : 'Under maintenance'}
+            {board.status === 'booked' ? 'Currently booked' : board.status === 'decommissioned' ? 'Decommissioned' : 'Currently unavailable'}
           </div>
         )}
       </div>

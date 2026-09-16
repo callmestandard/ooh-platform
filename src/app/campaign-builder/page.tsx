@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
+import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
 
 const CampaignMap = dynamic(() => import('./CampaignMap'), {
   ssr: false,
@@ -151,7 +152,7 @@ function BoardMockup({ format }: { format: string }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function CampaignBuilderPage() {
+function CampaignBuilderContent() {
   const router = useRouter();
 
   // ── Step 1: Brief ──
@@ -971,5 +972,13 @@ export default function CampaignBuilderPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CampaignBuilderPage() {
+  return (
+    <RequirePlatformAuth>
+      <CampaignBuilderContent />
+    </RequirePlatformAuth>
   );
 }

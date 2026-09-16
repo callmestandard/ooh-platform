@@ -47,7 +47,7 @@ export interface Board {
   format: string
   asking_rate: number
   photos?: string[]
-  status: 'available' | 'booked' | 'maintenance'
+  status: 'available' | 'booked' | 'unavailable' | 'decommissioned'
   created_at: string
 }
 

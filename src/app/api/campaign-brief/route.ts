@@ -44,6 +44,34 @@ const MONTHS: Record<string, number> = {
   nov: 10, november: 10, dec: 11, december: 11,
 };
 
+// Free-text location vibes the fixed city list can't catch (e.g. "campus
+// areas", "high-footfall youth locations"). This is a keyword heuristic, not
+// real NLP — there's no ANTHROPIC_API_KEY configured for this route to make
+// an actual extraction call. Flagged as a known limitation, not hidden.
+const LOCATION_HINT_KEYWORDS: { hint: string; kw: string[] }[] = [
+  { hint: 'campus',      kw: ['campus', 'university', 'polytechnic', 'college of', 'school area'] },
+  { hint: 'youth',       kw: ['youth', 'students', 'gen z', 'young adults', 'millennial'] },
+  { hint: 'mall',        kw: ['mall', 'shopping complex', 'shopping centre', 'shopping center'] },
+  { hint: 'market',      kw: ['market', 'trade fair', 'trading hub'] },
+  { hint: 'residential', kw: ['residential', 'estate', 'gated community', 'housing estate'] },
+  { hint: 'religious',   kw: ['church', 'mosque', 'religious centre', 'worship'] },
+  { hint: 'healthcare',  kw: ['hospital', 'clinic', 'healthcare', 'medical centre'] },
+  { hint: 'stadium',     kw: ['stadium', 'arena', 'sports complex'] },
+  { hint: 'airport',     kw: ['airport', 'terminal'] },
+  { hint: 'financial',   kw: ['financial district', 'business district', 'cbd', 'bank hq'] },
+  { hint: 'transit',     kw: ['bus stop', 'bus terminal', 'motor park', 'train station', 'transit hub'] },
+  { hint: 'nightlife',   kw: ['nightlife', 'bars and lounges', 'entertainment district'] },
+];
+
+function extractLocationHints(text: string): string[] {
+  const lower = text.toLowerCase();
+  const found: string[] = [];
+  for (const { hint, kw } of LOCATION_HINT_KEYWORDS) {
+    if (kw.some(k => lower.includes(k))) found.push(hint);
+  }
+  return found;
+}
+
 const OBJECTIVE_KEYWORDS: Record<string, string> = {
   awareness: 'awareness', brand: 'awareness', visibility: 'awareness', 'brand awareness': 'awareness',
   launch: 'launch', launching: 'launch', unveil: 'launch', introduce: 'launch', 'new product': 'launch',
@@ -60,6 +88,7 @@ export type ParsedBrief = {
   end_date: string;
   cities: string[];
   formats: string[];
+  location_hints: string[];
   notes: string;
   confidence: number;   // 0–100
   warnings: string[];
@@ -239,6 +268,7 @@ export async function POST(req: NextRequest) {
     const { start, end } = extractDates(brief, today);
     const cities = extractCities(brief);
     const formats = extractFormats(brief);
+    const location_hints = extractLocationHints(brief);
     const campaign_name = buildCampaignName(brief, client_name, objective);
 
     if (!client_name) { warnings.push('Could not identify a brand or client name — please fill in manually.'); } else { confidence += 10; }
@@ -246,6 +276,7 @@ export async function POST(req: NextRequest) {
     if (!total_budget){ warnings.push('No budget amount found — please enter your budget manually.'); } else { confidence += 10; }
     if (!start || !end){ warnings.push('Could not extract flight dates — please select them manually.'); } else { confidence += 10; }
     if (cities.length === 0) { warnings.push('No specific cities mentioned — Smart Suggest will use all available boards.'); } else { confidence += 5; }
+    if (location_hints.length > 0) { warnings.push(`Location hints detected (${location_hints.join(', ')}) — boards will be boosted by keyword match against their notes/address, not true location understanding.`); }
 
     const result: ParsedBrief = {
       client_name,
@@ -256,6 +287,7 @@ export async function POST(req: NextRequest) {
       end_date: end,
       cities,
       formats,
+      location_hints,
       notes: brief.trim(),
       confidence: Math.min(100, confidence),
       warnings,

@@ -17,6 +17,9 @@ type ProfileData = {
   jobTitle: string;
   bio: string;
   erpVendorCode: string;
+  cacNumber: string;
+  tinNumber: string;
+  salesContactName: string;
 };
 
 type NotifPrefs = Record<NotificationType, boolean>;
@@ -249,7 +252,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
 
   // Profile state
-  const [profile, setProfile] = useState<ProfileData>({ displayName: '', email: '', phone: '', company: '', jobTitle: '', bio: '', erpVendorCode: '' });
+  const [profile, setProfile] = useState<ProfileData>({ displayName: '', email: '', phone: '', company: '', jobTitle: '', bio: '', erpVendorCode: '', cacNumber: '', tinNumber: '', salesContactName: '' });
 
   // Notification prefs
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>({
@@ -300,6 +303,9 @@ export default function SettingsPage() {
       jobTitle: role === 'agency' ? 'Media Director' : role === 'client' ? 'Marketing Manager' : role === 'owner' ? 'Business Owner' : 'Platform Admin',
       bio: '',
       erpVendorCode: '',
+      cacNumber: '',
+      tinNumber: '',
+      salesContactName: '',
     });
     setProfile(storedProfile);
     setNotifPrefs(loadJSON<NotifPrefs>(getStorageKey(role, 'notif_prefs'), notifPrefs));
@@ -336,6 +342,29 @@ export default function SettingsPage() {
               logoUrl: row.brand_logo_url || prev.logoUrl,
             }));
           }
+          if (role === 'owner') {
+            setProfile(p => ({
+              ...p,
+              salesContactName: row.sales_contact_name || p.salesContactName,
+            }));
+            // CAC/TIN live in their own table (partner_kyc), not profiles —
+            // profiles is broadly readable in this app, so sensitive KYC
+            // data can't live there. See migration 011.
+            supabase
+              .from('partner_kyc')
+              .select('cac_number, tin_number')
+              .eq('id', user.id)
+              .maybeSingle()
+              .then(({ data: kyc }) => {
+                if (kyc) {
+                  setProfile(p => ({
+                    ...p,
+                    cacNumber: kyc.cac_number || p.cacNumber,
+                    tinNumber: kyc.tin_number || p.tinNumber,
+                  }));
+                }
+              });
+          }
         });
     });
 
@@ -366,6 +395,9 @@ export default function SettingsPage() {
         profileUpdate.brand_logo_url     = branding.logoUrl        || null;
         profileUpdate.erp_vendor_code    = profile.erpVendorCode.trim() || null;
       }
+      if (role === 'owner') {
+        profileUpdate.sales_contact_name  = profile.salesContactName.trim() || null;
+      }
       const { error: updateErr } = await supabase
         .from('profiles')
         .update(profileUpdate)
@@ -374,6 +406,22 @@ export default function SettingsPage() {
         setSaving(false);
         showToast('Failed to save — database error');
         return;
+      }
+
+      if (role === 'owner' && (profile.cacNumber.trim() || profile.tinNumber.trim())) {
+        const { error: kycErr } = await supabase
+          .from('partner_kyc')
+          .upsert({
+            id: profileUserId,
+            cac_number: profile.cacNumber.trim() || null,
+            tin_number: profile.tinNumber.trim() || null,
+            updated_at: new Date().toISOString(),
+          });
+        if (kycErr) {
+          setSaving(false);
+          showToast('Failed to save CAC/TIN — database error');
+          return;
+        }
       }
     }
 
@@ -596,6 +644,19 @@ export default function SettingsPage() {
                       <Input value={profile.erpVendorCode} onChange={v => setProfile(p => ({ ...p, erpVendorCode: v }))} placeholder="e.g. VND-OOH-00421" />
                     </Field>
                   )}
+                  {role === 'owner' && (
+                    <>
+                      <Field label="Sales contact name" hint="The person agencies should ask for — shown on your board listings.">
+                        <Input value={profile.salesContactName} onChange={v => setProfile(p => ({ ...p, salesContactName: v }))} placeholder="e.g. Chidi Okafor" />
+                      </Field>
+                      <Field label="CAC registration number" hint="Kept private — never shown to agencies.">
+                        <Input value={profile.cacNumber} onChange={v => setProfile(p => ({ ...p, cacNumber: v }))} placeholder="RC1234567" />
+                      </Field>
+                      <Field label="TIN (Tax ID)" hint="Kept private — never shown to agencies.">
+                        <Input value={profile.tinNumber} onChange={v => setProfile(p => ({ ...p, tinNumber: v }))} placeholder="12345678-0001" />
+                      </Field>
+                    </>
+                  )}
                 </div>
                 <Field label="Bio" hint="Brief description shown on your profile.">
                   <textarea
@@ -695,12 +756,12 @@ export default function SettingsPage() {
           {activeTab === 'payout' && role === 'owner' && (
             <div style={{ animation: 'slideIn 0.2s ease' }}>
               <SectionCard title="Payout details" subtitle="Your earnings will be sent to this bank account after each confirmed booking.">
-                <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '12px 16px', marginBottom: 20, display: 'flex', gap: 10 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
-                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 10, padding: '12px 16px', marginBottom: 20, display: 'flex', gap: 10 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
                   </svg>
-                  <p style={{ fontSize: '0.8125rem', color: '#92400E', margin: 0, lineHeight: 1.5 }}>
-                    Platform commission of 12% is deducted automatically. Payouts are processed within 3-5 business days after campaign completion.
+                  <p style={{ fontSize: '0.8125rem', color: '#065F46', margin: 0, lineHeight: 1.5 }}>
+                    Free forever — no commission, no fees. You receive 100% of the agreed rate. Payouts are processed within 3-5 business days after campaign completion.
                   </p>
                 </div>
 

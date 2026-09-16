@@ -31,6 +31,7 @@ type Booking = {
     width: number;
     height: number;
     photo_urls: string[] | null;
+    contact_name: string | null;
     contact_phone: string | null;
   };
   campaigns: {
@@ -77,6 +78,8 @@ function formatDate(dateStr?: string | null) {
 
 type ActionMode = null | 'message' | 'counter' | 'accept' | 'decline';
 
+type CounterEntry = { amount: string; by: 'agency' | 'owner' };
+
 export default function NegotiationDetailPage() {
   const { id: idParam } = useParams();
   const id = typeof idParam === 'string' ? idParam : idParam?.[0] ?? '';
@@ -95,6 +98,16 @@ export default function NegotiationDetailPage() {
   const [activityKey, setActivityKey] = useState(0);
   const [exportingContract, setExportingContract] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
+
+  // Quick-log: record the outcome of an off-platform phone/WhatsApp
+  // negotiation in one submit instead of typing out a chat.
+  const [logCallOpen, setLogCallOpen] = useState(false);
+  const [logInitialAsk, setLogInitialAsk] = useState('');
+  const [logCounters, setLogCounters] = useState<CounterEntry[]>([]);
+  const [logFinalRate, setLogFinalRate] = useState('');
+  const [logDate, setLogDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [loggingCall, setLoggingCall] = useState(false);
+  const [logError, setLogError] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -240,6 +253,102 @@ export default function NegotiationDetailPage() {
     setCounterRate('');
     setActionMode(null);
     setSending(false);
+    setActivityKey(k => k + 1);
+  }
+
+  function openLogCall() {
+    setLogInitialAsk(booking?.boards?.asking_rate ? String(booking.boards.asking_rate) : '');
+    setLogCounters([]);
+    setLogFinalRate('');
+    setLogDate(new Date().toISOString().slice(0, 10));
+    setLogError('');
+    setLogCallOpen(true);
+  }
+
+  function addCounterRow() {
+    setLogCounters(prev => [...prev, { amount: '', by: 'owner' }]);
+  }
+
+  function updateCounterRow(i: number, patch: Partial<CounterEntry>) {
+    setLogCounters(prev => prev.map((c, idx) => idx === i ? { ...c, ...patch } : c));
+  }
+
+  function removeCounterRow(i: number) {
+    setLogCounters(prev => prev.filter((_, idx) => idx !== i));
+  }
+
+  async function submitCallLog() {
+    if (!booking) return;
+    setLogError('');
+    const finalRate = parseFloat(logFinalRate);
+    if (!logFinalRate || isNaN(finalRate) || finalRate <= 0) {
+      setLogError('Enter the final agreed rate');
+      return;
+    }
+    setLoggingCall(true);
+
+    const callTimestamp = new Date(`${logDate}T12:00:00`).toISOString();
+    const rows: Record<string, unknown>[] = [];
+
+    if (logInitialAsk && !isNaN(parseFloat(logInitialAsk))) {
+      rows.push({
+        booking_id: booking.id, sender_role: 'owner', message_type: 'offer',
+        content: 'Initial ask (logged from call)', offered_rate: parseFloat(logInitialAsk),
+        created_at: callTimestamp,
+      });
+    }
+    for (const c of logCounters) {
+      const amt = parseFloat(c.amount);
+      if (isNaN(amt) || amt <= 0) continue;
+      rows.push({
+        booking_id: booking.id, sender_role: c.by, message_type: 'counter_offer',
+        content: `Counter-offer from ${c.by === 'agency' ? 'us' : 'owner'} (logged from call)`,
+        offered_rate: amt, created_at: callTimestamp,
+      });
+    }
+    rows.push({
+      booking_id: booking.id, sender_role: 'agency', message_type: 'accepted',
+      content: 'Deal agreed on call', offered_rate: finalRate, created_at: callTimestamp,
+    });
+
+    const { error: msgError } = await supabase.from('messages').insert(rows);
+    if (msgError) { setLogError(msgError.message); setLoggingCall(false); return; }
+
+    const prevStatus = booking.status;
+    await supabase.from('bookings').update({ agreed_rate: finalRate, status: 'agreed' }).eq('id', booking.id);
+
+    const actor = await getActivityActor();
+    const boardName = booking.boards?.name || 'a board';
+    await logActivity({
+      entityType: 'booking',
+      entityId: booking.id,
+      campaignId: (booking.campaigns as { id?: string })?.id,
+      action: 'booking.status_changed',
+      summary: `Call logged — agreed ${formatNaira(finalRate)}/mo for ${boardName}`,
+      ...actor,
+      changes: { status: { from: prevStatus, to: 'agreed' } },
+      metadata: { logged_from_call: true, call_date: logDate, counters: logCounters.length },
+    });
+    // Board-level trail too, so this shows up in the board's own negotiation history.
+    await logActivity({
+      entityType: 'board',
+      entityId: booking.boards.id,
+      action: 'board.status_changed',
+      summary: `Negotiated ${formatNaira(finalRate)}/mo for ${boardName} (${booking.campaigns?.name || 'campaign'})`,
+      ...actor,
+      metadata: { booking_id: booking.id, agreed_rate: finalRate },
+    });
+
+    await createNotification({
+      recipientRole: 'owner', type: 'offer_accepted', title: 'Deal logged',
+      body: `Agreed ${formatNaira(finalRate)}/month for ${boardName}`,
+      link: `/dashboard/owner/negotiations/${booking.id}`,
+    });
+
+    await fetchBooking();
+    await fetchMessages();
+    setLoggingCall(false);
+    setLogCallOpen(false);
     setActivityKey(k => k + 1);
   }
 
@@ -498,9 +607,28 @@ export default function NegotiationDetailPage() {
             </div>
           </div>
 
+          {/* Log a call — record an off-platform phone/WhatsApp negotiation fast */}
+          {!isResolved && (
+            <button
+              onClick={openLogCall}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                width: '100%', padding: '11px 0', borderRadius: 14, flexShrink: 0,
+                background: '#0F172A', color: '#fff', border: 'none', cursor: 'pointer',
+                fontSize: '0.8125rem', fontWeight: 700, fontFamily: 'inherit',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.36h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6.1 6.1l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+              </svg>
+              Log a call
+            </button>
+          )}
+
           {/* Contact owner card */}
           {(() => {
             const raw = booking.boards?.contact_phone;
+            const contactName = booking.boards?.contact_name;
             const wa  = raw?.replace(/\s/g, '').replace(/^0/, '234');
             const waMsg = encodeURIComponent(
               `Hi, I found your board listing "${booking.boards?.name}" on OOH Platform and I'm interested.\n\nCan we discuss availability and pricing?`
@@ -508,7 +636,7 @@ export default function NegotiationDetailPage() {
             return (
               <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 14, padding: '14px 16px', flexShrink: 0 }}>
                 <p style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>
-                  Contact owner
+                  {contactName ? `Contact ${contactName}` : 'Contact owner'}
                 </p>
                 {raw ? (
                   showPhone ? (
@@ -517,16 +645,23 @@ export default function NegotiationDetailPage() {
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.36h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6.1 6.1l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                         <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#15803D', letterSpacing: '0.02em' }}>{raw}</span>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                        <a href={`tel:${raw}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', borderRadius: 9, background: '#F1F5F9', border: '1.5px solid #E2E8F0', color: '#0F172A', textDecoration: 'none', fontSize: '0.75rem', fontWeight: 700 }}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.36h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6.1 6.1l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                        <a href={`tel:${raw}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '9px 4px', borderRadius: 9, background: '#F1F5F9', border: '1.5px solid #E2E8F0', color: '#0F172A', textDecoration: 'none', fontSize: '0.6875rem', fontWeight: 700 }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.36h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6.1 6.1l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                           Call
                         </a>
-                        <a href={`https://wa.me/${wa}?text=${waMsg}`} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px', borderRadius: 9, background: '#25D366', color: '#fff', textDecoration: 'none', fontSize: '0.75rem', fontWeight: 700 }}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                        <a href={`sms:${raw}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '9px 4px', borderRadius: 9, background: '#F1F5F9', border: '1.5px solid #E2E8F0', color: '#0F172A', textDecoration: 'none', fontSize: '0.6875rem', fontWeight: 700 }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                          SMS
+                        </a>
+                        <a href={`https://wa.me/${wa}?text=${waMsg}`} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '9px 4px', borderRadius: 9, background: '#25D366', color: '#fff', textDecoration: 'none', fontSize: '0.6875rem', fontWeight: 700 }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                           WhatsApp
                         </a>
                       </div>
+                      <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '2px 0 0', textAlign: 'center' }}>
+                        Negotiate off-platform, then come back and log the outcome below.
+                      </p>
                     </div>
                   ) : (
                     <button
@@ -637,7 +772,7 @@ export default function NegotiationDetailPage() {
           {booking.notes && (
             <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '14px', padding: '14px 16px' }}>
               <p style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>Initial notes</p>
-              <p style={{ fontSize: '0.75rem', color: '#78350F', lineHeight: 1.6, margin: 0, fontStyle: 'italic' }}>"{booking.notes}"</p>
+              <p style={{ fontSize: '0.75rem', color: '#78350F', lineHeight: 1.6, margin: 0, fontStyle: 'italic' }}>&quot;{booking.notes}&quot;</p>
             </div>
           )}
 
@@ -884,6 +1019,102 @@ export default function NegotiationDetailPage() {
           )}
         </div>
       </div>
+
+      {/* ── Log a call modal ── */}
+      {logCallOpen && (
+        <div
+          onClick={() => !loggingCall && setLogCallOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 16, padding: '24px 24px 20px', width: '100%', maxWidth: 420, maxHeight: '85vh', overflowY: 'auto' }}
+          >
+            <h2 style={{ fontSize: '1.0625rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px' }}>Log a call</h2>
+            <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: '0 0 18px' }}>
+              Record how a phone/WhatsApp negotiation played out — takes a few seconds.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: 4 }}>Initial ask (₦/mo)</label>
+                <input
+                  type="number" value={logInitialAsk} onChange={e => setLogInitialAsk(e.target.value)}
+                  placeholder={String(booking.boards?.asking_rate || '')}
+                  style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0', borderRadius: 8, fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569' }}>Counter-offers</label>
+                  <button type="button" onClick={addCounterRow} style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1B4F8A', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>+ Add</button>
+                </div>
+                {logCounters.length === 0 && (
+                  <p style={{ fontSize: '0.75rem', color: '#CBD5E1', margin: 0 }}>None yet — add each back-and-forth if there were any.</p>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {logCounters.map((c, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <select
+                        value={c.by} onChange={e => updateCounterRow(i, { by: e.target.value as 'agency' | 'owner' })}
+                        style={{ padding: '8px 6px', border: '1.5px solid #E2E8F0', borderRadius: 8, fontSize: '0.75rem', fontFamily: 'inherit', color: '#334155' }}
+                      >
+                        <option value="owner">Owner asked</option>
+                        <option value="agency">We offered</option>
+                      </select>
+                      <input
+                        type="number" value={c.amount} onChange={e => updateCounterRow(i, { amount: e.target.value })}
+                        placeholder="₦/mo"
+                        style={{ flex: 1, padding: '8px 10px', border: '1.5px solid #E2E8F0', borderRadius: 8, fontSize: '0.8125rem', fontFamily: 'inherit', minWidth: 0 }}
+                      />
+                      <button type="button" onClick={() => removeCounterRow(i)} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer', fontSize: 16, padding: '0 4px', lineHeight: 1 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: 4 }}>Final agreed rate (₦/mo) *</label>
+                  <input
+                    type="number" value={logFinalRate} onChange={e => setLogFinalRate(e.target.value)} autoFocus
+                    style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0', borderRadius: 8, fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: 4 }}>Date</label>
+                  <input
+                    type="date" value={logDate} onChange={e => setLogDate(e.target.value)}
+                    style={{ width: '100%', padding: '9px 12px', border: '1.5px solid #E2E8F0', borderRadius: 8, fontSize: '0.875rem', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              {logError && (
+                <p style={{ fontSize: '0.75rem', color: '#DC2626', margin: 0 }}>{logError}</p>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <button
+                  onClick={submitCallLog}
+                  disabled={loggingCall}
+                  style={{ flex: 1, background: loggingCall ? '#94A3B8' : '#059669', color: '#fff', border: 'none', padding: '11px 0', borderRadius: 10, fontSize: '0.875rem', fontWeight: 700, cursor: loggingCall ? 'default' : 'pointer', fontFamily: 'inherit' }}
+                >
+                  {loggingCall ? 'Saving…' : 'Save & mark agreed'}
+                </button>
+                <button
+                  onClick={() => setLogCallOpen(false)}
+                  disabled={loggingCall}
+                  style={{ background: '#fff', color: '#64748B', border: '1.5px solid #E2E8F0', padding: '11px 20px', borderRadius: 10, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

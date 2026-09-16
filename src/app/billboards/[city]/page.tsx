@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import type { CityMapBoard } from './CityMap';
 import CityMap from './CityMapLoader';
+import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
 
 export const revalidate = 3600;
 
@@ -252,7 +253,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
   };
 
   return (
-    <>
+    <RequirePlatformAuth>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -751,6 +752,6 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           </div>
         </div>
       </footer>
-    </>
+    </RequirePlatformAuth>
   );
 }
