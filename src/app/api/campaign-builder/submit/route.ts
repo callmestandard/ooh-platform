@@ -43,14 +43,27 @@ export async function POST(req: NextRequest) {
   const startDate = start.toISOString().split('T')[0];
   const endDate   = end.toISOString().split('T')[0];
 
+  // The submitter is both the plan's owner (agency_id — needed for the
+  // update/delete RLS policies) and the brand it's for (client_id — this is
+  // what /dashboard/client, where the user lands next, actually queries by).
+  const { data: submitterProfile } = await db
+    .from('profiles')
+    .select('full_name, company_name, role')
+    .eq('id', user.id)
+    .single() as { data: { full_name?: string; company_name?: string; role?: string } | null };
+
+  const clientName = submitterProfile?.company_name || submitterProfile?.full_name
+    || user.email?.split('@')[0] || 'Self-service';
+
   // Create campaign
   const { data: campaign, error: campErr } = await db
     .from('campaigns')
     .insert({
       name:         campaignName,
-      client_name:  user.email?.split('@')[0] || 'Self-service',
+      client_name:  clientName,
       status:       'submitted',
       agency_id:    user.id,
+      client_id:    user.id,
       total_budget: budget,
       start_date:   startDate,
       end_date:     endDate,
@@ -90,7 +103,7 @@ export async function POST(req: NextRequest) {
       action:     'campaign.submitted',
       summary:    `Self-service campaign "${campaignName}" submitted with ${boards.length} boards`,
       actorId:    user.id,
-      actorRole:  'agency',
+      actorRole:  submitterProfile?.role || 'client',
       campaignId: campaign.id,
       metadata:   { boardCount: boards.length, budget, durationMonths, source: 'campaign-builder' },
     },
@@ -123,7 +136,7 @@ export async function POST(req: NextRequest) {
           to:           ownerEmail,
           ownerName,
           boardName:    ownerBoard.name,
-          agencyName:   user.email?.split('@')[0] || 'A client',
+          agencyName:   clientName,
           campaignName,
           rate:         Math.round((ownerBoard.asking_rate || 0) * 0.95),
           bookingId:    booking?.id || campaign.id,
