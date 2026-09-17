@@ -14,7 +14,9 @@ export type NotificationType =
   | 'campaign_request'
   | 'mpo_raised'
   | 'invoice_sent'
-  | 'invoice_paid';
+  | 'invoice_paid'
+  | 'agent_authorization_request'
+  | 'agent_authorization_resolved';
 
 export type Notification = {
   id: string;
@@ -78,4 +80,6 @@ export const NOTIF_ICONS: Record<NotificationType, string> = {
   mpo_raised:       '📄',
   invoice_sent:     '🧾',
   invoice_paid:     '💰',
+  agent_authorization_request:  '🤝',
+  agent_authorization_resolved: '✅',
 };

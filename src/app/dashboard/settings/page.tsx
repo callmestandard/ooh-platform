@@ -70,6 +70,8 @@ const NOTIF_LABELS: Record<NotificationType, { label: string; desc: string; role
   mpo_raised:       { label: 'MPO received',             desc: 'When an agency raises a Media Purchase Order for you',   roles: ['owner'] },
   invoice_sent:     { label: 'Invoice received',         desc: 'When your agency sends you an invoice',                  roles: ['client'] },
   invoice_paid:     { label: 'Payment received',         desc: 'When a client pays an invoice',                          roles: ['agency'] },
+  agent_authorization_request:  { label: 'Agent authorization request', desc: 'When an agent claims to represent you on a board', roles: ['owner'] },
+  agent_authorization_resolved: { label: 'Authorization resolved',      desc: 'When an owner confirms or denies your claim',      roles: ['agent'] },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -272,6 +274,7 @@ export default function SettingsPage() {
     offer_declined: true, message: true, poe_submitted: true, poe_verified: true,
     poe_flagged: true, plan_approved: true, campaign_request: true,
     mpo_raised: true, invoice_sent: true, invoice_paid: true,
+    agent_authorization_request: true, agent_authorization_resolved: true,
   });
 
   // Payout (owner only)

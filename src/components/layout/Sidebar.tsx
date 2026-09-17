@@ -76,6 +76,7 @@ const ownerNav: NavItem[] = [
   { id: "bookings",      label: "Bookings",       path: "/dashboard/owner?tab=bookings",        icon: <Icon path="M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01" /> },
   { id: "calendar",      label: "Calendar",       path: "/dashboard/owner?tab=calendar",        icon: <Icon path="M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /> },
   { id: "negotiations",  label: "Negotiations",   path: "/dashboard/owner/negotiations",        icon: <Icon path="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /> },
+  { id: "agent-requests", label: "Agent Requests", path: "/dashboard/owner/agent-authorizations", icon: <Icon path="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" /> },
   { id: "earnings",      label: "Earnings",       path: "/dashboard/owner?tab=earnings",        icon: <Icon path="M12 1v22 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
   { id: "analytics",     label: "Analytics",      path: "/dashboard/owner?tab=analytics",       icon: <Icon path="M18 20V10 M12 20V4 M6 20v-6" /> },
   { id: "rate-card",     label: "Rate Card",      path: "/dashboard/owner?tab=rate-card",       icon: <Icon path="M22 12 18 12 15 21 9 3 6 12 2 12" /> },

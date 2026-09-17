@@ -6,6 +6,7 @@ import { RoleGuard } from '@/components/layout/RoleGuard';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/Toast';
 import { computeTrustBadge, TrustBadgePill } from '@/lib/agent-listings';
+import { createNotification } from '@/lib/notifications';
 
 type Board = {
   id: string;
@@ -159,7 +160,19 @@ function AgentDashboardContent() {
       if (authRow.status === 'disputed') {
         setClaimResult({ ok: false, message: 'Another agent already holds an active claim on this board. Both claims have been flagged for admin review — you\'ll be notified once it\'s resolved.' });
       } else {
-        setClaimResult({ ok: true, message: 'Claim recorded. You can now create a listing for it under "My Listings".' });
+        if (ownerId) {
+          await createNotification({
+            recipientRole: 'owner',
+            recipientUserId: ownerId,
+            type: 'agent_authorization_request',
+            title: 'An agent claims to represent you',
+            body: `${boardMode === 'new' ? newBoard.name.trim() : boardQuery} — confirm if you actually authorized them to sell this board.`,
+            link: '/dashboard/owner/agent-authorizations',
+          });
+          setClaimResult({ ok: true, message: 'Claim recorded and the owner has been notified to confirm. Until they do, your listing will show "Owner Unverified."' });
+        } else {
+          setClaimResult({ ok: true, message: 'Claim recorded. You can now create a listing for it under "My Listings".' });
+        }
         setFloorRate(''); setSelectedBoardId(''); setBoardQuery(''); setOwnerEmail('');
         setNewBoard({ name: '', city: '', state: '', format: 'billboard', address: '' });
       }
