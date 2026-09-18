@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
+import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -21,7 +22,14 @@ type Board = {
   face_count: number;
   status: 'available' | 'booked' | 'unavailable' | 'decommissioned';
   photo_urls: string[] | null;
+  activeListing?: { id: string; sell_price: number; badge: TrustBadge } | null;
 };
+
+/** The price an agency actually pays: the agent's sell price when the
+ * board has an active listing, otherwise the owner's own asking rate. */
+function effectiveRate(board: Board) {
+  return board.activeListing ? board.activeListing.sell_price : board.asking_rate;
+}
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -236,7 +244,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
               { label: 'Location',    value: `${board.city}, ${board.state}` },
               { label: 'Faces',       value: board.face_count === 1 ? 'Single face' : `${board.face_count} faces` },
               { label: 'Illuminated', value: board.illuminated ? 'Yes — backlit' : 'No' },
-              { label: 'Monthly rate', value: formatNaira(board.asking_rate) },
+              { label: 'Monthly rate', value: formatNaira(effectiveRate(board)) },
             ].map(({ label, value }) => (
               <div key={label} style={{ background: '#F8FAFC', borderRadius: 10, padding: '10px 14px' }}>
                 <p style={{ fontSize: '0.6875rem', color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 3px' }}>{label}</p>
@@ -245,8 +253,9 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
             ))}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
             <StatusBadge status={board.status} />
+            <TrustBadgePill badge={board.activeListing?.badge ?? 'Verified Owner'} small />
           </div>
 
           {board.status === 'available' ? (
@@ -259,7 +268,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
                 boxSizing: 'border-box',
               }}
             >
-              View full listing — {formatNaira(board.asking_rate)}/mo
+              View full listing — {formatNaira(effectiveRate(board))}/mo
             </a>
           ) : board.status === 'booked' ? (
             <button
@@ -300,12 +309,25 @@ function MarketplaceContent() {
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('boards')
-        .select('id, name, address, city, state, format, asking_rate, width, height, illuminated, face_count, status, photo_urls')
-        .order('created_at', { ascending: false });
+      const [{ data }, { data: listingsData }] = await Promise.all([
+        supabase
+          .from('boards')
+          .select('id, name, address, city, state, format, asking_rate, width, height, illuminated, face_count, status, photo_urls')
+          .order('created_at', { ascending: false }),
+        supabase.from('listings').select('id, board_id, sell_price, agent_id, board_authorizations(owner_verified)').eq('status', 'active'),
+      ]);
 
-      setBoards((data as Board[]) || []);
+      const listingsByBoard = new Map<string, any>();
+      (listingsData || []).forEach((l: any) => { if (!listingsByBoard.has(l.board_id)) listingsByBoard.set(l.board_id, l); });
+
+      const withBadges = ((data as Board[]) || []).map(b => {
+        const l = listingsByBoard.get(b.id);
+        if (!l) return b;
+        const badge = computeTrustBadge({ agent_id: l.agent_id }, l.board_authorizations);
+        return { ...b, activeListing: { id: l.id, sell_price: l.sell_price, badge } };
+      });
+
+      setBoards(withBadges);
       setLoading(false);
     }
     load();
@@ -316,7 +338,7 @@ function MarketplaceContent() {
       if (statusFilter !== 'all' && b.status !== statusFilter) return false;
       if (stateFilter !== 'all' && b.state !== stateFilter) return false;
       if (formatFilter !== 'all' && b.format !== formatFilter) return false;
-      if (b.asking_rate > priceMax) return false;
+      if (effectiveRate(b) > priceMax) return false;
       if (search) {
         const q = search.toLowerCase();
         if (!b.name.toLowerCase().includes(q) && !b.address.toLowerCase().includes(q) && !b.city.toLowerCase().includes(q)) return false;
@@ -632,12 +654,13 @@ function MarketplaceContent() {
                         Illuminated
                       </span>
                     )}
+                    <TrustBadgePill badge={board.activeListing?.badge ?? 'Verified Owner'} small />
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
                       <p style={{ fontSize: '1.125rem', fontWeight: 800, color: '#1B4F8A', fontFamily: 'monospace', margin: 0, letterSpacing: '-0.02em' }}>
-                        {formatNaira(board.asking_rate)}
+                        {formatNaira(effectiveRate(board))}
                       </p>
                       <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>per month</p>
                     </div>

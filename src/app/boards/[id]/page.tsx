@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 
 type Board = {
   id: string;
@@ -24,6 +25,8 @@ type Board = {
   contact_phone: string | null;
 };
 
+type ActiveListing = { sell_price: number; badge: TrustBadge } | null;
+
 const FORMAT_LABELS: Record<string, string> = {
   billboard: 'Billboard', unipole: 'Unipole', gantry: 'Gantry',
   bridge_panel: 'Bridge Panel', wall_drape: 'Wall Drape',
@@ -38,15 +41,27 @@ function formatNaira(n: number) {
 export default function PublicBoardPage() {
   const { id } = useParams();
   const [board, setBoard] = useState<Board | null>(null);
+  const [activeListing, setActiveListing] = useState<ActiveListing>(null);
   const [loading, setLoading] = useState(true);
   const [photoIdx, setPhotoIdx] = useState(0);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    supabase.from('boards').select('*').eq('id', id).single()
-      .then(({ data }) => { setBoard(data as Board); setLoading(false); });
+    Promise.all([
+      supabase.from('boards').select('*').eq('id', id).single(),
+      supabase.from('listings').select('sell_price, agent_id, board_authorizations(owner_verified)').eq('board_id', id).eq('status', 'active').maybeSingle(),
+    ]).then(([{ data }, { data: listing }]) => {
+      setBoard(data as Board);
+      if (listing) {
+        const badge = computeTrustBadge({ agent_id: listing.agent_id }, listing.board_authorizations as any);
+        setActiveListing({ sell_price: listing.sell_price, badge });
+      }
+      setLoading(false);
+    });
   }, [id]);
+
+  const effectiveRate = activeListing ? activeListing.sell_price : (board?.asking_rate ?? 0);
 
   function shareBoard() {
     const url = window.location.href;
@@ -238,10 +253,11 @@ export default function PublicBoardPage() {
           <div style={{ background: '#fff', padding: '16px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
             <div>
               <p style={{ fontSize: '0.625rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>Asking rate</p>
-              <p style={{ fontSize: '1.625rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: "'DM Mono', 'Courier New', monospace" }}>
-                {formatNaira(board.asking_rate)}
+              <p style={{ fontSize: '1.625rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: "'DM Mono', 'Courier New', monospace", marginBottom: 6 }}>
+                {formatNaira(effectiveRate)}
                 <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#94A3B8', letterSpacing: 0, fontFamily: 'inherit' }}>/mo</span>
               </p>
+              <TrustBadgePill badge={activeListing?.badge ?? 'Verified Owner'} small />
             </div>
             <a href="/auth/login" className="pub-btn" style={{
               background: isBooked ? '#94A3B8' : '#1B4F8A',
