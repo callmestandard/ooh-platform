@@ -253,12 +253,24 @@ function AdminContent() {
       ]);
       if (bRes.error) throw bRes.error;
       if (bRes.data) setBoards(bRes.data as Board[]);
+
+      // The rest are non-fatal individually (one tab's data shouldn't
+      // block the whole page), but a silent failure here previously meant
+      // a whole tab (Users, in particular) just stayed empty with no
+      // indication why — log each so it's at least visible in devtools.
+      if (bookRes.error) console.error('[admin] bookings fetch failed:', bookRes.error.message);
       if (bookRes.data) setBookings(bookRes.data as unknown as Booking[]);
+      if (campRes.error) console.error('[admin] campaigns fetch failed:', campRes.error.message);
       if (campRes.data) setCampaigns(campRes.data as Campaign[]);
+      if (compRes.error) console.error('[admin] compliance fetch failed:', compRes.error.message);
       if (compRes.data) setCompliance(compRes.data as ComplianceCheck[]);
+      if (profRes.error) console.error('[admin] profiles fetch failed:', profRes.error.message);
       if (profRes.data && profRes.data.length > 0) setProfiles(profRes.data as Profile[]);
+      if (actRes.error) console.error('[admin] activity_events fetch failed:', actRes.error.message);
       if (actRes.data) setActivityEvents(actRes.data as ActivityEvent[]);
+      if (disputedRes.error) console.error('[admin] board_authorizations fetch failed:', disputedRes.error.message);
       if (disputedRes.data) setDisputedAuths(disputedRes.data as unknown as DisputedAuthorization[]);
+      if (payoutsRes.error) console.error('[admin] booking_payouts fetch failed:', payoutsRes.error.message);
       if (payoutsRes.data) setAgentPayouts(payoutsRes.data as unknown as AgentPayoutRow[]);
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Failed to load admin data');
