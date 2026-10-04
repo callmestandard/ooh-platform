@@ -17,12 +17,18 @@ import { supabase } from '@/lib/supabase';
 import { formatNaira, formatDate } from '@/lib/utils';
 import { getMarketRate, type MarketRate } from '@/lib/rate-intelligence';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
+import PrintStatusPanel from '@/components/print/PrintStatusPanel';
+import {
+  type PrintTask, type ResponsibleParty, PRINT_STATUS_LABELS, PRINT_STATUS_STYLE,
+  fetchPrintTasksForBookings, createPrintTask,
+} from '@/lib/print-tasks';
 
 type Campaign = {
   id: string;
   name: string;
   client_name: string;
   client_id: string | null;
+  agency_id: string | null;
   status: string;
   start_date: string;
   end_date: string;
@@ -207,8 +213,13 @@ export default function CampaignPlanPage() {
     durationMonths: '1',
     creativeType: 'static' as 'static' | 'led' | 'digital',
     printRequired: false,
+    responsibleParty: '' as ResponsibleParty | '',
     notes: '',
   });
+
+  // Print progress tracking — keyed by booking id
+  const [printTasksByBooking, setPrintTasksByBooking] = useState<Record<string, PrintTask>>({});
+  const [printPanelFor, setPrintPanelFor] = useState<PlanItem | null>(null);
 
   // Board-swap flow: "needs replacement" → attach a candidate → approve
   const [replacingItemId, setReplacingItemId] = useState<string | null>(null);
@@ -357,6 +368,7 @@ export default function CampaignPlanPage() {
             (crRes.data as CreativeUpload[]).forEach(c => { if (!crMap[c.booking_id]) crMap[c.booking_id] = c; });
             setCreativesByBooking(crMap);
           }
+          setPrintTasksByBooking(await fetchPrintTasksForBookings(items.map(i => i.id)));
         }
       }
       if (boardsRes.data) {
@@ -476,6 +488,7 @@ export default function CampaignPlanPage() {
 
   async function addBoardToPlan() {
     if (!addForm.boardId || !addForm.rate) return;
+    if (addForm.printRequired && !addForm.responsibleParty) return;
     setSaving(true);
     const board = allBoards.find(b => b.id === addForm.boardId);
     const startDate = addForm.startDate || campaign?.start_date;
@@ -514,6 +527,17 @@ export default function CampaignPlanPage() {
         ...actor,
       });
       setActivityKey(k => k + 1);
+      if (addForm.printRequired && addForm.responsibleParty) {
+        const task = await createPrintTask({ bookingId: newItem.id, campaignId: id as string, responsibleParty: addForm.responsibleParty });
+        if (task) {
+          await logActivity({
+            entityType: 'print_task', entityId: task.id, campaignId: id,
+            action: 'print_task.created',
+            summary: `Print tracking set up for ${board?.name} — ${addForm.responsibleParty === 'board_owner' ? 'Board owner' : addForm.responsibleParty === 'client' ? 'Client' : 'Agency'} responsible`,
+            ...actor,
+          });
+        }
+      }
       // Notify owner that a new booking request has arrived
       await createNotification({
         recipientRole: 'owner',
@@ -525,7 +549,7 @@ export default function CampaignPlanPage() {
       await fetchData();
       setShowAddBoard(false);
       setReplacingItemId(null);
-      setAddForm({ boardId: '', rate: '', startDate: '', endDate: '', durationMonths: '1', creativeType: 'static', printRequired: false, notes: '' });
+      setAddForm({ boardId: '', rate: '', startDate: '', endDate: '', durationMonths: '1', creativeType: 'static', printRequired: false, responsibleParty: '', notes: '' });
       showToast(isReplacement ? `${board?.name} attached as a replacement candidate` : `${board?.name} added to plan`);
     } else {
       showToast('Failed to add board', 'error');
@@ -605,7 +629,9 @@ export default function CampaignPlanPage() {
       startDate: item.start_date, endDate: item.end_date,
       durationMonths: String(item.duration_months || 1),
       creativeType: (item.creative_type as 'static' | 'led' | 'digital') || 'static',
-      printRequired: item.print_required, notes: '',
+      printRequired: item.print_required,
+      responsibleParty: printTasksByBooking[item.id]?.responsible_party || '',
+      notes: '',
     });
     setShowAddBoard(true);
   }
@@ -626,6 +652,18 @@ export default function CampaignPlanPage() {
     const nextVersion = (campaign?.plan_version || 1) + 1;
     await supabase.from('campaigns').update({ plan_version: nextVersion }).eq('id', id);
 
+    // Board swap: reinitialize print tracking for the new board rather than
+    // carrying over stale status from the one it's replacing — same
+    // responsible-party assignment (it's a role, not a specific board), but
+    // status resets since it's a different physical board/creative.
+    const originalTask = printTasksByBooking[original.id];
+    let newPrintTask: PrintTask | null = null;
+    if (originalTask) {
+      newPrintTask = await createPrintTask({
+        bookingId: replacement.id, campaignId: id as string, responsibleParty: originalTask.responsible_party,
+      });
+    }
+
     const actor = await getActivityActor();
     await logActivity({
       entityType: 'booking', entityId: original.id, campaignId: id,
@@ -645,6 +683,15 @@ export default function CampaignPlanPage() {
       summary: `Plan updated to v${nextVersion} — ${original.boards?.name} → ${replacement.boards?.name}`,
       ...actor, changes: { plan_version: { from: campaign?.plan_version || 1, to: nextVersion } },
     });
+    if (newPrintTask) {
+      await logActivity({
+        entityType: 'print_task', entityId: newPrintTask.id, campaignId: id,
+        action: 'print_task.reinitialized',
+        summary: `Print tracking reset for ${replacement.boards?.name} (was "${PRINT_STATUS_LABELS[originalTask!.status]}" on ${original.boards?.name} before the swap)`,
+        ...actor,
+      });
+      setPrintTasksByBooking(prev => ({ ...prev, [replacement.id]: newPrintTask! }));
+    }
 
     setCampaign(prev => prev ? { ...prev, plan_version: nextVersion } : prev);
     setPlanItems(prev => prev.map(i =>
@@ -1041,7 +1088,7 @@ export default function CampaignPlanPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC' }}>
-                      {['Board', 'Location', 'Format', 'Duration', 'Rate/month', 'Total cost', 'Type', 'Status', 'Client', 'Artwork', 'POE link', ''].map(h => (
+                      {['Board', 'Location', 'Format', 'Duration', 'Rate/month', 'Total cost', 'Type', 'Status', 'Client', 'Artwork', 'Print', 'POE link', ''].map(h => (
                         <th key={h} style={{ padding: '10px 14px', fontSize: '0.625rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'left', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -1158,6 +1205,32 @@ export default function CampaignPlanPage() {
                                   style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#F1F5F9', color: '#64748B', border: '1px dashed #CBD5E1', padding: '3px 8px', borderRadius: 5, fontSize: '0.6875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
                                 >
                                   + Upload
+                                </button>
+                              );
+                            })()}
+                          </td>
+                          <td style={{ padding: '10px 14px' }}>
+                            {(() => {
+                              if (!item.print_required) return <span style={{ fontSize: '0.6875rem', color: '#CBD5E1' }}>—</span>;
+                              const pt = printTasksByBooking[item.id];
+                              if (!pt) {
+                                return (
+                                  <button
+                                    onClick={() => setPrintPanelFor(item)}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#F1F5F9', color: '#64748B', border: '1px dashed #CBD5E1', padding: '3px 8px', borderRadius: 5, fontSize: '0.6875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                                  >
+                                    + Set up
+                                  </button>
+                                );
+                              }
+                              const s = PRINT_STATUS_STYLE[pt.status];
+                              return (
+                                <button
+                                  onClick={() => setPrintPanelFor(item)}
+                                  title={`Responsible: ${pt.responsible_party}`}
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: s.bg, color: s.color, border: 'none', padding: '3px 8px', borderRadius: 5, fontSize: '0.6875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                                >
+                                  {PRINT_STATUS_LABELS[pt.status]}
                                 </button>
                               );
                             })()}
@@ -2038,6 +2111,21 @@ export default function CampaignPlanPage() {
                       Print required
                     </label>
                   </div>
+                  {addForm.printRequired && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: '#374151', marginBottom: 4 }}>Who prints it?</label>
+                      <select
+                        value={addForm.responsibleParty}
+                        onChange={e => setAddForm(f => ({ ...f, responsibleParty: e.target.value as ResponsibleParty }))}
+                        style={{ width: '100%', padding: '8px 10px', border: '1px solid #E2E8F0', borderRadius: '7px', fontSize: '0.875rem', outline: 'none', background: '#fff', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                      >
+                        <option value="">Select…</option>
+                        <option value="agency">Agency</option>
+                        <option value="client">Client</option>
+                        <option value="board_owner">Board owner</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 {/* Market rate intelligence panel */}
@@ -2115,8 +2203,8 @@ export default function CampaignPlanPage() {
 
                 <button
                   onClick={addBoardToPlan}
-                  disabled={saving || !addForm.rate}
-                  style={{ width: '100%', padding: '11px', background: saving || !addForm.rate ? '#94A3B8' : '#1B4F8A', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.875rem', fontWeight: 600, cursor: saving || !addForm.rate ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
+                  disabled={saving || !addForm.rate || (addForm.printRequired && !addForm.responsibleParty)}
+                  style={{ width: '100%', padding: '11px', background: saving || !addForm.rate || (addForm.printRequired && !addForm.responsibleParty) ? '#94A3B8' : '#1B4F8A', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.875rem', fontWeight: 600, cursor: saving || !addForm.rate || (addForm.printRequired && !addForm.responsibleParty) ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
                 >
                   {saving ? 'Adding...' : replacingItemId ? 'Attach as candidate' : 'Add to plan'}
                 </button>
@@ -2142,6 +2230,45 @@ export default function CampaignPlanPage() {
           </div>
         );
       })()}
+
+      {/* Print status needs-attention banner — same surfacing as the swap-review
+          banner above: a print task stuck at not_started close to the board's
+          start date shouldn't be a silent feature nobody checks. */}
+      {mainTableItems.length > 0 && (() => {
+        const soon = mainTableItems.filter(i => {
+          if (!i.print_required || !i.start_date) return false;
+          const task = printTasksByBooking[i.id];
+          if (task && task.status !== 'not_started') return false;
+          const daysToStart = (new Date(i.start_date).getTime() - Date.now()) / 86_400_000;
+          return daysToStart <= 7;
+        });
+        if (soon.length === 0) return null;
+        return (
+          <div style={{ background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, marginTop: '0.75rem' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <p style={{ fontSize: '0.8125rem', color: '#991B1B', margin: 0 }}>
+              <strong>{soon.length} board{soon.length !== 1 ? 's' : ''} need print started — flight start is within 7 days.</strong>{' '}
+              Click a line&apos;s <strong>Print</strong> status to check in with whoever&apos;s responsible.
+            </p>
+          </div>
+        );
+      })()}
+
+      {/* Print status panel */}
+      {printPanelFor && campaign && (
+        <PrintStatusPanel
+          bookingId={printPanelFor.id}
+          campaignId={campaign.id}
+          boardId={printPanelFor.board_id}
+          boardName={printPanelFor.boards?.name || 'Board'}
+          campaignAgencyId={campaign.agency_id}
+          campaignClientId={campaign.client_id}
+          onClose={() => setPrintPanelFor(null)}
+          onChange={task => {
+            if (task) setPrintTasksByBooking(prev => ({ ...prev, [printPanelFor.id]: task }));
+          }}
+        />
+      )}
 
       {/* Creative upload panel */}
       {uploadingFor && (

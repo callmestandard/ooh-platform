@@ -17,6 +17,8 @@ import { formatNaira, formatDate, formatDateShort, formatImpressions } from '@/l
 import { SkeletonCard, SkeletonTable } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
+import PrintStatusPanel from '@/components/print/PrintStatusPanel';
+import { type PrintTask, PRINT_STATUS_LABELS, PRINT_STATUS_STYLE, fetchPrintTasksForBookings } from '@/lib/print-tasks';
 
 const ClientPortalMap = dynamic(() => import('@/components/client/ClientPortalMap'), { ssr: false, loading: () => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: '#F8FAFC' }}>
@@ -38,6 +40,7 @@ type Campaign = {
   target_cities?: string | null;
   plan_notes?: string | null;
   agency_id?: string | null;
+  client_id?: string | null;
 };
 
 type Booking = {
@@ -288,6 +291,8 @@ function ClientContent() {
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [compliance, setCompliance] = useState<ComplianceCheck[]>([]);
+  const [printTasksByBooking, setPrintTasksByBooking] = useState<Record<string, PrintTask>>({});
+  const [printPanelFor, setPrintPanelFor] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [loadingCampaign, setLoadingCampaign] = useState(false);
@@ -339,8 +344,10 @@ function ClientContent() {
         .select('*')
         .in('booking_id', bookList.map(b => b.id));
       setCompliance((compData as ComplianceCheck[]) || []);
+      setPrintTasksByBooking(await fetchPrintTasksForBookings(bookList.map(b => b.id)));
     } else {
       setCompliance([]);
+      setPrintTasksByBooking({});
     }
 
     setLoadingCampaign(false);
@@ -1260,6 +1267,26 @@ function ClientContent() {
                           <span style={{ fontSize: '0.6875rem', color: '#94A3B8', fontWeight: 600 }}>POE Status</span>
                           <CompliancePill check={check} />
                         </div>
+
+                        {/* Print status */}
+                        {printTasksByBooking[booking.id] && (
+                          <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: '0.6875rem', color: '#94A3B8', fontWeight: 600 }}>Print status</span>
+                            {(() => {
+                              const pt = printTasksByBooking[booking.id];
+                              const s = PRINT_STATUS_STYLE[pt.status];
+                              return (
+                                <button
+                                  onClick={() => setPrintPanelFor(booking)}
+                                  title={`Responsible: ${pt.responsible_party}`}
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: s.bg, color: s.color, border: 'none', padding: '3px 8px', borderRadius: 5, fontSize: '0.6875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                                >
+                                  {PRINT_STATUS_LABELS[pt.status]}
+                                </button>
+                              );
+                            })()}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -1268,6 +1295,22 @@ function ClientContent() {
             </>
           )}
         </div>
+      )}
+
+      {/* Print status panel */}
+      {printPanelFor && activeCampaign && (
+        <PrintStatusPanel
+          bookingId={printPanelFor.id}
+          campaignId={activeCampaign.id}
+          boardId={printPanelFor.boards.id}
+          boardName={printPanelFor.boards?.name || 'Board'}
+          campaignAgencyId={activeCampaign.agency_id ?? null}
+          campaignClientId={activeCampaign.client_id ?? null}
+          onClose={() => setPrintPanelFor(null)}
+          onChange={task => {
+            if (task) setPrintTasksByBooking(prev => ({ ...prev, [printPanelFor.id]: task }));
+          }}
+        />
       )}
 
       {/* ═══ TAB: COMPLIANCE REPORT ═══ */}

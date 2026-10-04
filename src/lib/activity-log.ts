@@ -9,7 +9,7 @@ import { supabase } from './supabase';
 import { getSupabaseAdmin } from './supabase-admin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export type ActivityEntityType = 'campaign' | 'booking' | 'invoice' | 'compliance_check' | 'board';
+export type ActivityEntityType = 'campaign' | 'booking' | 'invoice' | 'compliance_check' | 'board' | 'print_task';
 
 export type ActivityEvent = {
   id: string;
@@ -89,7 +89,7 @@ export async function logActivity(
   const { error } = await db(client).from('activity_events').insert({
     entity_type: params.entityType,
     entity_id: params.entityId,
-    campaign_id: params.campaignId ?? null,
+    campaign_id: params.campaignId || null,
     actor_id: params.actorId ?? null,
     actor_role: params.actorRole ?? null,
     actor_name: params.actorName ?? null,

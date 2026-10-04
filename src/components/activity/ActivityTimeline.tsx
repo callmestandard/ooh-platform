@@ -34,6 +34,9 @@ const ACTION_ICONS: Record<string, string> = {
   'campaign.status_changed': '🔄',
   'invoice.created': '🧾',
   'invoice.erp_exported': '📤',
+  'print_task.created': '🖨️',
+  'print_task.status_changed': '🔄',
+  'print_task.reinitialized': '🖨️',
 };
 
 function fmtTime(iso: string) {

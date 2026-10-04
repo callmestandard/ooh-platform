@@ -20,6 +20,7 @@
 | Campaign plan page | `campaign.sent_for_approval`, `campaign.arcon_updated`, `campaign.status_changed`, `booking.added_to_plan`, `booking.removed_from_plan`, `booking.rate_updated` |
 | Client portal approve/decline | `booking.approved_by_client`, `booking.declined_by_client` |
 | POE submit | `compliance.submitted`, `booking.status_changed` → live |
+| `PrintStatusPanel` (agency/owner/client dashboards) | `print_task.created`, `print_task.status_changed`, `print_task.reinitialized` (on board swap) |
 
 ## UI
 
@@ -28,6 +29,7 @@
 | `/dashboard/agency/invoices/[id]` | `ActivityTimeline` |
 | `/dashboard/agency/campaigns/[id]` → Activity tab | `CampaignActivityTimeline` |
 | `/dashboard/agency/negotiations/[id]` | `ActivityTimeline` (sidebar) |
+| `PrintStatusPanel` (agency campaign plan, owner bookings, client board-status) | `ActivityTimeline` (`entityType: 'print_task'`) |
 
 ## Optional next
 

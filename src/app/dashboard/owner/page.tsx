@@ -10,6 +10,8 @@ import { SkeletonGrid, SkeletonTable } from '@/components/ui/Skeleton';
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import { useToast } from '@/components/ui/Toast';
 import { getActivityActor, logActivity } from '@/lib/activity-log';
+import PrintStatusPanel from '@/components/print/PrintStatusPanel';
+import { type PrintTask, PRINT_STATUS_LABELS, PRINT_STATUS_STYLE, fetchPrintTasksForBookings } from '@/lib/print-tasks';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -37,6 +39,7 @@ type Board = {
 type Booking = {
   id: string;
   board_id: string;
+  campaign_id?: string | null;
   status: string;
   offered_rate: number;
   agreed_rate: number | null;
@@ -48,7 +51,7 @@ type Booking = {
   mpo_issued_at?: string | null;
   mpo_agency_name?: string | null;
   boards: { name: string; city: string; format: string };
-  campaigns: { name: string; client_name: string | null };
+  campaigns: { id: string; name: string; client_name: string | null; agency_id: string | null; client_id: string | null };
 };
 
 type Message = {
@@ -505,6 +508,8 @@ function OwnerContent() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [creativesByBooking, setCreativesByBooking] = useState<Record<string, { id: string; file_url: string; file_name: string; file_size: number | null; status: string; notes: string | null }>>({});
+  const [printTasksByBooking, setPrintTasksByBooking] = useState<Record<string, PrintTask>>({});
+  const [printPanelFor, setPrintPanelFor] = useState<Booking | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [wizardName, setWizardName] = useState('');
@@ -629,7 +634,7 @@ function OwnerContent() {
         supabase.from('boards').select('*').eq('owner_id', uid).order('created_at', { ascending: false }).limit(200),
         supabase
           .from('bookings')
-          .select('*, boards!inner(name, city, format, owner_id), campaigns(name, client_name)')
+          .select('*, boards!inner(name, city, format, owner_id), campaigns(id, name, client_name, agency_id, client_id)')
           .eq('boards.owner_id', uid)
           .not('status', 'eq', 'declined')
           .order('created_at', { ascending: false })
@@ -666,6 +671,7 @@ function OwnerContent() {
             setCreativesByBooking(crMap);
           }
           if (msgRes.data) setMessages(msgRes.data as unknown as Message[]);
+          setPrintTasksByBooking(await fetchPrintTasksForBookings(bookingIds));
         }
       }
     } catch (err) {
@@ -1057,7 +1063,7 @@ function OwnerContent() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#F8FAFC' }}>
-                  {['Board', 'Campaign / Client', 'Rate', 'Flight dates', 'Artwork', 'Status'].map(h => (
+                  {['Board', 'Campaign / Client', 'Rate', 'Flight dates', 'Artwork', 'Print', 'Status'].map(h => (
                     <th key={h} style={{ padding: '10px 16px', fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'left', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -1133,6 +1139,22 @@ function OwnerContent() {
                                 <span style={{ fontSize: '0.625rem', fontWeight: 700, color: s.color, background: s.bg, padding: '2px 6px', borderRadius: 4, display: 'inline-block' }}>{s.label}</span>
                               )}
                             </div>
+                          );
+                        })()}
+                      </td>
+                      <td style={{ padding: '10px 16px' }}>
+                        {(() => {
+                          const pt = printTasksByBooking[booking.id];
+                          if (!pt) return <span style={{ fontSize: '0.6875rem', color: '#CBD5E1' }}>—</span>;
+                          const s = PRINT_STATUS_STYLE[pt.status];
+                          return (
+                            <button
+                              onClick={() => setPrintPanelFor(booking)}
+                              title={`Responsible: ${pt.responsible_party}`}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: s.bg, color: s.color, border: 'none', padding: '3px 8px', borderRadius: 5, fontSize: '0.6875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                            >
+                              {PRINT_STATUS_LABELS[pt.status]}
+                            </button>
                           );
                         })()}
                       </td>
@@ -1895,6 +1917,22 @@ function OwnerContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Print status panel */}
+      {printPanelFor && (
+        <PrintStatusPanel
+          bookingId={printPanelFor.id}
+          campaignId={printPanelFor.campaigns?.id || printPanelFor.campaign_id || ''}
+          boardId={printPanelFor.board_id}
+          boardName={printPanelFor.boards?.name || 'Board'}
+          campaignAgencyId={printPanelFor.campaigns?.agency_id ?? null}
+          campaignClientId={printPanelFor.campaigns?.client_id ?? null}
+          onClose={() => setPrintPanelFor(null)}
+          onChange={task => {
+            if (task) setPrintTasksByBooking(prev => ({ ...prev, [printPanelFor.id]: task }));
+          }}
+        />
       )}
 
       {/* Artwork review modal */}
