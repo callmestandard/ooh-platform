@@ -7,8 +7,18 @@ const MAPILLARY_TOKEN = process.env.NEXT_PUBLIC_MAPILLARY_TOKEN || '';
 
 type NearestImage = { id: string; capturedAt: number | null; distanceM: number };
 
-// Search outwards in steps so a nearby photo wins over a distant one; ~0.001° ≈ 110 m.
-const SEARCH_STEPS_DEG = [0.0008, 0.002, 0.005];
+// How far from the point a photo may be and still count as "this street".
+const MAX_DISTANCE_M = 500;
+const TILE_ZOOM = 14; // the only zoom Mapillary serves individual photos at
+
+function tileXY(lat: number, lng: number) {
+  const n = 2 ** TILE_ZOOM;
+  const latRad = (lat * Math.PI) / 180;
+  return {
+    x: ((lng + 180) / 360) * n,
+    y: ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n,
+  };
+}
 
 function distanceMetres(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 6_371_000;
@@ -18,28 +28,41 @@ function distanceMetres(lat1: number, lng1: number, lat2: number, lng2: number) 
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-/** Nearest Mapillary photo to a point, or null when nobody has photographed the area. */
+/**
+ * Nearest Mapillary photo to a point, or null when nobody has photographed
+ * the area. Reads Mapillary's coverage vector tiles rather than the Graph
+ * API's bbox image search, which returns empty results even over dense
+ * coverage. Also loads the neighbouring tile(s) when the point sits near a
+ * tile edge, so a photo just across the boundary isn't missed.
+ */
 async function findNearestImage(lat: number, lng: number, signal: AbortSignal): Promise<NearestImage | null> {
-  for (const d of SEARCH_STEPS_DEG) {
-    const url = new URL('https://graph.mapillary.com/images');
-    url.searchParams.set('access_token', MAPILLARY_TOKEN);
-    url.searchParams.set('fields', 'id,computed_geometry,captured_at');
-    url.searchParams.set('bbox', [lng - d, lat - d, lng + d, lat + d].join(','));
-    url.searchParams.set('limit', '100');
-    const res = await fetch(url, { signal });
+  const [{ VectorTile }, { default: Pbf }] = await Promise.all([import('@mapbox/vector-tile'), import('pbf')]);
+  const { x, y } = tileXY(lat, lng);
+  const tx = Math.floor(x), ty = Math.floor(y);
+  const xs = [tx], ys = [ty];
+  if (x - tx < 0.25) xs.push(tx - 1); else if (x - tx > 0.75) xs.push(tx + 1);
+  if (y - ty < 0.25) ys.push(ty - 1); else if (y - ty > 0.75) ys.push(ty + 1);
+
+  const candidates: NearestImage[] = [];
+  await Promise.all(xs.flatMap(cx => ys.map(async cy => {
+    const res = await fetch(`https://tiles.mapillary.com/maps/vtp/mly1_public/2/${TILE_ZOOM}/${cx}/${cy}?access_token=${encodeURIComponent(MAPILLARY_TOKEN)}`, { signal });
+    if (res.status === 404 || res.status === 204) return; // no coverage in this tile
     if (!res.ok) throw new Error(`Mapillary returned ${res.status}`);
-    const json = (await res.json()) as { data?: { id: string; captured_at?: number; computed_geometry?: { coordinates: [number, number] } }[] };
-    const candidates = (json.data ?? [])
-      .filter(i => i.computed_geometry?.coordinates)
-      .map(i => ({
-        id: i.id,
-        capturedAt: i.captured_at ?? null,
-        distanceM: distanceMetres(lat, lng, i.computed_geometry!.coordinates[1], i.computed_geometry!.coordinates[0]),
-      }))
-      .sort((a, b) => a.distanceM - b.distanceM);
-    if (candidates.length > 0) return candidates[0];
-  }
-  return null;
+    const layer = new VectorTile(new Pbf(new Uint8Array(await res.arrayBuffer()))).layers.image;
+    if (!layer) return;
+    for (let i = 0; i < layer.length; i++) {
+      const feature = layer.feature(i);
+      const geometry = feature.toGeoJSON(cx, cy, TILE_ZOOM).geometry;
+      if (geometry.type !== 'Point') continue;
+      const distanceM = distanceMetres(lat, lng, geometry.coordinates[1], geometry.coordinates[0]);
+      if (distanceM > MAX_DISTANCE_M) continue;
+      const capturedAt = Number(feature.properties.captured_at);
+      candidates.push({ id: String(feature.properties.id), capturedAt: Number.isFinite(capturedAt) ? capturedAt : null, distanceM });
+    }
+  })));
+
+  candidates.sort((a, b) => a.distanceM - b.distanceM);
+  return candidates[0] ?? null;
 }
 
 type Status = 'loading' | 'ready' | 'none' | 'error';
@@ -73,13 +96,16 @@ export default function StreetLevelView({ lat, lng, height = 400 }: { lat: numbe
         setImage(nearest);
         const { Viewer } = await import('mapillary-js');
         if (abort.signal.aborted || !containerRef.current) return;
-        viewer = new Viewer({
+        const v = new Viewer({
           accessToken: MAPILLARY_TOKEN,
           container: containerRef.current,
-          imageId: nearest.id,
           component: { cover: false },
         });
-        setStatus('ready');
+        viewer = v;
+        // moveTo rejects when Mapillary won't serve the photo (e.g. the token's
+        // app has no read permission) — without this the tab is just a black box.
+        await v.moveTo(nearest.id);
+        if (!abort.signal.aborted) setStatus('ready');
       } catch (e) {
         if (!abort.signal.aborted) {
           console.error('[street-level]', e);
@@ -110,7 +136,7 @@ export default function StreetLevelView({ lat, lng, height = 400 }: { lat: numbe
           <div ref={containerRef} style={{ position: 'absolute', inset: 0, visibility: status === 'ready' ? 'visible' : 'hidden' }} />
           {status === 'loading' && message('Looking for street-level photos…', 'Searching Mapillary around this point.')}
           {status === 'none' && message('No street-level photos here', 'Nobody has contributed Mapillary imagery within about 500 m of this point yet. Try Google Street View below.')}
-          {status === 'error' && message('Could not load street-level photos', 'Mapillary did not respond. Try again in a moment.')}
+          {status === 'error' && message('Could not load street-level photos', 'Mapillary would not serve imagery for this point. Try Google Street View below.')}
         </div>
       )}
 
