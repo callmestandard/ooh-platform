@@ -312,7 +312,8 @@ BEGIN
   END IF;
 
   INSERT INTO public.activity_events (entity_type, entity_id, campaign_id, actor_id, actor_role, actor_name, action, summary, changes)
-  VALUES ('makegood', NEW.id::TEXT, NEW.campaign_id, NEW.updated_by, NEW.updated_by_side, NEW.updated_by_name,
+  -- entity_id is UUID in the live schema (the 003 file declares TEXT); a UUID value assigns to either
+  VALUES ('makegood', NEW.id, NEW.campaign_id, NEW.updated_by, NEW.updated_by_side, NEW.updated_by_name,
           CASE WHEN TG_OP = 'INSERT' THEN 'makegood.created' WHEN NEW.status IS DISTINCT FROM OLD.status THEN 'makegood.status_changed' ELSE 'makegood.updated' END,
           v_summary,
           CASE WHEN TG_OP = 'UPDATE' AND NEW.status IS DISTINCT FROM OLD.status
@@ -379,5 +380,5 @@ $$;
 DROP POLICY IF EXISTS "activity_select_makegood" ON public.activity_events;
 -- additional permissive policy: both parties read a makegood's history
 CREATE POLICY "activity_select_makegood" ON public.activity_events FOR SELECT USING (
-  entity_type = 'makegood' AND public.makegood_event_visible(entity_id, auth.uid())
+  entity_type = 'makegood' AND public.makegood_event_visible(entity_id::TEXT, auth.uid())
 );
