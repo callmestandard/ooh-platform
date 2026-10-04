@@ -294,7 +294,7 @@ export async function POST(req: NextRequest) {
           [b.name || '—',        68, 155],
           [(b.city || b.address || b.state || '—').slice(0, 22), 228, 115],
           [(b.format || '—').replace(/_/g, ' '), 347, 65],
-          [fmtNaira(b.asking_rate || 0), 416, 80],
+          [b.asking_rate ? fmtNaira(b.asking_rate) : 'On request', 416, 80],
           [fmtImpr(b.estimated_impressions || 0), 499, 78],
         ];
         for (const [text, x, w] of rowData) {

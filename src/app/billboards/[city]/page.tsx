@@ -160,7 +160,7 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
   }
 
   const { count, minRate, maxRate, formats } = computeStats(boards);
-  const desc = `Browse ${count} OOH advertising locations in ${cityName}. Rates from ${fmtRate(minRate)} to ${fmtRate(maxRate)}/mo. ${formats.map(f => FORMAT_LABELS[f] || f).join(', ')}. Book online in minutes.`;
+  const desc = `Browse ${count} OOH advertising locations in ${cityName}. ${minRate ? `Rates from ${fmtRate(minRate)} to ${fmtRate(maxRate)}/mo.` : 'Rates quoted on request.'} ${formats.map(f => FORMAT_LABELS[f] || f).join(', ')}. Book online in minutes.`;
   const url  = `${BASE_URL}/billboards/${slug}`;
 
   return {
@@ -207,7 +207,9 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
   const faqs = [
     {
       q: `How much does a billboard cost in ${cityName}?`,
-      a: `Billboard advertising in ${cityName} ranges from ${fmtRateLong(minRate)} to ${fmtRateLong(maxRate)} per month, depending on the format, size, location, and illumination. The average rate is around ${fmtRate(Math.round((minRate + maxRate) / 2))} per month. Use our self-service campaign builder to get an instant quote.`,
+      a: (minRate
+        ? `Billboard advertising in ${cityName} ranges from ${fmtRateLong(minRate)} to ${fmtRateLong(maxRate)} per month, depending on the format, size, location, and illumination. The average rate is around ${fmtRate(Math.round((minRate + maxRate) / 2))} per month. `
+        : `Billboard rates in ${cityName} are quoted on request and depend on the format, size, location, and illumination. `) + `Use our self-service campaign builder to get an instant quote.`,
     },
     {
       q: `How many billboards are available in ${cityName}?`,
@@ -215,7 +217,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
     },
     {
       q: `What OOH formats are available in ${cityName}?`,
-      a: `${cityName} has ${formats.length} OOH format${formats.length !== 1 ? 's' : ''} available: ${formatStats.map(s => `${FORMAT_LABELS[s.format] || s.format} (${s.count} location${s.count !== 1 ? 's' : ''}, from ${fmtRate(s.min)}/mo)`).join('; ')}. Each format suits different campaign objectives — large billboards for mass reach, unipoles for highway visibility, gantries for traffic convergence points, and LED screens for dynamic digital content.`,
+      a: `${cityName} has ${formats.length} OOH format${formats.length !== 1 ? 's' : ''} available: ${formatStats.map(s => `${FORMAT_LABELS[s.format] || s.format} (${s.count} location${s.count !== 1 ? 's' : ''}${s.min ? `, from ${fmtRate(s.min)}/mo` : ''})`).join('; ')}. Each format suits different campaign objectives — large billboards for mass reach, unipoles for highway visibility, gantries for traffic convergence points, and LED screens for dynamic digital content.`,
     },
     {
       q: `How do I book a billboard in ${cityName}?`,
@@ -235,7 +237,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
         '@id': `${BASE_URL}/billboards/${slug}`,
         name: `Billboard Advertising in ${cityName} — OOH Platform`,
         url:  `${BASE_URL}/billboards/${slug}`,
-        description: `Browse ${count} OOH locations in ${cityName}. Rates from ${fmtRate(minRate)}/mo.`,
+        description: `Browse ${count} OOH locations in ${cityName}. ${minRate ? `Rates from ${fmtRate(minRate)}/mo.` : 'Rates on request.'}`,
         breadcrumb: {
           '@type': 'BreadcrumbList',
           itemListElement: [
@@ -367,8 +369,9 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           }}>
             {[
               { label: 'Locations',    value: String(count) },
-              { label: 'From/month',   value: fmtRate(minRate) },
-              { label: 'Up to/month',  value: fmtRate(maxRate) },
+              ...(minRate
+                ? [{ label: 'From/month', value: fmtRate(minRate) }, { label: 'Up to/month', value: fmtRate(maxRate) }]
+                : [{ label: 'Rates', value: 'On request' }]),
               { label: 'Formats',      value: String(formats.length) },
             ].map((stat, i) => (
               <div
@@ -429,7 +432,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
                 {[
                   { icon: '📍', label: `${count} available locations` },
-                  { icon: '💰', label: `Rates from ${fmtRate(minRate)}/mo` },
+                  { icon: '💰', label: minRate ? `Rates from ${fmtRate(minRate)}/mo` : 'Rates quoted on request' },
                   { icon: '📐', label: `${formats.length} format${formats.length !== 1 ? 's' : ''}: ${formats.slice(0, 3).map(f => FORMAT_LABELS[f] || f).join(', ')}${formats.length > 3 ? ` +${formats.length - 3} more` : ''}` },
                   { icon: '⚡', label: 'Book online, live in 5–10 days' },
                 ].map(item => (
@@ -589,9 +592,9 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <div>
                           <div style={{ color: '#0F172A', fontWeight: 700, fontSize: '0.9375rem', lineHeight: 1 }}>
-                            {fmtRate(board.asking_rate)}
+                            {board.asking_rate ? fmtRate(board.asking_rate) : 'Contact for rate'}
                           </div>
-                          <div style={{ color: '#94A3B8', fontSize: '0.6875rem', marginTop: 2 }}>per month</div>
+                          {!!board.asking_rate && <div style={{ color: '#94A3B8', fontSize: '0.6875rem', marginTop: 2 }}>per month</div>}
                         </div>
                         <Link
                           href={`/boards/${board.id}`}
@@ -751,7 +754,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <span style={{ color: '#475569', fontSize: '0.8125rem' }}>© 2026 OOH Platform. All rights reserved.</span>
             <span style={{ color: '#475569', fontSize: '0.8125rem' }}>
-              Billboard advertising in {cityName} — {count} locations from {fmtRate(minRate)}/mo
+              Billboard advertising in {cityName} — {count} locations{minRate ? ` from ${fmtRate(minRate)}/mo` : ''}
             </span>
           </div>
         </div>

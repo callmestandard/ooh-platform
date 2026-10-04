@@ -56,6 +56,22 @@ export async function attachVisibleRates<T extends { id: string; asking_rate?: n
   });
 }
 
+/**
+ * Same as attachVisibleRates, for rows that carry their board nested under
+ * `boards` (bookings, authorizations): fills boards.asking_rate where the
+ * viewer is allowed to see it.
+ */
+export async function attachRatesToBookings<T extends { board_id?: string | null; boards?: { id?: string; asking_rate?: number | null } | null }>(rows: T[] | null | undefined): Promise<T[]> {
+  const list = rows ?? [];
+  const idOf = (r: T) => r.boards?.id ?? r.board_id ?? null;
+  const rates = await fetchVisibleRates(list.map(idOf).filter((x): x is string => !!x));
+  return list.map(r => {
+    const id = idOf(r);
+    const rate = id ? rates[id] : undefined;
+    return rate && r.boards ? ({ ...r, boards: { ...r.boards, asking_rate: rate.gross_monthly_rate ?? r.boards.asking_rate ?? null } } as T) : r;
+  });
+}
+
 export function rateLabel(rate: number | null | undefined): string {
   return rate ? '₦' + Math.round(rate).toLocaleString('en-NG') : 'Contact for rate';
 }

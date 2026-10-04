@@ -258,7 +258,7 @@ export default function BoardDetailPanel({ board, onClose, onBookingRequest, aud
                 <div>
                   <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '0 0 2px', fontWeight: 500 }}>Monthly rate</p>
                   <p style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.03em', fontFamily: "'DM Mono', monospace" }}>
-                    {formatNaira(board.asking_rate)}
+                    {board.asking_rate ? formatNaira(board.asking_rate) : 'On request'}
                   </p>
                 </div>
                 {board.width && board.height && (

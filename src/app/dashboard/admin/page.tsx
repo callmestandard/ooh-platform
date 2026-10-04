@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { supabase } from '@/lib/supabase';
+import { attachVisibleRates } from '@/lib/board-rates';
 import { formatNaira, formatDate } from '@/lib/utils';
 import type { ActivityEvent } from '@/lib/activity-log';
 import { useToast } from '@/components/ui/Toast';
@@ -252,7 +253,7 @@ function AdminContent() {
         supabase.from('booking_payouts').select('id, booking_id, effective_rate, floor_rate, owner_payout_amount, agent_payout_amount, owner_payout_status, agent_payout_status, bookings(boards(name, city), campaigns(name)), agent:agent_id(full_name, company_name), owner:owner_id(full_name, company_name)').order('updated_at', { ascending: false }),
       ]);
       if (bRes.error) throw bRes.error;
-      if (bRes.data) setBoards(bRes.data as Board[]);
+      if (bRes.data) setBoards(await attachVisibleRates(bRes.data as Board[]));
 
       // The rest are non-fatal individually (one tab's data shouldn't
       // block the whole page), but a silent failure here previously meant

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { attachRatesToBookings } from '@/lib/board-rates';
 import { authedFetch } from '@/lib/api';
 import { createNotification } from '@/lib/notifications';
 import { getActivityActor, logActivity } from '@/lib/activity-log';
@@ -144,7 +145,7 @@ export default function OwnerNegotiationDetailPage() {
         .eq('id', id)
         .single();
       if (error) throw error;
-      if (data) setBooking(data as unknown as Booking);
+      if (data) setBooking((await attachRatesToBookings([data as unknown as Booking]))[0]);
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Failed to load booking');
     } finally {
@@ -312,7 +313,7 @@ export default function OwnerNegotiationDetailPage() {
 
   const statusCfg = STATUS_CONFIG[booking.status] || STATUS_CONFIG.pending;
   const isResolved = ['agreed', 'signed', 'live', 'declined'].includes(booking.status);
-  const agencyOfferedAboveAsking = booking.offered_rate > (booking.boards?.asking_rate || 0);
+  const agencyOfferedAboveAsking = !!booking.boards?.asking_rate && booking.offered_rate > booking.boards.asking_rate;
 
   return (
     <>
@@ -394,7 +395,7 @@ export default function OwnerNegotiationDetailPage() {
                 { label: 'Location',    value: [booking.boards?.city, booking.boards?.state].filter(Boolean).join(', ') || '—' },
                 { label: 'Address',     value: booking.boards?.address || '—' },
                 { label: 'Dimensions',  value: booking.boards?.width && booking.boards?.height ? `${booking.boards.width}m × ${booking.boards.height}m` : '—' },
-                { label: 'Asking rate', value: formatNaira(booking.boards?.asking_rate) },
+                { label: 'Asking rate', value: booking.boards?.asking_rate ? formatNaira(booking.boards.asking_rate) : 'Not set' },
               ].map(({ label, value }) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #F8FAFC' }}>
                   <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>{label}</span>
@@ -419,7 +420,7 @@ export default function OwnerNegotiationDetailPage() {
                   <span style={{ fontSize: '0.75rem', fontWeight: 600, color: highlight ? '#10B981' : '#0F172A' }}>{value}</span>
                 </div>
               ))}
-              {booking.agreed_rate && (
+              {booking.agreed_rate && !!booking.boards?.asking_rate && (
                 <div style={{ marginTop: 8, padding: '8px 10px', background: '#ECFDF5', borderRadius: 7 }}>
                   <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#065F46', margin: 0 }}>
                     {booking.agreed_rate >= (booking.boards?.asking_rate || 0)

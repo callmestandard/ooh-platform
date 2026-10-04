@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
+import { attachVisibleRates } from '@/lib/board-rates';
 import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
 
 const CampaignMap = dynamic(() => import('./CampaignMap'), {
@@ -255,7 +256,9 @@ function CampaignBuilderContent() {
       const res  = await fetch(`/api/campaign-builder/boards?${qs}`);
       const data = await res.json() as { boards?: Board[]; error?: string };
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to load boards');
-      setBoards(data.boards || []);
+      // The route runs with the service role and no longer carries rates (they are
+      // private since migration 035); add back only those this viewer may see.
+      setBoards(await attachVisibleRates(data.boards || []));
       setStep(2);
     } catch (err) {
       setBoardsError(err instanceof Error ? err.message : 'Failed to load boards');
@@ -699,9 +702,9 @@ function CampaignBuilderContent() {
                         {/* Rate + checkbox */}
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
                           <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', fontFamily: "'JetBrains Mono', monospace" }}>
-                            {fmtNaira(b.asking_rate)}
+                            {b.asking_rate ? fmtNaira(b.asking_rate) : 'On request'}
                           </span>
-                          <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>/mo</span>
+                          {!!b.asking_rate && <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>/mo</span>}
                           <div style={{
                             width: 18, height: 18, borderRadius: 5, marginTop: 2,
                             border: selected ? 'none' : '1.5px solid #CBD5E1',

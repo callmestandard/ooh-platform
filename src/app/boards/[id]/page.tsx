@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { attachVisibleRates } from '@/lib/board-rates';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 
 type Board = {
@@ -51,8 +52,8 @@ export default function PublicBoardPage() {
     Promise.all([
       supabase.from('boards').select('*').eq('id', id).single(),
       supabase.from('listings').select('sell_price, agent_id, board_authorizations(owner_verified)').eq('board_id', id).eq('status', 'active').maybeSingle(),
-    ]).then(([{ data }, { data: listing }]) => {
-      setBoard(data as Board);
+    ]).then(async ([{ data }, { data: listing }]) => {
+      setBoard(data ? (await attachVisibleRates([data as Board]))[0] : (data as Board));
       if (listing) {
         const badge = computeTrustBadge({ agent_id: listing.agent_id }, listing.board_authorizations as any);
         setActiveListing({ sell_price: listing.sell_price, badge });
@@ -254,8 +255,8 @@ export default function PublicBoardPage() {
             <div>
               <p style={{ fontSize: '0.625rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>Asking rate</p>
               <p style={{ fontSize: '1.625rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: "'DM Mono', 'Courier New', monospace", marginBottom: 6 }}>
-                {formatNaira(effectiveRate)}
-                <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#94A3B8', letterSpacing: 0, fontFamily: 'inherit' }}>/mo</span>
+                {effectiveRate ? formatNaira(effectiveRate) : 'Contact for rate'}
+                {!!effectiveRate && <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#94A3B8', letterSpacing: 0, fontFamily: 'inherit' }}>/mo</span>}
               </p>
               <TrustBadgePill badge={activeListing?.badge ?? 'Verified Owner'} small />
             </div>

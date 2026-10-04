@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { attachRatesToBookings } from '@/lib/board-rates';
 
 type Booking = {
   id: string;
@@ -76,7 +77,7 @@ export default function OwnerNegotiationsPage() {
         .not('status', 'eq', 'declined')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setBookings((data as Booking[]) || []);
+      setBookings(await attachRatesToBookings((data as Booking[]) || []));
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Failed to load negotiations');
     } finally {
@@ -253,7 +254,7 @@ export default function OwnerNegotiationsPage() {
                     {booking.agreed_rate && <span style={{ fontSize: '0.625rem', color: '#10B981', marginLeft: 4, fontFamily: 'inherit', fontWeight: 600 }}>agreed</span>}
                   </p>
                   <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>
-                    asking {formatNaira(booking.boards?.asking_rate)}
+                    {booking.boards?.asking_rate ? `asking ${formatNaira(booking.boards.asking_rate)}` : 'no rate set'}
                   </p>
                 </div>
 

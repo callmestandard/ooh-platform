@@ -249,9 +249,15 @@ export default async function BillboardsIndexPage() {
 
                       {/* Rate range */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                        <span style={{ color: '#475569', fontSize: '0.8125rem' }}>From</span>
-                        <span style={{ color: '#0F172A', fontWeight: 700, fontSize: '0.9375rem' }}>{fmtRate(c.minRate)}</span>
-                        <span style={{ color: '#94A3B8', fontSize: '0.8125rem' }}>to {fmtRate(c.maxRate)}/mo</span>
+                        {c.minRate ? (
+                          <>
+                            <span style={{ color: '#475569', fontSize: '0.8125rem' }}>From</span>
+                            <span style={{ color: '#0F172A', fontWeight: 700, fontSize: '0.9375rem' }}>{fmtRate(c.minRate)}</span>
+                            <span style={{ color: '#94A3B8', fontSize: '0.8125rem' }}>to {fmtRate(c.maxRate)}/mo</span>
+                          </>
+                        ) : (
+                          <span style={{ color: '#475569', fontSize: '0.8125rem' }}>Rates on request</span>
+                        )}
                       </div>
 
                       {/* Format pills */}

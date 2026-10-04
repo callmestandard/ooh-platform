@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { attachRatesToBookings } from '@/lib/board-rates';
 import { authedFetch } from '@/lib/api';
 import { createNotification } from '@/lib/notifications';
 import { getActivityActor, logActivity } from '@/lib/activity-log';
@@ -131,7 +132,8 @@ export default function NegotiationDetailPage() {
         .eq('id', id)
         .single();
       if (error) throw error;
-      if (data) setBooking(data as Booking);
+      // The board's rate is private (migration 035): shown only if the owner lets this agency see it.
+      if (data) setBooking((await attachRatesToBookings([data as Booking]))[0]);
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Failed to load booking');
     } finally {
@@ -699,7 +701,7 @@ export default function NegotiationDetailPage() {
               <div style={{ flex: 1, background: '#F8FAFC', borderRadius: '10px', padding: '10px 12px' }}>
                 <p style={{ fontSize: '0.625rem', color: '#94A3B8', margin: '0 0 3px', fontWeight: 500 }}>ASKING</p>
                 <p style={{ fontSize: '1rem', fontWeight: 700, color: '#64748B', margin: 0, fontFamily: "'DM Mono', monospace", letterSpacing: '-0.02em' }}>
-                  {formatNaira(booking.boards?.asking_rate)}
+                  {booking.boards?.asking_rate ? formatNaira(booking.boards.asking_rate) : 'On request'}
                 </p>
               </div>
             </div>

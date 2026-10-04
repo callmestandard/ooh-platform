@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { supabase } from '@/lib/supabase';
+import { attachVisibleRates, attachRatesToBookings } from '@/lib/board-rates';
 import { useToast } from '@/components/ui/Toast';
 import { computeTrustBadge, TrustBadgePill } from '@/lib/agent-listings';
 import { createNotification } from '@/lib/notifications';
@@ -92,7 +93,7 @@ function AgentDashboardContent() {
       supabase.from('board_authorizations').select('*, boards(id, name, city, state, format, asking_rate)').eq('agent_id', uid).order('created_at', { ascending: false }),
       supabase.from('listings').select('*').eq('agent_id', uid),
     ]);
-    setAuthorizations((authRes.data as Authorization[]) || []);
+    setAuthorizations(await attachRatesToBookings((authRes.data as Authorization[]) || []));
     setListings((listRes.data as Listing[]) || []);
     setLoading(false);
   }
@@ -104,7 +105,7 @@ function AgentDashboardContent() {
       supabase.from('boards').select('id, name, city, state, format, asking_rate')
         .ilike('name', `%${boardQuery.trim()}%`)
         .limit(8)
-        .then(({ data }) => setBoardResults((data as Board[]) || []));
+        .then(async ({ data }) => setBoardResults(await attachVisibleRates((data as Board[]) || [])));
     }, 250);
     return () => clearTimeout(t);
   }, [boardQuery, boardMode]);
@@ -328,7 +329,7 @@ function AgentDashboardContent() {
                       <button key={b.id} onClick={() => { setSelectedBoardId(b.id); setBoardQuery(b.name); setBoardResults([]); }}
                         style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', background: '#fff', border: 'none', borderTop: '1px solid #F1F5F9', cursor: 'pointer', fontFamily: 'inherit' }}>
                         <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>{b.name}</span>
-                        <span style={{ fontSize: '0.75rem', color: '#94A3B8', marginLeft: 6 }}>{b.city} · {formatNaira(b.asking_rate)}/mo asking</span>
+                        <span style={{ fontSize: '0.75rem', color: '#94A3B8', marginLeft: 6 }}>{b.city} · {b.asking_rate ? `${formatNaira(b.asking_rate)}/mo asking` : 'rate on request'}</span>
                       </button>
                     ))}
                   </div>

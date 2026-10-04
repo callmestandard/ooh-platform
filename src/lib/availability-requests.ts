@@ -9,6 +9,7 @@
 
 import { supabase } from './supabase';
 import { createNotification } from './notifications';
+import { attachVisibleRates, attachRatesToBookings } from './board-rates';
 
 export type AvailabilityRequest = {
   id: string;
@@ -87,7 +88,7 @@ export async function fetchRequestResponses(requestId: string): Promise<{ respon
     supabase.rpc('availability_request_unreached_boards', { p_request_id: requestId }),
   ]);
   return {
-    responses: (res.data ?? []) as unknown as AvailabilityResponse[],
+    responses: await attachRatesToBookings((res.data ?? []) as unknown as AvailabilityResponse[]),
     unreached: (unreached.data ?? []) as UnreachedBoard[],
     error: err(res.error) ?? err(unreached.error),
   };
@@ -201,7 +202,7 @@ export async function fetchOwnerMatchingBoards(request: AvailabilityRequest): Pr
   }
 
   const cities = request.cities.map(c => c.trim().toLowerCase());
-  return [...all.values()].filter(b =>
+  return (await attachVisibleRates([...all.values()])).filter(b =>
     b.status !== 'decommissioned'
     && !!b.city && cities.includes(b.city.trim().toLowerCase())
     && (request.formats.length === 0 || (!!b.format && request.formats.includes(b.format))),

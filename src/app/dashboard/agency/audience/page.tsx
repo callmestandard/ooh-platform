@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { attachVisibleRates } from '@/lib/board-rates';
 import { formatNaira, formatImpressions } from '@/lib/utils';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -269,7 +270,7 @@ export default function AudiencePage() {
         .order('city');
       if (error) throw error;
       if (data) {
-        const boardList = data as Board[];
+        const boardList = await attachVisibleRates(data as Board[]);
         setBoards(boardList);
         if (boardList.length > 0) setSelectedBoard(boardList[0]);
       }
@@ -377,7 +378,7 @@ export default function AudiencePage() {
                     </div>
                     <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '0 0 3px' }}>{board.city} · {FORMAT_LABELS[board.format] || board.format}</p>
                     <p style={{ fontSize: '0.6875rem', color: '#1B4F8A', fontWeight: 600, fontFamily: 'monospace', margin: 0 }}>
-                      {formatImpressions(p.dailyImpressions)}/day · {formatNaira(board.asking_rate)}/mo
+                      {formatImpressions(p.dailyImpressions)}/day · {board.asking_rate ? `${formatNaira(board.asking_rate)}/mo` : 'rate on request'}
                     </p>
                   </div>
                 </div>
@@ -564,7 +565,7 @@ export default function AudiencePage() {
                           <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', flex: 1 }}>{b.name}</span>
                           <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>{b.city}</span>
                           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#7C3AED', fontFamily: 'monospace' }}>{formatImpressions(p.dailyImpressions * 30 * duration)}</span>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1B4F8A', fontFamily: 'monospace' }}>{formatNaira(b.asking_rate * duration)}</span>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1B4F8A', fontFamily: 'monospace' }}>{b.asking_rate ? formatNaira(b.asking_rate * duration) : 'on request'}</span>
                           <button
                             onClick={() => toggleBoard(b.id)}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: 0, fontSize: '0.875rem', lineHeight: 1 }}

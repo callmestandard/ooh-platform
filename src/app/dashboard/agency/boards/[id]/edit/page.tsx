@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { supabase } from '@/lib/supabase';
+import { attachVisibleRates } from '@/lib/board-rates';
 import ActivityTimeline from '@/components/activity/ActivityTimeline';
 import BoardForm, { type BoardRecord } from '../../BoardForm';
 
@@ -37,7 +38,7 @@ function EditBoardContent() {
       setLoading(true);
       const { data, error } = await supabase.from('boards').select('*').eq('id', id).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
-      setBoard(data as BoardRecord);
+      setBoard((await attachVisibleRates([data as BoardRecord]))[0]);
 
       // Negotiation history for this board, across every campaign it's ever
       // been shortlisted on — this is what makes the next negotiation start
@@ -133,7 +134,7 @@ function EditBoardContent() {
             Asking rate
           </p>
           <p style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0F172A', margin: '4px 0 0', fontFamily: "'DM Mono', monospace" }}>
-            {formatNaira(board.asking_rate)}<span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#94A3B8' }}>/mo</span>
+            {board.asking_rate ? <>{formatNaira(board.asking_rate)}<span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#94A3B8' }}>/mo</span></> : 'Rate on request'}
           </p>
         </div>
 

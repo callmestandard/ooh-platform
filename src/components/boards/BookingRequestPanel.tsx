@@ -309,7 +309,7 @@ export default function BookingRequestPanel({ board, onClose, onSuccess }: Props
           {[
             { label: 'Format', value: FORMAT_LABELS[board.format || ''] || board.format || '—', mono: false },
             { label: 'Location', value: board.city || board.state || '—', mono: false },
-            { label: 'Asking rate', value: formatNaira(board.asking_rate), mono: true },
+            { label: 'Asking rate', value: board.asking_rate ? formatNaira(board.asking_rate) : 'On request', mono: true },
           ].map((cell, i) => (
             <div
               key={cell.label}

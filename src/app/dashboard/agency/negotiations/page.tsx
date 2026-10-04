@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { attachRatesToBookings } from '@/lib/board-rates';
 import { SkeletonTable } from '@/components/ui/Skeleton';
 
 type Booking = {
@@ -94,7 +95,7 @@ export default function NegotiationsPage() {
         .order('created_at', { ascending: false })
         .limit(150);
       if (error) throw error;
-      setBookings((data as unknown as Booking[]) || []);
+      setBookings(await attachRatesToBookings((data as unknown as Booking[]) || []));
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Failed to load negotiations');
     } finally {
@@ -305,7 +306,7 @@ export default function NegotiationsPage() {
                     {formatNaira(booking.agreed_rate || booking.offered_rate)}
                   </p>
                   <p style={{ fontSize: '0.6875rem', color: savingsPct ? '#059669' : '#94A3B8', margin: 0, fontWeight: savingsPct ? 600 : 400 }}>
-                    {savingsPct ? `↓ ${savingsPct}% saved` : `asking ${formatNaira(booking.boards?.asking_rate)}`}
+                    {savingsPct ? `↓ ${savingsPct}% saved` : (booking.boards?.asking_rate ? `asking ${formatNaira(booking.boards.asking_rate)}` : 'rate on request')}
                   </p>
                 </div>
 
