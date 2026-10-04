@@ -22,6 +22,8 @@ type Step = 1 | 2 | 3 | 4;
 
 type ImportRow = {
   _id: string;
+  /** Row number in the uploaded sheet (header is row 1), so the owner can find it. */
+  row_no: number;
   name: string;
   address: string;
   city: string;
@@ -39,6 +41,8 @@ type ImportRow = {
   issues: string[];
   geocoded: boolean;
   geocoding: boolean;
+  /** How the pin was found when the sheet had no GPS: a street-level match, a rough area guess, or not found. */
+  geocode_confidence: 'high' | 'low' | 'failed' | null;
   duplicate: boolean;
   duplicate_of: string;
   selected: boolean;
@@ -52,7 +56,7 @@ const FIELD_DEFS = [
   { field: 'name',         label: 'Board Name',    required: true },
   { field: 'city',         label: 'City',          required: true },
   { field: 'format',       label: 'Format',        required: true },
-  { field: 'asking_rate',  label: 'Asking Rate',   required: true },
+  { field: 'asking_rate',  label: 'Monthly Rate',  required: false },
   { field: 'address',      label: 'Address',       required: false },
   { field: 'state',        label: 'State',         required: false },
   { field: 'width',        label: 'Width (m)',      required: false },
@@ -102,8 +106,11 @@ function normalizeFormat(raw: string): string | null {
 function parseRate(raw: unknown): number | null {
   if (raw == null || raw === '') return null;
   if (typeof raw === 'number') return raw > 0 ? Math.round(raw) : null;
-  const s = String(raw).replace(/[₦₦,\s]/g, '').toLowerCase();
-  const m = s.match(/^([\d.]+)\s*([kmb]?)$/);
+  // Owner sheets write rates many ways: "₦600,000", "N600k", "NGN 1.2m",
+  // "600,000 per month", or with the naira sign mangled by the file's
+  // encoding. Take the first number in the cell and an optional k/m/b suffix;
+  // a cell with no number at all ("call us") is reported, not guessed.
+  const m = String(raw).toLowerCase().replace(/,/g, '').match(/(\d+(?:\.\d+)?)\s*([kmb])?(?![a-z0-9])/);
   if (!m) return null;
   const n = parseFloat(m[1]);
   if (isNaN(n) || n <= 0) return null;
@@ -133,25 +140,36 @@ function haversine(lat1: number, lon1: number, lat2: number, lon2: number): numb
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function detectColumn(header: string): string | null {
-  const h = header.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '');
+/**
+ * Platform fields a header could mean, best guess first. An exact match on a
+ * hint wins; otherwise a hint must appear as a whole word in the header (so
+ * the single-letter hint "h" for height no longer matches "Price/Month"),
+ * and longer hints beat shorter ones.
+ */
+function rankColumn(header: string): string[] {
+  const h = header.toLowerCase().trim().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!h) return [];
+  const words = h.split(' ');
+  const scored: { field: string; score: number }[] = [];
   for (const [field, hints] of Object.entries(FIELD_HINTS)) {
+    let best = 0;
     for (const hint of hints) {
-      if (h === hint || h.includes(hint) || hint.includes(h)) return field;
+      if (h === hint) best = Math.max(best, 1000 + hint.length);
+      else if (hint.includes(' ') ? ` ${h} `.includes(` ${hint} `) : words.includes(hint)) best = Math.max(best, 100 + hint.length);
+      else if (hint.length >= 4 && words.some(w => w.length >= 4 && (w.startsWith(hint) || hint.startsWith(w)))) best = Math.max(best, hint.length);
     }
+    if (best > 0) scored.push({ field, score: best });
   }
-  return null;
+  return scored.sort((a, b) => b.score - a.score).map(x => x.field);
 }
 
 function buildAutoMap(headers: string[]): Record<string, string> {
   const map: Record<string, string> = {};
-  const used = new Set<string>();
+  // Each header goes to its best free field, so a column is never mapped twice
+  // and a taken first choice falls through to the next plausible one.
   for (const h of headers) {
-    const field = detectColumn(h);
-    if (field && !map[field] && !used.has(h)) {
-      map[field] = h;
-      used.add(h);
-    }
+    const field = rankColumn(h).find(f => !map[f]);
+    if (field) map[field] = h;
   }
   return map;
 }
@@ -189,7 +207,14 @@ function validateRows(
     const issues: string[] = [];
     if (!name) issues.push('Missing board name');
     if (!city) issues.push('Missing city');
-    if (!asking_rate) issues.push('Missing or invalid rate');
+    // Rates are optional (a board without one shows "contact for rate"), but a
+    // value we could not read is reported rather than quietly dropped.
+    if (asking_rate_raw && !asking_rate) issues.push(`Could not read the rate "${asking_rate_raw}" — imports without a rate`);
+    if ((latRaw && !lngRaw) || (!latRaw && lngRaw)) issues.push('Only one of latitude/longitude given — pin will be estimated from the address');
+    else if (latitude != null && longitude != null && !isNaN(latitude) && !isNaN(longitude)
+      && (latitude < 3.5 || latitude > 14.5 || longitude < 2 || longitude > 15.5)) {
+      issues.push(`GPS ${latitude}, ${longitude} is outside Nigeria — check the latitude and longitude columns`);
+    }
     if (!format_raw) issues.push('Missing format');
     else if (!format) issues.push(`Unknown format "${format_raw}" — select manually`);
 
@@ -225,11 +250,14 @@ function validateRows(
       }
     }
 
-    const hasHardMissing = !name || !city || !asking_rate;
+    // Rows that cannot be imported as they stand. An unknown format is one of
+    // them: it is never guessed — the owner picks the right one in the table.
+    const hasHardMissing = !name || !city || !format;
     const status: ImportRow['status'] = hasHardMissing ? 'skip' : (issues.length > 0 ? 'warning' : 'ready');
 
     return {
       _id: uid(),
+      row_no: idx + 2,
       name,
       address,
       city,
@@ -247,6 +275,7 @@ function validateRows(
       issues,
       geocoded: false,
       geocoding: false,
+      geocode_confidence: null,
       duplicate,
       duplicate_of,
       selected: !hasHardMissing,
@@ -320,6 +349,10 @@ export default function ImportBoardsPage() {
   const [editField, setEditField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const geocodeAbort = useRef(false);
+  // The owner company's column mapping from their last import (field -> their header).
+  const [ownerCompanyId, setOwnerCompanyId] = useState<string | null>(null);
+  const [savedMap, setSavedMap] = useState<Record<string, string>>({});
+  const [usedSavedMap, setUsedSavedMap] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load owner's existing boards for dedup
@@ -327,10 +360,17 @@ export default function ImportBoardsPage() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const uid = session?.user?.id;
       if (!uid) return;
-      supabase.from('boards')
-        .select('id, name, latitude, longitude')
-        .eq('owner_id', uid)
-        .then(({ data }) => setExistingBoards((data as ExistingBoard[]) || []));
+      // A marketer or owner admin imports for their owner company (migration 035).
+      supabase.rpc('owner_company_of', { p_uid: uid }).then(({ data: company }) => {
+        const ownerId = (company as string | null) ?? uid;
+        setOwnerCompanyId(ownerId);
+        supabase.from('boards')
+          .select('id, name, latitude, longitude')
+          .eq('owner_id', ownerId)
+          .then(({ data }) => setExistingBoards((data as ExistingBoard[]) || []));
+        supabase.from('owner_import_mappings').select('mapping').eq('owner_id', ownerId).maybeSingle()
+          .then(({ data }) => setSavedMap(((data as { mapping?: Record<string, string> } | null)?.mapping) ?? {}));
+      });
     });
   }, []);
 
@@ -353,7 +393,21 @@ export default function ImportBoardsPage() {
       setRawHeaders(data.headers);
       setRawRows(data.rows);
       setTruncated(data.truncated);
-      setColMap(buildAutoMap(data.headers));
+      // Start from auto-detection, then prefer what this owner chose last time
+      // for any of their headers that appear again in this file.
+      const auto = buildAutoMap(data.headers);
+      // Read the saved mapping now rather than trusting state loaded on mount:
+      // a file dropped straight after the page opens would otherwise miss it.
+      let saved = savedMap;
+      if (session?.user) {
+        const { data: company } = await supabase.rpc('owner_company_of', { p_uid: session.user.id });
+        const { data: row } = await supabase.from('owner_import_mappings').select('mapping')
+          .eq('owner_id', (company as string | null) ?? session.user.id).maybeSingle();
+        saved = ((row as { mapping?: Record<string, string> } | null)?.mapping) ?? savedMap;
+      }
+      const remembered = Object.fromEntries(Object.entries(saved).filter(([, header]) => (data.headers as string[]).includes(header)));
+      setUsedSavedMap(Object.keys(remembered).length > 0);
+      setColMap({ ...auto, ...remembered });
     } catch {
       toastError('Failed to read file');
     } finally {
@@ -374,6 +428,12 @@ export default function ImportBoardsPage() {
     for (const f of required) {
       if (!colMap[f]) { toastError(`Please map the "${FIELD_DEFS.find(d => d.field === f)?.label}" column`); return; }
     }
+    // Remember this mapping for the owner's next import.
+    if (ownerCompanyId) {
+      const mapping = Object.fromEntries(Object.entries(colMap).filter(([, header]) => !!header));
+      supabase.from('owner_import_mappings').upsert({ owner_id: ownerCompanyId, mapping, updated_at: new Date().toISOString() })
+        .then(({ error }) => { if (!error) setSavedMap(mapping); });
+    }
     const validated = validateRows(rawRows, colMap, existingBoards);
     setRows(validated);
     setStep(3);
@@ -384,6 +444,15 @@ export default function ImportBoardsPage() {
   }
 
   // ── Geocoding ───────────────────────────────────────────────────────────
+
+  // No GPS and the address could not be found: the board still imports, just without a map pin.
+  function markNotLocated(id: string) {
+    setRows(prev => prev.map(r => r._id === id ? {
+      ...r, geocoding: false, geocode_confidence: 'failed',
+      issues: [...r.issues, 'No GPS and the address could not be located — imports without a map pin'],
+      status: r.status === 'ready' ? 'warning' : r.status,
+    } : r));
+  }
 
   const runGeocode = useCallback(async (initialRows: ImportRow[]) => {
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -406,15 +475,25 @@ export default function ImportBoardsPage() {
           const feature = data.features?.[0];
           if (feature) {
             const [lng, lat] = feature.center as [number, number];
-            setRows(prev => prev.map(r => r._id === row._id ? { ...r, latitude: lat, longitude: lng, geocoded: true, geocoding: false } : r));
+            // Only a street-address match with a strong score counts as confident;
+            // a match on just the town or neighbourhood is a rough guess.
+            const confident = (feature.place_type as string[] | undefined)?.includes('address') && Number(feature.relevance) >= 0.8;
+            const note = confident
+              ? 'Pin placed from the address (no GPS in the sheet) — verify it on the map'
+              : `Pin is a rough guess from "${feature.place_name ?? q}" (low confidence) — check and correct it`;
+            setRows(prev => prev.map(r => r._id === row._id ? {
+              ...r, latitude: lat, longitude: lng, geocoded: true, geocoding: false,
+              geocode_confidence: confident ? 'high' : 'low',
+              issues: [...r.issues, note], status: r.status === 'ready' ? 'warning' : r.status,
+            } : r));
           } else {
-            setRows(prev => prev.map(r => r._id === row._id ? { ...r, geocoding: false } : r));
+            markNotLocated(row._id);
           }
         } else {
-          setRows(prev => prev.map(r => r._id === row._id ? { ...r, geocoding: false } : r));
+          markNotLocated(row._id);
         }
       } catch {
-        setRows(prev => prev.map(r => r._id === row._id ? { ...r, geocoding: false } : r));
+        markNotLocated(row._id);
       }
 
       // 5 req/sec rate limit
@@ -444,16 +523,20 @@ export default function ImportBoardsPage() {
         updated.asking_rate_raw = editValue;
         updated.asking_rate = parseRate(editValue);
       }
-      // Re-evaluate status
+      // Re-evaluate the four editable fields with the same rules as the first
+      // pass, and keep every other note (GPS, pin confidence, duplicates).
+      const fieldIssue = (i: string) => /^(Missing (board name|city|format)|Unknown format|Could not read the rate)/.test(i);
       const issues: string[] = [];
       if (!updated.name) issues.push('Missing board name');
       if (!updated.city) issues.push('Missing city');
-      if (!updated.asking_rate) issues.push('Missing or invalid rate');
-      if (!normalizeFormat(updated.format)) issues.push(`Unknown format "${updated.format}"`);
-      const hasHard = !updated.name || !updated.city || !updated.asking_rate;
-      updated.issues = issues.filter(i => !i.includes('Duplicate'));
-      if (r.duplicate) updated.issues.push(`Possible duplicate of ${r.duplicate_of}`);
+      if (updated.asking_rate_raw && !updated.asking_rate) issues.push(`Could not read the rate "${updated.asking_rate_raw}" — imports without a rate`);
+      if (!updated.format_raw) issues.push('Missing format');
+      else if (!normalizeFormat(updated.format)) issues.push(`Unknown format "${updated.format}" — select manually`);
+      const hasHard = !updated.name || !updated.city || !normalizeFormat(updated.format);
+      updated.issues = [...issues, ...r.issues.filter(i => !fieldIssue(i))];
       updated.status = hasHard ? 'skip' : (updated.issues.length > 0 ? 'warning' : 'ready');
+      // A row that was unimportable and has just been fixed is included again.
+      if (r.status === 'skip' && !hasHard) updated.selected = true;
       return updated;
     }));
     setEditingId(null); setEditField(null);
@@ -466,21 +549,24 @@ export default function ImportBoardsPage() {
     setPublishing(true);
     setPublishProgress(0);
 
-    const selected = rows.filter(r => r.selected && r.status !== 'skip');
-    const skipped = rows.filter(r => !r.selected || r.status === 'skip');
+    // A row is only sent if its format is one the platform knows — never defaulted.
+    const importable = (r: ImportRow) => r.selected && r.status !== 'skip' && !!normalizeFormat(r.format);
+    const selected = rows.filter(importable);
+    const skipped: ImportRow[] = rows.filter(r => !importable(r)).map(r => (r.issues.length ? r : { ...r, issues: ['Deselected by you'] }));
     const BATCH = 50;
     let inserted = 0;
 
     for (let i = 0; i < selected.length; i += BATCH) {
-      const batch = selected.slice(i, i + BATCH).map(r => ({
+      const batchRows = selected.slice(i, i + BATCH);
+      const batch = batchRows.map(r => ({
         name: r.name,
         address: r.address,
         city: r.city,
         state: r.state,
-        format: normalizeFormat(r.format) || 'billboard',
+        format: normalizeFormat(r.format)!,
         width: r.width,
         height: r.height,
-        asking_rate: r.asking_rate ?? 0,
+        asking_rate: r.asking_rate,
         latitude: r.latitude,
         longitude: r.longitude,
         notes: r.notes,
@@ -498,7 +584,11 @@ export default function ImportBoardsPage() {
         });
         const data = await res.json();
         inserted += data.inserted ?? 0;
-      } catch { /* batch failed — continue */ }
+        // A rejected batch is reported row by row, not swallowed.
+        if (!res.ok || !data.inserted) skipped.push(...batchRows.map(r => ({ ...r, issues: [...r.issues, `Not saved — ${data.error ?? 'the server rejected this batch'}`] })));
+      } catch {
+        skipped.push(...batchRows.map(r => ({ ...r, issues: [...r.issues, 'Not saved — connection problem, try importing these rows again'] })));
+      }
 
       setPublishProgress(Math.round(((i + Math.min(BATCH, selected.length - i)) / selected.length) * 100));
     }
@@ -511,9 +601,9 @@ export default function ImportBoardsPage() {
   function downloadSkipReport() {
     if (!publishResult) return;
     const lines = [
-      'Name,City,Format,Rate,Reason',
+      'Row,Name,City,Format,Rate,Reason',
       ...publishResult.skipped.map(r =>
-        [`"${r.name}"`, `"${r.city}"`, r.format, r.asking_rate ?? '', `"${r.issues.join('; ')}"`].join(',')
+        [r.row_no, `"${r.name}"`, `"${r.city}"`, r.format, r.asking_rate ?? '', `"${r.issues.join('; ')}"`].join(',')
       ),
     ];
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
@@ -691,7 +781,13 @@ export default function ImportBoardsPage() {
           <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px' }}>Map your columns</h2>
           <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '0 0 20px' }}>
             Tell us which of your spreadsheet columns maps to each board field. We auto-detected likely matches — correct any that are wrong.
+            Your choices are remembered for your next import.
           </p>
+          {usedSavedMap && (
+            <p data-saved-mapping style={{ fontSize: '0.8125rem', color: '#065F46', background: '#ECFDF5', borderRadius: 8, padding: '8px 12px', margin: '-8px 0 16px' }}>
+              Using the column mapping you saved last time. Check it still fits this file.
+            </p>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {FIELD_DEFS.map(def => (
@@ -756,6 +852,22 @@ export default function ImportBoardsPage() {
               </div>
             )}
           </div>
+
+          {/* Every row that is not clean, with its reason — nothing is dropped without saying why */}
+          {rows.some(r => r.issues.length > 0) && (
+            <details data-attention style={{ ...cardStyle, marginBottom: 16, padding: '12px 16px' }} open={skipCount > 0}>
+              <summary style={{ cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A' }}>
+                {rows.filter(r => r.issues.length > 0).length} row{rows.filter(r => r.issues.length > 0).length !== 1 ? 's' : ''} need attention — see why
+              </summary>
+              <div style={{ maxHeight: 220, overflowY: 'auto', marginTop: 8 }}>
+                {rows.filter(r => r.issues.length > 0).map(r => (
+                  <p key={r._id} style={{ fontSize: '0.75rem', margin: '0 0 5px', color: r.status === 'skip' ? '#B91C1C' : '#92400E' }}>
+                    <strong>Row {r.row_no}{r.name ? ` · ${r.name}` : ''}</strong> — {r.status === 'skip' ? 'will be skipped: ' : 'will import, but: '}{r.issues.join('; ')}
+                  </p>
+                ))}
+              </div>
+            </details>
+          )}
 
           {/* Table */}
           <div style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
@@ -967,11 +1079,25 @@ export default function ImportBoardsPage() {
                   </p>
                   <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0 }}>
                     {publishResult.skipped.length > 0
-                      ? `${publishResult.skipped.length} rows were skipped — download the report below.`
+                      ? `${publishResult.skipped.length} rows were skipped — they are listed below with the reason for each.`
                       : 'All selected boards were imported successfully.'}
+                  </p>
+                  <p data-import-summary style={{ fontSize: '0.8125rem', color: '#334155', margin: '6px 0 0', fontWeight: 600 }}>
+                    {rows.length} rows in the file · {publishResult.inserted} imported
+                    {' '}({rows.filter(r => r.status === 'warning' && !publishResult.skipped.some(s => s._id === r._id)).length} of them flagged for review)
+                    {' '}· {publishResult.skipped.length} skipped
                   </p>
                 </div>
               </div>
+              {publishResult.skipped.length > 0 && (
+                <div style={{ maxHeight: 200, overflowY: 'auto', background: '#FEF2F2', borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
+                  {publishResult.skipped.map(r => (
+                    <p key={r._id} style={{ fontSize: '0.75rem', color: '#B91C1C', margin: '0 0 4px' }}>
+                      <strong>Row {r.row_no}{r.name ? ` · ${r.name}` : ''}</strong> — {r.issues.join('; ') || 'not selected'}
+                    </p>
+                  ))}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <button style={{ ...btnPrimary }} onClick={() => router.push('/dashboard/owner')}>
                   View my boards →

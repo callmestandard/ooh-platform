@@ -15,7 +15,7 @@ type InsertRow = {
   format: string;
   width?: number | null;
   height?: number | null;
-  asking_rate: number;
+  asking_rate: number | null;
   latitude?: number | null;
   longitude?: number | null;
   notes?: string;
@@ -31,7 +31,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No rows provided' }, { status: 400 });
     }
 
-    // Stamp owner_id from auth session — never trust client-sent owner_id
+    // Stamp ownership from the auth session — never trust a client-sent owner_id.
+    // A marketer or owner admin imports on behalf of their owner company
+    // (migration 035); a marketer's rows are assigned to them.
+    const { data: company } = await supabaseAdmin.rpc('owner_company_of', { p_uid: user.id });
+    const ownerId = (company as string | null) ?? user.id;
+    const { data: isAdmin } = ownerId === user.id ? { data: true } : await supabaseAdmin.rpc('is_owner_admin', { p_owner_id: ownerId, p_uid: user.id });
+
     const payload = rows.map(r => ({
       name: String(r.name).trim(),
       address: String(r.address ?? '').trim() || null,
@@ -40,12 +46,15 @@ export async function POST(req: NextRequest) {
       format: r.format,
       width: r.width ?? null,
       height: r.height ?? null,
-      asking_rate: r.asking_rate,
+      // moved into the private rate card by the database; null = quote on request
+      asking_rate: Number(r.asking_rate) > 0 ? Number(r.asking_rate) : null,
       latitude: r.latitude ?? null,
       longitude: r.longitude ?? null,
       notes: String(r.notes ?? '').trim() || null,
       status: 'available',
-      owner_id: user.id,
+      owner_id: ownerId,
+      created_by: user.id,
+      assigned_marketer_id: isAdmin ? null : user.id,
       face_count: 1,
       illuminated: false,
     }));
