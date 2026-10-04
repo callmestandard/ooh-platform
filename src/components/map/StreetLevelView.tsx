@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import 'mapillary-js/dist/mapillary.css';
+import { useEffect, useState } from 'react';
 
 const MAPILLARY_TOKEN = process.env.NEXT_PUBLIC_MAPILLARY_TOKEN || '';
 
@@ -69,11 +68,13 @@ type Status = 'loading' | 'ready' | 'none' | 'error';
 
 /**
  * Street-level photos you can step through, from Mapillary (crowd-sourced,
- * so coverage and age vary a lot). Shows the nearest photo to the point and
- * lets the viewer walk along the sequence with the on-image arrows.
+ * so coverage and age vary a lot). Finds the nearest photo to the point and
+ * shows it in Mapillary's own hosted embed viewer, whose on-image arrows
+ * move along the street. The embed is used instead of the MapillaryJS
+ * library because a client token can read the coverage tiles but may be
+ * refused the photo data itself; the embed needs no token of ours.
  */
 export default function StreetLevelView({ lat, lng, height = 400 }: { lat: number; lng: number; height?: number }) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<Status>('loading');
   const [image, setImage] = useState<NearestImage | null>(null);
   const openInMapillary = `https://www.mapillary.com/app/?lat=${lat}&lng=${lng}&z=17`;
@@ -84,7 +85,6 @@ export default function StreetLevelView({ lat, lng, height = 400 }: { lat: numbe
   useEffect(() => {
     if (!MAPILLARY_TOKEN) return;
     const abort = new AbortController();
-    let viewer: { remove: () => void } | null = null;
 
     (async () => {
       setStatus('loading');
@@ -94,18 +94,7 @@ export default function StreetLevelView({ lat, lng, height = 400 }: { lat: numbe
         if (abort.signal.aborted) return;
         if (!nearest) { setStatus('none'); return; }
         setImage(nearest);
-        const { Viewer } = await import('mapillary-js');
-        if (abort.signal.aborted || !containerRef.current) return;
-        const v = new Viewer({
-          accessToken: MAPILLARY_TOKEN,
-          container: containerRef.current,
-          component: { cover: false },
-        });
-        viewer = v;
-        // moveTo rejects when Mapillary won't serve the photo (e.g. the token's
-        // app has no read permission) — without this the tab is just a black box.
-        await v.moveTo(nearest.id);
-        if (!abort.signal.aborted) setStatus('ready');
+        setStatus('ready');
       } catch (e) {
         if (!abort.signal.aborted) {
           console.error('[street-level]', e);
@@ -114,10 +103,7 @@ export default function StreetLevelView({ lat, lng, height = 400 }: { lat: numbe
       }
     })();
 
-    return () => {
-      abort.abort();
-      viewer?.remove();
-    };
+    return () => abort.abort();
   }, [lat, lng]);
 
   const message = (title: string, body: string) => (
@@ -133,10 +119,19 @@ export default function StreetLevelView({ lat, lng, height = 400 }: { lat: numbe
         message('Street-level view is not set up', 'NEXT_PUBLIC_MAPILLARY_TOKEN is not set for this environment.')
       ) : (
         <div style={{ position: 'relative', height }}>
-          <div ref={containerRef} style={{ position: 'absolute', inset: 0, visibility: status === 'ready' ? 'visible' : 'hidden' }} />
+          {status === 'ready' && image && (
+            <iframe
+              key={image.id}
+              src={`https://www.mapillary.com/embed?image_key=${image.id}&style=photo`}
+              title="Street-level photo from Mapillary"
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
+              loading="lazy"
+              allowFullScreen
+            />
+          )}
           {status === 'loading' && message('Looking for street-level photos…', 'Searching Mapillary around this point.')}
           {status === 'none' && message('No street-level photos here', 'Nobody has contributed Mapillary imagery within about 500 m of this point yet. Try Google Street View below.')}
-          {status === 'error' && message('Could not load street-level photos', 'Mapillary would not serve imagery for this point. Try Google Street View below.')}
+          {status === 'error' && message('Could not load street-level photos', 'Mapillary did not respond for this point. Try Google Street View below.')}
         </div>
       )}
 
