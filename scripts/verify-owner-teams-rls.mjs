@@ -183,9 +183,9 @@ async function verify() {
   check('mA1 sees the request for unassigned board A3', 'deny', !(await sees(c.mA1, bk3Id)), '');
   check('owner B sees owner A\'s request', 'deny', !(await sees(c.ownerB, bk1Id)), '');
   check('owner B\'s marketer sees owner A\'s request', 'deny', !(await sees(c.mB1, bk1Id)), '');
-  const msgOk = await c.mA1.from('messages').insert({ booking_id: bk1Id, sender_role: 'owner', sender_id: U.mA1.id, content: `[${TAG}] counter`, message_type: 'message' }).select('id');
+  const msgOk = await c.mA1.from('messages').insert({ booking_id: bk1Id, sender_role: 'owner', content: `[${TAG}] counter`, message_type: 'message' }).select('id');
   check('assigned marketer replies in the negotiation thread', 'allow', one(msgOk), describe(msgOk));
-  const msgNo = await c.mA2.from('messages').insert({ booking_id: bk1Id, sender_role: 'owner', sender_id: U.mA2.id, content: 'x', message_type: 'message' }).select('id');
+  const msgNo = await c.mA2.from('messages').insert({ booking_id: bk1Id, sender_role: 'owner', content: 'x', message_type: 'message' }).select('id');
   check('the other marketer replies in that thread', 'deny', !one(msgNo), describe(msgNo));
 
   section('Deal attribution');
