@@ -180,6 +180,8 @@ export default function CampaignPlanPage() {
   const [marketRate, setMarketRate] = useState<MarketRate | null>(null);
   const [marketRateLoading, setMarketRateLoading] = useState(false);
   const [reportCopied, setReportCopied] = useState(false);
+  // Opens of the shared report link — null until loaded (or if migration 033 isn't applied)
+  const [reportOpens, setReportOpens] = useState<{ count: number; last: string | null } | null>(null);
 
   // ARCON form state
   const [arconForm, setArconForm] = useState({
@@ -349,6 +351,11 @@ export default function CampaignPlanPage() {
           arcon_notes: c.arcon_notes || '',
         });
       }
+      // Opens of the shared report link (RLS: only this campaign's agency can read them)
+      supabase.from('proposal_views').select('viewed_at').eq('campaign_id', id).order('viewed_at', { ascending: false })
+        .then(({ data, error }) => {
+          if (!error && data) setReportOpens({ count: data.length, last: data[0]?.viewed_at ?? null });
+        });
       if (itemsRes.data) {
         const items = itemsRes.data as unknown as PlanItem[];
         setPlanItems(items);
@@ -829,6 +836,13 @@ export default function CampaignPlanPage() {
             <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>
               {campaign.client_name || '—'} · {formatDate(campaign.start_date)} → {formatDate(campaign.end_date)}
             </p>
+            {reportOpens && (
+              <p data-report-opens={reportOpens.count} style={{ fontSize: '0.75rem', margin: '4px 0 0', color: reportOpens.count > 0 ? '#065F46' : '#94A3B8', fontWeight: reportOpens.count > 0 ? 600 : 400 }}>
+                {reportOpens.count > 0
+                  ? `Shared report opened ${reportOpens.count} time${reportOpens.count !== 1 ? 's' : ''} · last ${new Date(reportOpens.last!).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+                  : 'Shared report not opened yet'}
+              </p>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button

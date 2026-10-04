@@ -56,6 +56,7 @@ const agencyNav: NavItem[] = [
   { id: "invoices",    label: "Invoices",     path: "/dashboard/agency/invoices",     icon: <Icon path="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8" /> },
   { id: "reports",          label: "Reports",          path: "/dashboard/agency/reports",           icon: <Icon path="M18 20V10 M12 20V4 M6 20v-6" /> },
   { id: "rate-intelligence", label: "Rate Intel",       path: "/dashboard/agency/rate-intelligence", icon: <Icon path="M22 12 18 12 15 21 9 3 6 12 2 12" /> },
+  { id: "availability-requests", label: "Avail. Requests", path: "/dashboard/agency/availability-requests", icon: <Icon path="M22 2 11 13 M22 2l-7 20-4-9-9-4z" /> },
   { id: "budget-estimator", label: "Budget Estimator", path: "/dashboard/agency/budget-estimator",  icon: <Icon path="M4 2h16v20H4z M8 6h8 M8 11h2 M14 11h2 M8 15h2 M14 15h2" /> },
   { id: "settings",         label: "Settings",         path: "/dashboard/settings",                 icon: <Icon path="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /> },
 ];
@@ -77,6 +78,7 @@ const ownerNav: NavItem[] = [
   { id: "bookings",      label: "Bookings",       path: "/dashboard/owner?tab=bookings",        icon: <Icon path="M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01" /> },
   { id: "calendar",      label: "Calendar",       path: "/dashboard/owner?tab=calendar",        icon: <Icon path="M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /> },
   { id: "negotiations",  label: "Negotiations",   path: "/dashboard/owner/negotiations",        icon: <Icon path="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /> },
+  { id: "availability-requests", label: "Avail. Requests", path: "/dashboard/owner/availability-requests", icon: <Icon path="M22 2 11 13 M22 2l-7 20-4-9-9-4z" /> },
   { id: "agent-requests", label: "Agent Requests", path: "/dashboard/owner/agent-authorizations", icon: <Icon path="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" /> },
   { id: "earnings",      label: "Earnings",       path: "/dashboard/owner?tab=earnings",        icon: <Icon path="M12 1v22 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
   { id: "analytics",     label: "Analytics",      path: "/dashboard/owner?tab=analytics",       icon: <Icon path="M18 20V10 M12 20V4 M6 20v-6" /> },

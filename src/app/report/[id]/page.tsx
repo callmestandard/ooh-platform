@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
+import { authedFetch } from '@/lib/api';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -182,6 +183,8 @@ export default function CampaignReportPage() {
     const data = await res.json();
 
     setCampaign(data.campaign as Campaign);
+    // Tell the agency this report was opened (the route ignores the agency's own opens).
+    authedFetch(`/api/report/${id}/view`, { method: 'POST' }).catch(() => {});
     if (data.agencyBranding) setAgencyBranding(data.agencyBranding as AgencyBranding);
 
     const bks = (data.bookings as Booking[]) || [];

@@ -16,7 +16,9 @@ export type NotificationType =
   | 'invoice_sent'
   | 'invoice_paid'
   | 'agent_authorization_request'
-  | 'agent_authorization_resolved';
+  | 'agent_authorization_resolved'
+  | 'availability_request'
+  | 'availability_response';
 
 export type Notification = {
   id: string;
@@ -82,4 +84,6 @@ export const NOTIF_ICONS: Record<NotificationType, string> = {
   invoice_paid:     '💰',
   agent_authorization_request:  '🤝',
   agent_authorization_resolved: '✅',
+  availability_request:  '📨',
+  availability_response: '📬',
 };
