@@ -54,6 +54,9 @@ export default function StreetLevelView({ lat, lng, height = 400 }: { lat: numbe
   const [status, setStatus] = useState<Status>('loading');
   const [image, setImage] = useState<NearestImage | null>(null);
   const openInMapillary = `https://www.mapillary.com/app/?lat=${lat}&lng=${lng}&z=17`;
+  // Plain link-out built from the coordinates (Google's documented Maps URL
+  // for a panorama) — opens in a new tab, uses no Google API or key.
+  const openInGoogleStreetView = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
 
   useEffect(() => {
     if (!MAPILLARY_TOKEN) return;
@@ -106,19 +109,30 @@ export default function StreetLevelView({ lat, lng, height = 400 }: { lat: numbe
         <div style={{ position: 'relative', height }}>
           <div ref={containerRef} style={{ position: 'absolute', inset: 0, visibility: status === 'ready' ? 'visible' : 'hidden' }} />
           {status === 'loading' && message('Looking for street-level photos…', 'Searching Mapillary around this point.')}
-          {status === 'none' && message('No street-level photos here', 'Nobody has contributed Mapillary imagery within about 500 m of this point yet.')}
+          {status === 'none' && message('No street-level photos here', 'Nobody has contributed Mapillary imagery within about 500 m of this point yet. Try Google Street View below.')}
           {status === 'error' && message('Could not load street-level photos', 'Mapillary did not respond. Try again in a moment.')}
         </div>
       )}
 
-      <div style={{ padding: '10px 16px', borderTop: '1px solid #F1F5F9', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>
-          {status === 'ready' && image
-            ? `Photo ${Math.round(image.distanceM)} m from this point${image.capturedAt ? ` · taken ${new Date(image.capturedAt).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}` : ''} · Mapillary`
-            : 'Street-level imagery by Mapillary contributors'}
-        </span>
-        <a href={openInMapillary} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', color: '#1B4F8A', fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}>
-          Open in Mapillary →
+      <div style={{ padding: '10px 16px', borderTop: '1px solid #F1F5F9', background: '#F8FAFC' }}>
+        {status === 'ready' && image && (
+          <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '0 0 6px' }}>
+            Photo {Math.round(image.distanceM)} m from this point{image.capturedAt ? ` · taken ${new Date(image.capturedAt).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}` : ''}
+          </p>
+        )}
+        <p data-attribution style={{ fontSize: '0.6875rem', color: '#64748B', margin: '0 0 10px' }}>
+          Imagery ©{' '}
+          <a href={openInMapillary} target="_blank" rel="noopener noreferrer" style={{ color: '#1B4F8A', fontWeight: 600, textDecoration: 'none' }}>Mapillary</a>
+          {' '}contributors, licensed{' '}
+          <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer" style={{ color: '#1B4F8A', fontWeight: 600, textDecoration: 'none' }}>CC BY-SA 4.0</a>
+        </p>
+        <a
+          href={openInGoogleStreetView}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: 'inline-block', padding: '7px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: '#1B4F8A', fontSize: '0.75rem', fontWeight: 600, textDecoration: 'none' }}
+        >
+          View on Google Street View ↗
         </a>
       </div>
     </div>
