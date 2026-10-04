@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { attachVisibleRates } from '@/lib/board-rates';
 import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 
@@ -333,7 +334,7 @@ function MarketplaceContent() {
         return { ...b, activeListing: { id: l.id, sell_price: l.sell_price, badge } };
       });
 
-      setBoards(withBadges);
+      setBoards(await attachVisibleRates(withBadges));
       setLoading(false);
     }
     load();

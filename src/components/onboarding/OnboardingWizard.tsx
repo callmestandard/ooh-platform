@@ -38,6 +38,7 @@ const AGENT_STEPS: Step[] = [
 ];
 
 const STEPS: Record<DemoRole, Step[]> = {
+  marketer: [],
   agency: AGENCY_STEPS,
   owner:  OWNER_STEPS,
   client: CLIENT_STEPS,
@@ -69,6 +70,7 @@ const AGENT_ACTIONS = [
 ];
 
 const ACTIONS: Record<DemoRole, typeof AGENCY_ACTIONS> = {
+  marketer: [],
   agency: AGENCY_ACTIONS,
   owner:  OWNER_ACTIONS,
   client: CLIENT_ACTIONS,

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { attachVisibleRates } from '@/lib/board-rates';
 import dynamic from 'next/dynamic';
 import BoardDetailPanel from '@/components/boards/BoardDetailPanel';
 import BookingRequestPanel from '@/components/boards/BookingRequestPanel';
@@ -92,7 +93,7 @@ export default function BoardsMapPage() {
       .select('id, name, address, city, state, format, asking_rate, status, latitude, longitude, width, height, photo_urls')
       .order('created_at', { ascending: false })
       .limit(500);
-    setBoards((data as Board[]) || []);
+    setBoards(await attachVisibleRates((data as Board[]) || []));
     setLoading(false);
   }
 

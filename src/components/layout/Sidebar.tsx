@@ -79,6 +79,9 @@ const ownerNav: NavItem[] = [
   { id: "calendar",      label: "Calendar",       path: "/dashboard/owner?tab=calendar",        icon: <Icon path="M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /> },
   { id: "negotiations",  label: "Negotiations",   path: "/dashboard/owner/negotiations",        icon: <Icon path="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /> },
   { id: "availability-requests", label: "Avail. Requests", path: "/dashboard/owner/availability-requests", icon: <Icon path="M22 2 11 13 M22 2l-7 20-4-9-9-4z" /> },
+  { id: "team",          label: "Team & Targets", path: "/dashboard/owner/team",                 icon: <Icon path="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" /> },
+  { id: "rate-cards",    label: "Rates & Assignment", path: "/dashboard/owner/rate-cards",       icon: <Icon path="M12 1v22 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
+  { id: "share-links",   label: "Share Links",    path: "/dashboard/marketer/share-links",       icon: <Icon path="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8 M16 6l-4-4-4 4 M12 2v13" /> },
   { id: "agent-requests", label: "Agent Requests", path: "/dashboard/owner/agent-authorizations", icon: <Icon path="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" /> },
   { id: "earnings",      label: "Earnings",       path: "/dashboard/owner?tab=earnings",        icon: <Icon path="M12 1v22 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /> },
   { id: "analytics",     label: "Analytics",      path: "/dashboard/owner?tab=analytics",       icon: <Icon path="M18 20V10 M12 20V4 M6 20v-6" /> },
@@ -92,6 +95,14 @@ const agentNav: NavItem[] = [
   { id: "claim-new",label: "Claim a Board", path: "/dashboard/agent?tab=claim",     icon: <Icon path="M12 5v14 M5 12h14" /> },
   { id: "listings", label: "My Listings", path: "/dashboard/agent?tab=listings",   icon: <Icon path="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10" /> },
   { id: "settings", label: "Settings",    path: "/dashboard/settings",             icon: <Icon path="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /> },
+];
+
+// Owner's sales staff. Team admins also get the owner's team and rate pages.
+const marketerNav: NavItem[] = [
+  { id: "my-desk",      label: "My Desk",        path: "/dashboard/marketer",                      icon: <Icon path="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10" /> },
+  { id: "share-links",  label: "Share Links",    path: "/dashboard/marketer/share-links",          icon: <Icon path="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8 M16 6l-4-4-4 4 M12 2v13" /> },
+  { id: "availability-requests", label: "Avail. Requests", path: "/dashboard/owner/availability-requests", icon: <Icon path="M22 2 11 13 M22 2l-7 20-4-9-9-4z" /> },
+  { id: "settings",     label: "Settings",       path: "/dashboard/settings",                      icon: <Icon path="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" /> },
 ];
 
 const adminNav: NavItem[] = [
@@ -111,6 +122,7 @@ const navByRole: Record<DemoRole, NavItem[]> = {
   owner: ownerNav,
   admin: adminNav,
   agent: agentNav,
+  marketer: marketerNav,
 };
 
 type Props = {

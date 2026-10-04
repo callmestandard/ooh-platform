@@ -147,6 +147,16 @@ export async function acceptResponses(
 
 // ── Owner ───────────────────────────────────────────────────────────────────
 
+/**
+ * Requests and replies are keyed by the owner COMPANY (migration 035), so a
+ * marketer answers as their company. Falls back to the user's own id for an
+ * owner account, or if 035 isn't applied yet.
+ */
+async function ownerCompanyId(userId: string): Promise<string> {
+  const { data } = await supabase.rpc('owner_company_of', { p_uid: userId });
+  return (data as string | null) ?? userId;
+}
+
 export async function listOwnerRequests(): Promise<{
   items: { request: AvailabilityRequest; recipient: AvailabilityRecipient }[];
   error: string | null;
@@ -156,7 +166,7 @@ export async function listOwnerRequests(): Promise<{
   const { data, error } = await supabase
     .from('availability_request_recipients')
     .select('*, request:availability_requests(*)')
-    .eq('owner_id', session.user.id)
+    .eq('owner_id', await ownerCompanyId(session.user.id))
     .order('created_at', { ascending: false });
   const rows = (data ?? []) as unknown as (AvailabilityRecipient & { request: AvailabilityRequest | null })[];
   return {
@@ -169,7 +179,7 @@ export async function listOwnerRequests(): Promise<{
 export async function fetchOwnerMatchingBoards(request: AvailabilityRequest): Promise<OwnerBoard[]> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return [];
-  const uid = session.user.id;
+  const uid = await ownerCompanyId(session.user.id);
   const [direct, viaAuth] = await Promise.all([
     supabase.from('boards').select('id, name, city, format, address, asking_rate, status').eq('owner_id', uid),
     supabase.from('board_authorizations').select('boards(id, name, city, format, address, asking_rate, status)').eq('owner_id', uid).eq('status', 'active').eq('owner_verified', true),
@@ -177,6 +187,18 @@ export async function fetchOwnerMatchingBoards(request: AvailabilityRequest): Pr
   const all = new Map<string, OwnerBoard>();
   ((direct.data ?? []) as OwnerBoard[]).forEach(b => all.set(b.id, b));
   ((viaAuth.data ?? []) as unknown as { boards: OwnerBoard | null }[]).forEach(a => { if (a.boards) all.set(a.boards.id, a.boards); });
+
+  // A marketer answers only for boards that currently route to them; the
+  // owner and owner admins answer for all of the company's boards.
+  if (uid !== session.user.id) {
+    const { data: mine } = await supabase.rpc('my_owner_company');
+    if ((mine as { team_role: string }[] | null)?.[0]?.team_role === 'marketer') {
+      await Promise.all([...all.keys()].map(async id => {
+        const { data: assignee } = await supabase.rpc('board_assignee', { p_board_id: id });
+        if (assignee !== session.user.id) all.delete(id);
+      }));
+    }
+  }
 
   const cities = request.cities.map(c => c.trim().toLowerCase());
   return [...all.values()].filter(b =>
@@ -189,7 +211,7 @@ export async function fetchOwnerMatchingBoards(request: AvailabilityRequest): Pr
 export async function fetchOwnResponses(requestId: string): Promise<AvailabilityResponse[]> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return [];
-  const { data } = await supabase.from('availability_responses').select('*').eq('request_id', requestId).eq('owner_id', session.user.id);
+  const { data } = await supabase.from('availability_responses').select('*').eq('request_id', requestId).eq('owner_id', await ownerCompanyId(session.user.id));
   return (data ?? []) as AvailabilityResponse[];
 }
 
@@ -199,10 +221,11 @@ export async function submitOwnerResponses(
 ): Promise<{ error: string | null }> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return { error: 'Not signed in' };
+  const ownerId = await ownerCompanyId(session.user.id);
   const { error } = await supabase.from('availability_responses').upsert(
     answers.map(a => ({
       request_id: request.id,
-      owner_id: session.user.id,
+      owner_id: ownerId,
       board_id: a.boardId,
       available: a.available,
       quoted_rate: a.available ? a.quotedRate : null,

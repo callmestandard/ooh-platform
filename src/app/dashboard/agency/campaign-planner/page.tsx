@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
+import { attachVisibleRates } from '@/lib/board-rates';
 import { authedFetch } from '@/lib/api';
 import { createNotification } from '@/lib/notifications';
 import { formatNaira } from '@/lib/utils';
@@ -257,8 +258,8 @@ export default function CampaignPlannerPage() {
           const badge = computeTrustBadge({ agent_id: l.agent_id }, l.board_authorizations);
           return { ...b, activeListing: { id: l.id, sell_price: l.sell_price, badge } };
         });
-        setBoards(withBadges);
-        setLoading(false);
+        // Only rates the owner has opened to this agency come back; the rest stay "contact for rate".
+        attachVisibleRates(withBadges).then(b => { setBoards(b); setLoading(false); });
       });
 
     supabase

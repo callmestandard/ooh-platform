@@ -210,7 +210,7 @@ function Avatar({ name, role, avatarUrl, onUpload, uploading }: {
   uploading?: boolean;
 }) {
   const roleColors: Record<DemoRole, string> = {
-    agency: '#1B4F8A', client: '#059669', owner: '#7C3AED', admin: '#DC2626', agent: '#D97706',
+    agency: '#1B4F8A', client: '#059669', owner: '#7C3AED', admin: '#DC2626', agent: '#D97706', marketer: '#7C3AED',
   };
   const initials = (name || '').split(' ').map(n => n[0] || '').join('').slice(0, 2).toUpperCase();
   return (
@@ -572,10 +572,10 @@ export default function SettingsPage() {
   ).filter(t => t.roles.includes(role));
 
   const roleColors: Record<DemoRole, string> = {
-    agency: '#1B4F8A', client: '#059669', owner: '#7C3AED', admin: '#DC2626', agent: '#D97706',
+    agency: '#1B4F8A', client: '#059669', owner: '#7C3AED', admin: '#DC2626', agent: '#D97706', marketer: '#7C3AED',
   };
   const roleLabels: Record<DemoRole, string> = {
-    agency: 'Agency', client: 'Client', owner: 'Board Owner', admin: 'Platform Admin', agent: 'Agent',
+    agency: 'Agency', client: 'Client', owner: 'Board Owner', admin: 'Platform Admin', agent: 'Agent', marketer: 'Marketer',
   };
 
   return (

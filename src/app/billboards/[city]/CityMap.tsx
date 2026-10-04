@@ -24,6 +24,8 @@ const FORMAT_PIN_COLORS: Record<string, string> = {
 };
 
 function fmtRate(n: number) {
+
+  if (!n) return 'on request'; // rates are private unless the owner opens them (migration 035)
   if (n >= 1_000_000) return '₦' + (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000)     return '₦' + Math.round(n / 1_000) + 'K';
   return '₦' + n.toLocaleString('en-NG');

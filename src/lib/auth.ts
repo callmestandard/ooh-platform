@@ -68,7 +68,7 @@ export type UserProfile = {
 };
 
 /** Credentials for the seeded demo accounts. */
-export const DEMO_CREDENTIALS: Record<DemoRole, { email: string; password: string }> = {
+export const DEMO_CREDENTIALS: Record<Exclude<DemoRole, 'marketer'>, { email: string; password: string }> = {
   agency: { email: 'agency@demo.oohplatform.com', password: 'oohplatform2026' },
   client: { email: 'client@demo.oohplatform.com', password: 'oohplatform2026' },
   owner:  { email: 'owner@demo.oohplatform.com',  password: 'oohplatform2026' },

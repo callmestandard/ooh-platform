@@ -41,7 +41,7 @@ export default function OwnerAvailabilityRequestsPage() {
   }
 
   useEffect(() => {
-    if (role !== 'owner') return;
+    if (role !== 'owner' && role !== 'marketer') return;
     (async () => { await refresh(); })();
   }, [role]);
 
@@ -77,7 +77,7 @@ export default function OwnerAvailabilityRequestsPage() {
     await refresh();
   }
 
-  if (role !== 'owner') {
+  if (role !== 'owner' && role !== 'marketer') {
     return <div style={{ padding: 32, color: '#64748B', fontSize: '0.875rem' }}>Availability requests are answered from board owner accounts.</div>;
   }
 

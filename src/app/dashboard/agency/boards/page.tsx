@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RoleGuard } from '@/components/layout/RoleGuard';
 import { supabase } from '@/lib/supabase';
+import { attachVisibleRates } from '@/lib/board-rates';
 
 type BoardRow = {
   id: string;
@@ -45,9 +46,9 @@ function BoardsListContent() {
       .from('boards')
       .select('id, name, city, state, format, asking_rate, status, partner_name, owner_id')
       .order('created_at', { ascending: false })
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (error) console.error('[agency/boards] fetch failed:', error.message);
-        setBoards((data as BoardRow[]) || []);
+        setBoards(await attachVisibleRates((data as BoardRow[]) || []));
         setLoading(false);
       });
   }, []);

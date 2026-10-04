@@ -11,6 +11,7 @@ import OnboardingWizard from '@/components/onboarding/OnboardingWizard';
 import { useToast } from '@/components/ui/Toast';
 import { getActivityActor, logActivity } from '@/lib/activity-log';
 import PrintStatusPanel from '@/components/print/PrintStatusPanel';
+import { attachVisibleRates } from '@/lib/board-rates';
 import { type PrintTask, PRINT_STATUS_LABELS, PRINT_STATUS_STYLE, fetchPrintTasksForBookings } from '@/lib/print-tasks';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -644,7 +645,8 @@ function OwnerContent() {
       if (boardsRes.error) throw boardsRes.error;
       if (bookingsRes.error) throw bookingsRes.error;
 
-      if (boardsRes.data) setBoards(boardsRes.data as Board[]);
+      // Rates live in the private board_rates table (migration 035) — the owner may always read their own.
+      if (boardsRes.data) setBoards(await attachVisibleRates(boardsRes.data as Board[]));
       if (bookingsRes.data) {
         const bks = bookingsRes.data as unknown as Booking[];
         setBookings(bks);

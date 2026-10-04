@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
+import { attachVisibleRates } from '@/lib/board-rates';
 import { authedFetch } from '@/lib/api';
 import { useToast } from '@/components/ui/Toast';
 
@@ -405,7 +406,7 @@ export default function MarketplacePage() {
       .select('id, name, format, address, city, state, width, height, asking_rate, face_count, illuminated, status, photo_urls, latitude, longitude, notes, contact_phone, available_from, created_at')
       .order('created_at', { ascending: false })
       .limit(300)
-      .then(({ data }) => { setBoards((data as Board[]) || []); setLoading(false); });
+      .then(async ({ data }) => { setBoards(await attachVisibleRates((data as Board[]) || [])); setLoading(false); });
 
     supabase.from('campaigns').select('id, name').order('created_at', { ascending: false }).limit(50)
       .then(({ data }) => setCampaigns((data as { id: string; name: string }[]) || []));

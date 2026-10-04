@@ -107,7 +107,7 @@ function LoginContent() {
     setResendSent(true);
   }
 
-  async function loginAs(role: DemoRole) {
+  async function loginAs(role: Exclude<DemoRole, 'marketer'>) {
     setDemoLoading(role);
     setError('');
 
@@ -394,7 +394,7 @@ function LoginContent() {
               return (
                 <button
                   key={role}
-                  onClick={() => loginAs(role)}
+                  onClick={() => loginAs(role as Exclude<DemoRole, 'marketer'>)}
                   disabled={demoLoading !== null}
                   style={{
                     display: 'flex', alignItems: 'center', gap: '12px',

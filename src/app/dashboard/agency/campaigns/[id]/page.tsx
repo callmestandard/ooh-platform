@@ -18,6 +18,7 @@ import { formatNaira, formatDate } from '@/lib/utils';
 import { getMarketRate, type MarketRate } from '@/lib/rate-intelligence';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 import PrintStatusPanel from '@/components/print/PrintStatusPanel';
+import { attachVisibleRates } from '@/lib/board-rates';
 import {
   type PrintTask, type ResponsibleParty, PRINT_STATUS_LABELS, PRINT_STATUS_STYLE,
   fetchPrintTasksForBookings, createPrintTask,
@@ -379,7 +380,7 @@ export default function CampaignPlanPage() {
         }
       }
       if (boardsRes.data) {
-        const boards = boardsRes.data as Board[];
+        const boards = await attachVisibleRates(boardsRes.data as Board[]);
         const listingsByBoard = new Map<string, { id: string; sell_price: number; agent_id: string | null; board_authorizations: { owner_verified: boolean } | null }>();
         (listingsRes.data || []).forEach((l: any) => {
           // multiple listings per board shouldn't normally happen, but if
