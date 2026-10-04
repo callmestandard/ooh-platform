@@ -309,7 +309,7 @@ export default function LocationIntelPanel({ lat, lng, name, nearbyBoards, onClo
           <div>
             <div style={{ padding: '10px 16px', background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
               <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0, lineHeight: 1.4 }}>
-                Ground-level photos near <strong>{name}</strong> — use the arrows on the image to move along the street.
+                Google Street View at <strong>{name}</strong>.
               </p>
             </div>
             <StreetLevelView lat={lat} lng={lng} />

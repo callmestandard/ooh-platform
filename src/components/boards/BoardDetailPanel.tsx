@@ -531,7 +531,7 @@ export default function BoardDetailPanel({ board, onClose, onBookingRequest, aud
           <div>
             <div style={{ padding: '10px 16px', background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
               <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0, lineHeight: 1.4 }}>
-                Ground-level photos near this board — use the arrows on the image to move along the street.
+                Google Street View at this board's location.
               </p>
             </div>
             <StreetLevelView lat={board.latitude} lng={board.longitude} />
