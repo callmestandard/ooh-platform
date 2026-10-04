@@ -59,7 +59,7 @@ async function setup() {
 async function as(u) {
   const c = createClient(SUPABASE_URL, ANON, { auth: { persistSession: false } });
   const { session } = must(await c.auth.signInWithPassword({ email: u.email, password: u.password }), 'signIn');
-  c.accessToken = session.access_token;
+  c.qaToken = session.access_token;
   return c;
 }
 
@@ -191,13 +191,13 @@ async function verify() {
   const views = async cl => must(await cl.from('proposal_views').select('id, viewer_kind').eq('campaign_id', state.campaignId), 'views');
   if (appUrl) {
     const post = async token => (await fetch(`${appUrl}/api/report/${state.campaignId}/view`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} })).json();
-    const own = await post(a.accessToken);
+    const own = await post(a.qaToken);
     check('route: the agency opening its own report is not counted', 'deny', own.counted === false && own.reason === 'own', JSON.stringify(own));
     const first = await post(null);
     check('route: an anonymous open is counted', 'allow', first.counted === true, JSON.stringify(first));
     const again = await post(null);
     check('route: a refresh within 30 minutes is not counted again', 'deny', again.counted === false && again.reason === 'recent', JSON.stringify(again));
-    const other = await post(o1.accessToken);
+    const other = await post(o1.qaToken);
     check('route: a different signed-in viewer is counted', 'allow', other.counted === true, JSON.stringify(other));
     const missing = await fetch(`${appUrl}/api/report/00000000-0000-0000-0000-000000000000/view`, { method: 'POST' });
     check('route: an unknown campaign id', 'deny', missing.status === 404, `HTTP ${missing.status}`);
