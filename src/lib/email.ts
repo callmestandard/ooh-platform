@@ -221,10 +221,11 @@ export async function emailNewBookingRequest(params: {
   boardName: string;
   agencyName: string;
   campaignName: string;
-  rate: number;
+  /** null = a quote request: no amount was offered. */
+  rate: number | null;
   bookingId: string;
 }) {
-  const amount = '₦' + Number(params.rate).toLocaleString('en-NG');
+  const amount = params.rate ? '₦' + Number(params.rate).toLocaleString('en-NG') : null;
   const link   = `${APP_URL}/dashboard/owner/negotiations`;
 
   const html = emailWrap(
@@ -236,7 +237,7 @@ export async function emailNewBookingRequest(params: {
          ${metaRow('Board', params.boardName)}
          ${metaRow('Campaign', params.campaignName)}
          ${metaRow('Agency', params.agencyName)}
-         ${metaRow('Offered rate', `<span style="font-family:monospace;font-weight:700;">${amount}/mo</span>`)}
+         ${amount ? metaRow('Offered rate', `<span style="font-family:monospace;font-weight:700;">${amount}/mo</span>`) : metaRow('Offer', 'Quote requested — please reply with your rate')}
        </tbody>
      </table>
      ${btn('Review &amp; Respond', link)}`

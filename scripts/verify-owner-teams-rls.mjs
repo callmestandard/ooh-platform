@@ -299,10 +299,14 @@ async function cleanup() {
   const state = JSON.parse(readFileSync(stateFile, 'utf8'));
   const userIds = Object.values(state.users).map(u => u.id);
   await admin.from('notifications').delete().in('recipient_user_id', userIds);
+  await admin.from('activity_events').delete().in('actor_id', userIds);
   if (state.campaignId) {
     await admin.from('bookings').delete().eq('campaign_id', state.campaignId);
     await admin.from('campaigns').delete().eq('id', state.campaignId);
   }
+  // campaigns survive their agency's deletion (agency_id is set to null), so remove them explicitly
+  await admin.from('campaigns').delete().in('agency_id', userIds);
+  await admin.from('availability_requests').delete().in('agency_id', userIds);
   await admin.from('board_share_links').delete().in('owner_id', userIds);
   const boardIds = Object.values(state.boards);
   if (boardIds.length) must(await admin.from('boards').delete().in('id', boardIds), 'del boards');

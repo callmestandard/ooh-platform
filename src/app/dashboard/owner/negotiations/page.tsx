@@ -250,7 +250,7 @@ export default function OwnerNegotiationsPage() {
                 {/* Rate */}
                 <div>
                   <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: booking.agreed_rate ? '#10B981' : '#0F172A', margin: '0 0 2px', fontFamily: 'monospace' }}>
-                    {formatNaira(booking.agreed_rate || booking.offered_rate)}
+                    {booking.agreed_rate || booking.offered_rate ? formatNaira(booking.agreed_rate || booking.offered_rate) : 'Quote requested'}
                     {booking.agreed_rate && <span style={{ fontSize: '0.625rem', color: '#10B981', marginLeft: 4, fontFamily: 'inherit', fontWeight: 600 }}>agreed</span>}
                   </p>
                   <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>

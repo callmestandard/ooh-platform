@@ -206,7 +206,12 @@ function CampaignBuilderContent() {
     [boards, selectedIds],
   );
 
-  const askingTotal   = selectedBoards.reduce((s, b) => s + (b.asking_rate || 0) * durationMonths, 0);
+  // Boards whose rate this viewer cannot see are quote requests: no offer is
+  // made for them and nothing is computed from a rate, so they stay out of
+  // every total below.
+  const pricedBoards  = selectedBoards.filter(b => !!b.asking_rate);
+  const quoteBoards   = selectedBoards.filter(b => !b.asking_rate);
+  const askingTotal   = pricedBoards.reduce((s, b) => s + b.asking_rate * durationMonths, 0);
   const discount      = Math.round(askingTotal * 0.05);
   const totalAfter    = askingTotal - discount;
   const perMonth      = durationMonths > 0 ? Math.round(totalAfter / durationMonths) : totalAfter;
@@ -586,8 +591,8 @@ function CampaignBuilderContent() {
                 <>
                   <div style={{ width: 1, height: 20, background: '#E2E8F0' }} />
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', fontFamily: "'JetBrains Mono', monospace" }}>{fmtNaira(totalAfter)}</span>
-                    <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>estimated total</span>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', fontFamily: "'JetBrains Mono', monospace" }}>{pricedBoards.length > 0 ? fmtNaira(totalAfter) : 'Quote'}</span>
+                    <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>{pricedBoards.length > 0 ? 'estimated total' : 'requests only'}{pricedBoards.length > 0 && quoteBoards.length > 0 ? ` + ${quoteBoards.length} quote request${quoteBoards.length !== 1 ? 's' : ''}` : ''}</span>
                   </div>
                   <div style={{ width: 1, height: 20, background: '#E2E8F0' }} />
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -702,7 +707,7 @@ function CampaignBuilderContent() {
                         {/* Rate + checkbox */}
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
                           <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', fontFamily: "'JetBrains Mono', monospace" }}>
-                            {b.asking_rate ? fmtNaira(b.asking_rate) : 'On request'}
+                            {b.asking_rate ? fmtNaira(b.asking_rate) : 'Request quote'}
                           </span>
                           {!!b.asking_rate && <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>/mo</span>}
                           <div style={{
@@ -803,7 +808,8 @@ function CampaignBuilderContent() {
                 </thead>
                 <tbody>
                   {selectedBoards.map((b, i) => {
-                    const offered  = Math.round(b.asking_rate * 0.95);
+                    const quote    = !b.asking_rate;
+                    const offered  = quote ? 0 : Math.round(b.asking_rate * 0.95);
                     const subtotal = offered * durationMonths;
                     return (
                       <tr key={b.id} style={{ borderBottom: i < selectedBoards.length - 1 ? '1px solid #F8FAFC' : 'none' }}>
@@ -814,9 +820,9 @@ function CampaignBuilderContent() {
                             {FORMAT_LABELS[b.format] || b.format}
                           </span>
                         </td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', fontFamily: "'JetBrains Mono', monospace" }}>{fmtNaira(offered)}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', fontFamily: "'JetBrains Mono', monospace" }}>{quote ? 'Request quote' : fmtNaira(offered)}</td>
                         <td style={{ padding: '12px 16px', fontSize: '0.8125rem', color: '#64748B' }}>{durationMonths}mo</td>
-                        <td style={{ padding: '12px 16px', fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', fontFamily: "'JetBrains Mono', monospace" }}>{fmtNaira(subtotal)}</td>
+                        <td style={{ padding: '12px 16px', fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', fontFamily: "'JetBrains Mono', monospace" }}>{quote ? '—' : fmtNaira(subtotal)}</td>
                       </tr>
                     );
                   })}
@@ -825,10 +831,11 @@ function CampaignBuilderContent() {
             </div>
           </div>
 
-          {/* Pricing breakdown */}
+          {/* Pricing breakdown — only when at least one board has a rate to price */}
+          {pricedBoards.length > 0 && (
           <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 14, overflow: 'hidden', marginBottom: 32 }}>
             <div style={{ padding: '16px 24px', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9' }}>
-              <span style={{ fontSize: '0.875rem', color: '#64748B' }}>Subtotal ({selectedBoards.length} boards × {durationMonths}mo)</span>
+              <span style={{ fontSize: '0.875rem', color: '#64748B' }}>Subtotal ({pricedBoards.length} board{pricedBoards.length !== 1 ? 's' : ''} × {durationMonths}mo)</span>
               <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', fontFamily: "'JetBrains Mono', monospace" }}>{fmtFull(askingTotal)}</span>
             </div>
             <div style={{ padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F0FDF4', borderBottom: '1px solid #BBF7D0' }}>
@@ -849,6 +856,13 @@ function CampaignBuilderContent() {
               <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#1B4F8A', fontFamily: "'JetBrains Mono', monospace" }}>{fmtFull(perMonth)}/mo</span>
             </div>
           </div>
+          )}
+
+          {quoteBoards.length > 0 && (
+            <div data-quote-note style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: '0.8125rem', color: '#1E3A8A' }}>
+              <strong>{quoteBoards.length} board{quoteBoards.length !== 1 ? 's' : ''}</strong> will be sent as a quote request with no amount — the owner replies with a rate. {quoteBoards.length !== 1 ? 'They are' : 'It is'} not included in the totals above.
+            </div>
+          )}
 
           {overBudget && (
             <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>

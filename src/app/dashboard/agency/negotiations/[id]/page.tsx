@@ -695,7 +695,7 @@ export default function NegotiationDetailPage() {
               <div style={{ flex: 1, background: '#F8FAFC', borderRadius: '10px', padding: '10px 12px' }}>
                 <p style={{ fontSize: '0.625rem', color: '#94A3B8', margin: '0 0 3px', fontWeight: 500 }}>YOUR OFFER</p>
                 <p style={{ fontSize: '1rem', fontWeight: 700, color: '#1B4F8A', margin: 0, fontFamily: "'DM Mono', monospace", letterSpacing: '-0.02em' }}>
-                  {formatNaira(booking.agreed_rate || booking.offered_rate)}
+                  {booking.agreed_rate || booking.offered_rate ? formatNaira(booking.agreed_rate || booking.offered_rate) : 'Quote requested'}
                 </p>
               </div>
               <div style={{ flex: 1, background: '#F8FAFC', borderRadius: '10px', padding: '10px 12px' }}>

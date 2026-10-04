@@ -60,6 +60,8 @@ export type MediaPlanBoard = {
   state: string;
   format: string;
   asking_rate: number;
+  /** 'agreed' = this agency's own negotiated rate; 'asking' = an owner rate it may see; null = undisclosed. */
+  rate_basis?: 'agreed' | 'asking' | null;
   width?: number;
   height?: number;
   estimated_impressions: number;
@@ -294,7 +296,7 @@ export async function POST(req: NextRequest) {
           [b.name || '—',        68, 155],
           [(b.city || b.address || b.state || '—').slice(0, 22), 228, 115],
           [(b.format || '—').replace(/_/g, ' '), 347, 65],
-          [b.asking_rate ? fmtNaira(b.asking_rate) : 'On request', 416, 80],
+          [b.asking_rate ? fmtNaira(b.asking_rate) + (b.rate_basis === 'agreed' ? ' agreed' : '') : 'On request', 416, 80],
           [fmtImpr(b.estimated_impressions || 0), 499, 78],
         ];
         for (const [text, x, w] of rowData) {

@@ -36,6 +36,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch board data' }, { status: 500 });
   }
 
+  // Rates are private (migration 035) and no longer on the boards row. Use a
+  // board's rate only if THIS user is allowed to see it; any other board is
+  // submitted as a quote request with no amount — never a ₦0 offer.
+  const rateByBoard: Record<string, number> = {};
+  await Promise.all(boards.map(async b => {
+    const { data: canSee } = await db.rpc('can_see_board_rate', { p_board_id: b.id, p_uid: user.id });
+    if (!canSee) return;
+    const { data: r } = await db.from('board_rates').select('gross_monthly_rate').eq('board_id', b.id).maybeSingle();
+    if (r?.gross_monthly_rate && Number(r.gross_monthly_rate) > 0) rateByBoard[b.id] = Number(r.gross_monthly_rate);
+  }));
+  const offerFor = (boardId: string): number | null => (rateByBoard[boardId] ? Math.round(rateByBoard[boardId] * 0.95) : null);
+
   // Compute campaign dates
   const start = new Date();
   const end   = new Date(start);
@@ -75,11 +87,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: campErr?.message || 'Failed to create campaign' }, { status: 500 });
   }
 
-  // Create bookings — offered_rate is 5% below asking
+  // Create bookings — offered_rate is 5% below a visible asking rate, or empty for a quote request
   const bookingRows = boards.map(b => ({
     board_id:        b.id,
     campaign_id:     campaign.id,
-    offered_rate:    Math.round((b.asking_rate || 0) * 0.95),
+    offered_rate:    offerFor(b.id),
+    notes:           offerFor(b.id) === null ? 'Quote request — no offer made; please reply with your rate' : null,
     start_date:      startDate,
     end_date:        endDate,
     duration_months: durationMonths,
@@ -138,7 +151,7 @@ export async function POST(req: NextRequest) {
           boardName:    ownerBoard.name,
           agencyName:   clientName,
           campaignName,
-          rate:         Math.round((ownerBoard.asking_rate || 0) * 0.95),
+          rate:         offerFor(ownerBoard.id),
           bookingId:    booking?.id || campaign.id,
         });
         ownerCount++;
@@ -148,5 +161,6 @@ export async function POST(req: NextRequest) {
     }),
   );
 
-  return NextResponse.json({ campaignId: campaign.id, boardCount: boards.length, ownerCount });
+  const quoteRequests = boards.filter(b => offerFor(b.id) === null).length;
+  return NextResponse.json({ campaignId: campaign.id, boardCount: boards.length, ownerCount, quoteRequests });
 }

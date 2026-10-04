@@ -65,7 +65,7 @@ export default function MarketerDeskPage() {
         <span style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>{b.boards?.name ?? 'Board'}</span>
         <span style={{ display: 'block', fontSize: '0.6875rem', color: '#94A3B8' }}>{b.boards?.city ?? '—'} · {b.start_date ? fmtDate(b.start_date) : '—'} → {b.end_date ? fmtDate(b.end_date) : '—'}</span>
       </span>
-      <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#7C3AED', fontFamily: "'JetBrains Mono', monospace" }}>{naira(b.agreed_rate ?? b.offered_rate)}/mo</span>
+      <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#7C3AED', fontFamily: "'JetBrains Mono', monospace" }}>{b.agreed_rate ?? b.offered_rate ? `${naira(b.agreed_rate ?? b.offered_rate)}/mo` : 'Quote requested'}</span>
     </Link>
   );
   const empty = (t: string) => <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>{t}</p>;

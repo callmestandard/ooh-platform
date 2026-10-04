@@ -72,6 +72,30 @@ export async function attachRatesToBookings<T extends { board_id?: string | null
   });
 }
 
+/**
+ * The signed-in agency's OWN most recent agreed rate per board (from its own
+ * bookings). A rate an agency negotiated is its to keep and print, even when
+ * the owner's asking rate is hidden from it.
+ */
+export async function fetchOwnAgreedRates(boardIds: string[]): Promise<Record<string, number>> {
+  const ids = [...new Set(boardIds.filter(Boolean))];
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session || ids.length === 0) return {};
+  const { data } = await supabase
+    .from('bookings')
+    .select('board_id, agreed_rate, created_at, campaigns!inner(agency_id)')
+    .eq('campaigns.agency_id', session.user.id)
+    .in('board_id', ids)
+    .not('agreed_rate', 'is', null)
+    .in('status', ['agreed', 'signed', 'live', 'completed'])
+    .order('created_at', { ascending: false });
+  const out: Record<string, number> = {};
+  ((data ?? []) as unknown as { board_id: string; agreed_rate: number }[]).forEach(r => {
+    if (out[r.board_id] === undefined && Number(r.agreed_rate) > 0) out[r.board_id] = Number(r.agreed_rate);
+  });
+  return out;
+}
+
 export function rateLabel(rate: number | null | undefined): string {
   return rate ? '₦' + Math.round(rate).toLocaleString('en-NG') : 'Contact for rate';
 }

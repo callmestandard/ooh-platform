@@ -303,7 +303,7 @@ export default function NegotiationsPage() {
                 {/* Rate */}
                 <div style={{ flex: '1', minWidth: 0 }}>
                   <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px', fontFamily: "'DM Mono', monospace", letterSpacing: '-0.02em' }}>
-                    {formatNaira(booking.agreed_rate || booking.offered_rate)}
+                    {booking.agreed_rate || booking.offered_rate ? formatNaira(booking.agreed_rate || booking.offered_rate) : 'Quote requested'}
                   </p>
                   <p style={{ fontSize: '0.6875rem', color: savingsPct ? '#059669' : '#94A3B8', margin: 0, fontWeight: savingsPct ? 600 : 400 }}>
                     {savingsPct ? `↓ ${savingsPct}% saved` : (booking.boards?.asking_rate ? `asking ${formatNaira(booking.boards.asking_rate)}` : 'rate on request')}

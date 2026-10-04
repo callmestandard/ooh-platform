@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
-import { attachVisibleRates } from '@/lib/board-rates';
+import { attachVisibleRates, fetchOwnAgreedRates } from '@/lib/board-rates';
 import { authedFetch } from '@/lib/api';
 import { createNotification } from '@/lib/notifications';
 import { formatNaira } from '@/lib/utils';
@@ -500,6 +500,10 @@ export default function CampaignPlannerPage() {
     if (selectedBoards.length === 0) { showToast('Select at least one board first', 'error'); return; }
     setExporting(true);
     try {
+      // A rate this agency has already agreed for a board is printed as such.
+      // Otherwise the owner's asking rate prints only if this agency may see
+      // it; an undisclosed asking rate goes out as "On request" (rate 0).
+      const agreed = await fetchOwnAgreedRates(selectedBoards.map(b => b.id));
       const boardsPayload = selectedBoards.map(b => ({
         id: b.id,
         name: b.name,
@@ -507,7 +511,8 @@ export default function CampaignPlannerPage() {
         city: b.city || '',
         state: b.state || '',
         format: b.format || 'billboard',
-        asking_rate: b.asking_rate || 0,
+        asking_rate: agreed[b.id] ?? b.asking_rate ?? 0,
+        rate_basis: agreed[b.id] ? 'agreed' : b.asking_rate ? 'asking' : null,
         width: b.width,
         height: b.height,
         estimated_impressions: estimateImpressions(b, days),
@@ -1109,7 +1114,7 @@ export default function CampaignPlannerPage() {
                           {board.activeListing && <TrustBadgePill badge={board.activeListing.badge} small />}
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1B4F8A', margin: '0 0 1px' }}>{formatNaira(board.activeListing ? board.activeListing.sell_price : (board.asking_rate || 0))}</p>
+                          <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1B4F8A', margin: '0 0 1px' }}>{board.activeListing || board.asking_rate ? formatNaira(board.activeListing ? board.activeListing.sell_price : board.asking_rate) : 'On request'}</p>
                           {days > 0 && (
                             <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>
                               ~{(estimateImpressions(board, days) / 1000).toFixed(0)}K impr.

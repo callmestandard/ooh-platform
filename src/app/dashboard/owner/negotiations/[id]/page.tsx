@@ -195,6 +195,8 @@ export default function OwnerNegotiationDetailPage() {
       content = messageText || `Counter offer: ${formatNaira(rate)} per month`;
       newStatus = 'negotiating';
     } else if (actionMode === 'accept') {
+      // A quote request has no amount to accept — the owner must counter with a rate.
+      if (!booking.offered_rate) { setSending(false); return; }
       messageType = 'accepted';
       content = messageText || 'Offer accepted. Looking forward to working with you.';
       newStatus = 'agreed';
@@ -377,7 +379,9 @@ export default function OwnerNegotiationDetailPage() {
                   New booking request
                 </p>
                 <p style={{ fontSize: '0.8125rem', color: '#92400E', margin: 0 }}>
-                  Agency is offering <strong>{formatNaira(booking.offered_rate)}</strong>/month for this board.
+                  {booking.offered_rate
+                    ? <>Agency is offering <strong>{formatNaira(booking.offered_rate)}</strong>/month for this board.</>
+                    : <>The agency is asking for a quote — no amount has been offered. Reply with <strong>Counter</strong> to give your rate.</>}
                   {!agencyOfferedAboveAsking && booking.boards?.asking_rate && (
                     <> Your asking rate is {formatNaira(booking.boards.asking_rate)}.</>
                   )}
@@ -410,7 +414,7 @@ export default function OwnerNegotiationDetailPage() {
                 Deal terms
               </p>
               {[
-                { label: 'Agency offer',  value: formatNaira(booking.offered_rate), highlight: false },
+                { label: 'Agency offer',  value: booking.offered_rate ? formatNaira(booking.offered_rate) : 'Quote requested', highlight: false },
                 { label: 'Agreed rate',   value: booking.agreed_rate ? formatNaira(booking.agreed_rate) : 'Pending', highlight: !!booking.agreed_rate },
                 { label: 'Start date',    value: formatDate(booking.start_date), highlight: false },
                 { label: 'End date',      value: formatDate(booking.end_date), highlight: false },
