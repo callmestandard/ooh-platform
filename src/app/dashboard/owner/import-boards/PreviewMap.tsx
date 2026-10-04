@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import OOHMap, { Popup, type MapRef } from '@/components/map/OOHMap';
+import ClusteredPoints from '@/components/map/ClusteredPoints';
 
 export type MapBoard = {
   id: string;
@@ -17,40 +16,6 @@ export type MapBoard = {
   status: 'ready' | 'warning';
 };
 
-function makePin(status: 'ready' | 'warning', geocoded: boolean): L.DivIcon {
-  const bg = status === 'ready' ? '#1B4F8A' : '#D97706';
-  const border = geocoded ? '#F59E0B' : 'rgba(255,255,255,0.6)';
-  return L.divIcon({
-    html: `<div style="
-      width:22px; height:22px; border-radius:50%;
-      background:${bg}; border:2px solid ${border};
-      display:flex; align-items:center; justify-content:center;
-      box-shadow:0 2px 6px rgba(0,0,0,0.3);
-    "></div>`,
-    className: '',
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
-  });
-}
-
-function FitBounds({ boards }: { boards: MapBoard[] }) {
-  const map = useMap();
-  useEffect(() => {
-    if (boards.length === 0) return;
-    if (boards.length === 1) {
-      map.setView([boards[0].lat, boards[0].lng], 13);
-      return;
-    }
-    const lats = boards.map(b => b.lat);
-    const lngs = boards.map(b => b.lng);
-    map.fitBounds([
-      [Math.min(...lats), Math.min(...lngs)],
-      [Math.max(...lats), Math.max(...lngs)],
-    ], { padding: [40, 40] });
-  }, [boards, map]);
-  return null;
-}
-
 function fmt(n: number | null) {
   if (!n) return '—';
   if (n >= 1_000_000) return '₦' + (n / 1_000_000).toFixed(1) + 'M';
@@ -59,34 +24,55 @@ function fmt(n: number | null) {
 }
 
 export default function PreviewMap({ boards }: { boards: MapBoard[] }) {
-  const center: [number, number] = boards.length > 0
-    ? [boards[0].lat, boards[0].lng]
-    : [9.0579, 7.4951]; // Nigeria centroid
+  const mapRef = useRef<MapRef>(null);
+  const [poppedId, setPoppedId] = useState<string | null>(null);
+  const center = boards.length > 0 ? { longitude: boards[0].lng, latitude: boards[0].lat } : { longitude: 7.4951, latitude: 9.0579 };
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || boards.length === 0) return;
+    if (boards.length === 1) {
+      map.flyTo({ center: [boards[0].lng, boards[0].lat], zoom: 13, duration: 600 });
+      return;
+    }
+    const lngs = boards.map(b => b.lng);
+    const lats = boards.map(b => b.lat);
+    map.fitBounds(
+      [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+      { padding: 40, duration: 600 },
+    );
+  }, [boards]);
+
+  // Fill = row status, ring = amber when the pin was geocoded rather than supplied.
+  const points = useMemo(
+    () => boards.map(b => ({
+      id: b.id, lng: b.lng, lat: b.lat, radius: 9,
+      color: b.status === 'ready' ? '#1B4F8A' : '#D97706',
+      stroke: b.geocoded ? '#F59E0B' : '#fff',
+    })),
+    [boards],
+  );
 
   return (
-    <MapContainer
-      center={center}
-      zoom={6}
-      style={{ height: '100%', width: '100%', borderRadius: 12 }}
-      scrollWheelZoom
-    >
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-      />
-      <FitBounds boards={boards} />
-      {boards.map(b => (
-        <Marker key={b.id} position={[b.lat, b.lng]} icon={makePin(b.status, b.geocoded)}>
-          <Popup>
-            <strong style={{ fontSize: '0.8125rem' }}>{b.name}</strong><br />
-            <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{b.city} · {b.format}</span><br />
-            <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{fmt(b.asking_rate)}/mo</span>
-            {b.geocoded && (
-              <><br /><span style={{ fontSize: '0.6875rem', color: '#D97706' }}>⚠ Geocoded — verify pin</span></>
-            )}
+    <OOHMap ref={mapRef} initialViewState={{ ...center, zoom: 6 }} style={{ width: '100%', height: '100%', borderRadius: 12 }}>
+      <ClusteredPoints sourceId="import-preview-boards" points={points} onPointClick={setPoppedId} />
+
+      {poppedId && (() => {
+        const b = boards.find(x => x.id === poppedId);
+        if (!b) return null;
+        return (
+          <Popup longitude={b.lng} latitude={b.lat} anchor="bottom" offset={16} closeOnClick={false} onClose={() => setPoppedId(null)}>
+            <div style={{ fontFamily: "'Inter', sans-serif", minWidth: 150 }}>
+              <strong style={{ fontSize: '0.8125rem' }}>{b.name}</strong><br />
+              <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{b.city} · {b.format}</span><br />
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{fmt(b.asking_rate)}/mo</span>
+              {b.geocoded && (
+                <><br /><span style={{ fontSize: '0.6875rem', color: '#D97706' }}>⚠ Geocoded — verify pin</span></>
+              )}
+            </div>
           </Popup>
-        </Marker>
-      ))}
-    </MapContainer>
+        );
+      })()}
+    </OOHMap>
   );
 }

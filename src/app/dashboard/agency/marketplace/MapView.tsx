@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useEffect, useMemo, useRef } from 'react';
+import OOHMap, { type MapRef } from '@/components/map/OOHMap';
+import ClusteredPoints from '@/components/map/ClusteredPoints';
+import { boardStatusColor } from '@/components/map/ooh-map-shared';
 
 type Board = {
   id: string;
@@ -27,50 +27,6 @@ type Board = {
   created_at: string;
 };
 
-const FORMAT_INITIALS: Record<string, string> = {
-  billboard: 'B', unipole: 'U', gantry: 'G',
-  bridge_panel: 'P', wall_drape: 'W', digital: 'D',
-};
-
-function makePin(status: string, format: string): L.DivIcon {
-  const available = status === 'available';
-  const color = available ? '#1B4F8A' : '#94A3B8';
-  const initial = FORMAT_INITIALS[format] || format[0]?.toUpperCase() || 'B';
-  return L.divIcon({
-    html: `<div style="
-      width:34px;height:34px;border-radius:50% 50% 50% 0;
-      transform:rotate(-45deg);
-      background:${color};
-      border:2.5px solid white;
-      box-shadow:0 2px 10px rgba(0,0,0,0.35);
-      display:flex;align-items:center;justify-content:center;
-    "><span style="
-      transform:rotate(45deg);
-      color:white;font-weight:800;font-size:11px;
-      font-family:-apple-system,sans-serif;line-height:1;
-    ">${initial}</span></div>`,
-    className: '',
-    iconSize: [34, 34],
-    iconAnchor: [17, 34],
-    popupAnchor: [0, -38],
-  });
-}
-
-function FitBounds({ boards }: { boards: Board[] }) {
-  const map = useMap();
-  useEffect(() => {
-    const pts = boards.filter(b => b.latitude != null && b.longitude != null);
-    if (pts.length === 0) return;
-    if (pts.length === 1) {
-      map.setView([pts[0].latitude!, pts[0].longitude!], 15);
-      return;
-    }
-    const bounds = L.latLngBounds(pts.map(b => [b.latitude!, b.longitude!] as [number, number]));
-    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 });
-  }, [boards, map]);
-  return null;
-}
-
 export default function MapView({
   boards,
   onSelectBoard,
@@ -78,52 +34,71 @@ export default function MapView({
   boards: Board[];
   onSelectBoard: (b: Board) => void;
 }) {
-  const boardsWithGPS = boards.filter(b => b.latitude != null && b.longitude != null);
+  const mapRef = useRef<MapRef>(null);
+  const boardsWithGPS = useMemo(() => boards.filter(b => b.latitude != null && b.longitude != null), [boards]);
   const boardsNoGPS = boards.length - boardsWithGPS.length;
+  const points = useMemo(
+    () => boardsWithGPS.map(b => ({ id: b.id, lng: b.longitude!, lat: b.latitude!, color: boardStatusColor(b.status) })),
+    [boardsWithGPS],
+  );
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || boardsWithGPS.length === 0) return;
+    if (boardsWithGPS.length === 1) {
+      map.flyTo({ center: [boardsWithGPS[0].longitude!, boardsWithGPS[0].latitude!], zoom: 15, duration: 600 });
+      return;
+    }
+    const lngs = boardsWithGPS.map(b => b.longitude!);
+    const lats = boardsWithGPS.map(b => b.latitude!);
+    map.fitBounds(
+      [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+      { padding: 60, maxZoom: 14, duration: 600 },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardsWithGPS.length]);
+
+  function handlePointClick(id: string) {
+    const board = boardsWithGPS.find(b => b.id === id);
+    if (!board) return;
+    mapRef.current?.flyTo({ center: [board.longitude!, board.latitude!], zoom: Math.max(mapRef.current.getZoom(), 13), duration: 700 });
+    onSelectBoard(board);
+  }
 
   return (
     <div style={{ position: 'relative', height: 'calc(100vh - 300px)', minHeight: 480, borderRadius: 14, overflow: 'hidden', border: '1px solid #E2E8F0', boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
-      <MapContainer
-        center={[9.082, 8.675]}
-        zoom={6}
-        style={{ height: '100%', width: '100%' }}
-        zoomControl={true}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      <OOHMap ref={mapRef} initialViewState={{ longitude: 8.675, latitude: 9.082, zoom: 6 }} search>
+        <ClusteredPoints
+          sourceId="marketplace-boards"
+          points={points}
+          onPointClick={handlePointClick}
         />
-        <FitBounds boards={boardsWithGPS} />
-        {boardsWithGPS.map(board => (
-          <Marker
-            key={board.id}
-            position={[board.latitude!, board.longitude!]}
-            icon={makePin(board.status, board.format)}
-            eventHandlers={{ click: () => onSelectBoard(board) }}
-          />
-        ))}
-      </MapContainer>
+      </OOHMap>
 
       {/* Legend */}
       <div style={{
-        position: 'absolute', top: 14, right: 14, zIndex: 1000,
+        position: 'absolute', top: 14, right: 14, zIndex: 1,
         background: 'rgba(255,255,255,0.96)', borderRadius: 10,
         padding: '10px 14px', boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
       }}>
         <p style={{ fontSize: '0.5625rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 7px' }}>Legend</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#1B4F8A', flexShrink: 0 }} />
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: boardStatusColor('available'), flexShrink: 0 }} />
             <span style={{ fontSize: '0.6875rem', color: '#374151', fontWeight: 500 }}>Available</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#94A3B8', flexShrink: 0 }} />
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: boardStatusColor('booked'), flexShrink: 0 }} />
             <span style={{ fontSize: '0.6875rem', color: '#374151', fontWeight: 500 }}>Booked</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: boardStatusColor('unavailable'), flexShrink: 0 }} />
+            <span style={{ fontSize: '0.6875rem', color: '#374151', fontWeight: 500 }}>Unavailable</span>
           </div>
         </div>
         <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #F1F5F9' }}>
           <p style={{ fontSize: '0.5625rem', color: '#94A3B8', margin: 0, lineHeight: 1.5 }}>
-            Letter = format<br />B·U·G·P·W·D
+            Numbered circles = clusters<br />Click to zoom in
           </p>
         </div>
       </div>
@@ -131,7 +106,7 @@ export default function MapView({
       {/* Boards without GPS notice */}
       {boardsNoGPS > 0 && (
         <div style={{
-          position: 'absolute', bottom: 14, left: 14, zIndex: 1000,
+          position: 'absolute', bottom: 14, left: 14, zIndex: 1,
           background: 'rgba(15,23,42,0.82)', color: '#fff',
           padding: '8px 13px', borderRadius: 8,
           fontSize: '0.6875rem', fontWeight: 600,
@@ -148,7 +123,7 @@ export default function MapView({
       {/* Empty state */}
       {boardsWithGPS.length === 0 && (
         <div style={{
-          position: 'absolute', inset: 0, zIndex: 999,
+          position: 'absolute', inset: 0, zIndex: 1,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           background: 'rgba(248,250,252,0.9)', backdropFilter: 'blur(4px)',
           gap: 10,

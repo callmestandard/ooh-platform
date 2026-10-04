@@ -1,123 +1,92 @@
 'use client';
 
-import { useRef, useCallback } from 'react';
-import Map, { Marker, NavigationControl, MapRef } from 'react-map-gl/maplibre';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import OOHMap, { type MapRef } from '@/components/map/OOHMap';
+import ClusteredPoints from '@/components/map/ClusteredPoints';
+import CorridorTool, { type CorridorMode } from '@/components/map/CorridorTool';
+import { boardStatusColor, cityCenter, LAGOS_CENTER } from '@/components/map/ooh-map-shared';
 import type { Board } from '@/app/dashboard/agency/boards-map/page';
-
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
-
-const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
-
-const FORMAT_ICONS: Record<string, string> = {
-  unipole: '▲', gantry: '⬛', billboard: '▬', bridge_panel: '─', wall_drape: '▼',
-};
 
 type Props = {
   boards: Board[];
   selectedIds: Set<string>;
   onToggleBoard: (board: Board) => void;
   highlightedId?: string | null;
+  /** Corridor/radius tool result — lets the parent merge matched boards straight into the shortlist. */
+  onCorridorMatch?: (boards: Board[]) => void;
+  showCorridorTool?: boolean;
+  /** Board ids currently inside the drawn corridor/radius — ringed on the map. */
+  corridorMatchIds?: Set<string>;
+  /** A city to fly to (e.g. the first target city from a parsed brief). */
+  focusCity?: string | null;
 };
 
-export default function PlannerMap({ boards, selectedIds, onToggleBoard, highlightedId }: Props) {
+export default function PlannerMap({ boards, selectedIds, onToggleBoard, highlightedId, onCorridorMatch, showCorridorTool, corridorMatchIds, focusCity }: Props) {
   const mapRef = useRef<MapRef>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [corridorMode, setCorridorMode] = useState<CorridorMode>('off');
+  const drawing = !!showCorridorTool && corridorMode !== 'off';
 
-  const geo = boards.filter(b => b.latitude && b.longitude);
+  const geo = useMemo(() => boards.filter(b => b.latitude && b.longitude), [boards]);
+  const byId = useMemo(() => new Map(geo.map(b => [b.id, b])), [geo]);
+  const corridorBoards = useMemo(() => geo.filter(b => b.status === 'available'), [geo]);
+
+  // Fly to a board highlighted from the list (e.g. hovering a shortlist row).
+  useEffect(() => {
+    if (!highlightedId) return;
+    const b = byId.get(highlightedId);
+    const map = mapRef.current;
+    if (!b || !map) return;
+    map.flyTo({ center: [b.longitude!, b.latitude!], zoom: Math.max(map.getZoom(), 13), duration: 700 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightedId]);
+
+  // Fly to the brief's target city so a corridor can be drawn there right away.
+  useEffect(() => {
+    const center = cityCenter(focusCity);
+    if (!center || !mapReady) return;
+    mapRef.current?.flyTo({ center, zoom: 11.5, duration: 1400 });
+  }, [focusCity, mapReady]);
+
+  const points = useMemo(() => geo.map(b => {
+    const selected = selectedIds.has(b.id);
+    const highlighted = highlightedId === b.id;
+    const matched = !!corridorMatchIds?.has(b.id);
+    return {
+      id: b.id,
+      lng: b.longitude!,
+      lat: b.latitude!,
+      color: selected ? '#1B4F8A' : highlighted ? '#F59E0B' : boardStatusColor(b.status),
+      radius: selected || highlighted || matched ? 10 : 7,
+      stroke: matched ? '#F59E0B' : '#fff',
+    };
+  }), [geo, selectedIds, highlightedId, corridorMatchIds]);
+
+  const handleMatched = useCallback((matched: Board[]) => onCorridorMatch?.(matched), [onCorridorMatch]);
+
+  function handlePointClick(id: string) {
+    const board = byId.get(id);
+    if (board && board.status === 'available') onToggleBoard(board);
+  }
 
   return (
-    <Map
-      ref={mapRef}
-      initialViewState={{ longitude: 3.3792, latitude: 6.5244, zoom: 11 }}
-      style={{ width: '100%', height: '100%' }}
-      mapStyle={MAP_STYLE}
-      attributionControl={false}
-    >
-      <NavigationControl position="bottom-right" />
+    <OOHMap ref={mapRef} initialViewState={{ ...LAGOS_CENTER, zoom: 11 }} search onLoad={() => setMapReady(true)}>
+      <ClusteredPoints
+        sourceId="planner-boards"
+        points={points}
+        onPointClick={handlePointClick}
+        interactive={!drawing}
+      />
 
-      {geo.map(board => {
-        const selected = selectedIds.has(board.id);
-        const highlighted = highlightedId === board.id;
-        const isAvailable = board.status === 'available';
-
-        return (
-          <Marker
-            key={board.id}
-            longitude={board.longitude!}
-            latitude={board.latitude!}
-            anchor="bottom"
-            onClick={e => {
-              e.originalEvent.stopPropagation();
-              if (isAvailable) onToggleBoard(board);
-            }}
-          >
-            <div
-              title={isAvailable ? (selected ? 'Remove from plan' : 'Add to plan') : 'Not available'}
-              style={{
-                position: 'relative',
-                cursor: isAvailable ? 'pointer' : 'not-allowed',
-                transform: selected || highlighted ? 'scale(1.2)' : 'scale(1)',
-                transition: 'transform 0.15s',
-              }}
-            >
-              {/* Pulse ring for selected */}
-              {selected && (
-                <div style={{
-                  position: 'absolute',
-                  inset: -8,
-                  borderRadius: '50%',
-                  border: '2px solid #1B4F8A',
-                  opacity: 0.5,
-                  animation: 'plannerPulse 1.5s ease-in-out infinite',
-                  pointerEvents: 'none',
-                }} />
-              )}
-
-              {/* Pin body */}
-              <div style={{
-                width: 32,
-                height: 32,
-                borderRadius: selected ? '8px' : '50% 50% 50% 0',
-                transform: selected ? 'none' : 'rotate(-45deg)',
-                background: selected
-                  ? '#1B4F8A'
-                  : !isAvailable
-                    ? '#94A3B8'
-                    : highlighted
-                      ? '#F59E0B'
-                      : '#10B981',
-                border: `2px solid ${selected ? '#3B82F6' : 'rgba(255,255,255,0.8)'}`,
-                boxShadow: selected
-                  ? '0 4px 12px rgba(27,79,138,0.5)'
-                  : '0 2px 8px rgba(0,0,0,0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                <span style={{
-                  transform: selected ? 'none' : 'rotate(45deg)',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  color: '#fff',
-                  lineHeight: 1,
-                  fontFamily: 'monospace',
-                }}>
-                  {selected
-                    ? '✓'
-                    : (FORMAT_ICONS[board.format || ''] || '●')
-                  }
-                </span>
-              </div>
-            </div>
-          </Marker>
-        );
-      })}
-
-      <style>{`
-        @keyframes plannerPulse {
-          0%, 100% { transform: scale(1); opacity: 0.5; }
-          50% { transform: scale(1.4); opacity: 0.2; }
-        }
-      `}</style>
-    </Map>
+      {showCorridorTool && (
+        <CorridorTool
+          boards={corridorBoards}
+          onMatchedChange={handleMatched}
+          onModeChange={setCorridorMode}
+        />
+      )}
+    </OOHMap>
   );
 }
+
+export type { Board };

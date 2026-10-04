@@ -1,89 +1,11 @@
 'use client';
 
-import { useRef, useMemo, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useEffect, useRef } from 'react';
+import OOHMap, { Marker, type MapRef } from '@/components/map/OOHMap';
+import type { MapMouseEvent, MarkerDragEvent } from '@/components/map/engine';
+import { CITY_CENTERS } from '@/components/map/ooh-map-shared';
 
-const CITY_CENTERS: Record<string, [number, number]> = {
-  'Lagos': [6.5244, 3.3792],
-  'Abuja': [9.0579, 7.4951],
-  'Port Harcourt': [4.8156, 7.0498],
-  'Kano': [12.0022, 8.5919],
-  'Ibadan': [7.3775, 3.9470],
-  'Benin City': [6.3350, 5.6037],
-  'Enugu': [6.4584, 7.5464],
-  'Aba': [5.1069, 7.3664],
-  'Warri': [5.5167, 5.7500],
-  'Onitsha': [6.1449, 6.7874],
-  'Kaduna': [10.5105, 7.4165],
-  'Jos': [9.8965, 8.8583],
-  'Ilorin': [8.4966, 4.5426],
-  'Calabar': [4.9517, 8.3220],
-  'Akure': [7.2526, 5.1977],
-  'Uyo': [5.0510, 7.9328],
-  'Osogbo': [7.7712, 4.5573],
-  'Owerri': [5.4836, 7.0330],
-  'Maiduguri': [11.8333, 13.1500],
-  'Zaria': [11.0667, 7.7000],
-  'Abeokuta': [7.1475, 3.3619],
-  'Asaba': [6.1952, 6.7353],
-  'Umuahia': [5.5266, 7.4927],
-  'Bauchi': [10.3158, 9.8442],
-  'Sokoto': [13.0622, 5.2339],
-  'Yola': [9.2035, 12.4954],
-  'Makurdi': [7.7319, 8.5237],
-  'Lokoja': [7.7963, 6.7384],
-  'Lafia': [8.4939, 8.5219],
-  'Gusau': [12.1649, 6.6599],
-};
-
-const NIGERIA_CENTER: [number, number] = [9.0579, 7.4951];
-
-function makePinIcon(): L.DivIcon {
-  return L.divIcon({
-    html: `<div style="
-      position:relative;
-      width:0; height:0;
-    ">
-      <div style="
-        position:absolute;
-        left:-14px; top:-28px;
-        width:28px; height:28px;
-        background:#7C3AED;
-        border:3px solid #fff;
-        border-radius:50% 50% 50% 0;
-        transform:rotate(-45deg);
-        box-shadow:0 3px 10px rgba(124,58,237,0.45);
-      "></div>
-    </div>`,
-    className: '',
-    iconSize: [0, 0],
-    iconAnchor: [0, 0],
-  });
-}
-
-function ClickToPlace({ onPlace }: { onPlace: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click(e) {
-      onPlace(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
-
-function MapRecenterer({ lat, lng, city }: { lat: number | null; lng: number | null; city: string }) {
-  const map = useMap();
-  useEffect(() => {
-    if (lat !== null && lng !== null) {
-      map.setView([lat, lng], Math.max(map.getZoom(), 15));
-    } else if (city && CITY_CENTERS[city]) {
-      map.setView(CITY_CENTERS[city], 13);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lat, lng, city]);
-  return null;
-}
+const NIGERIA_CENTER: [number, number] = [7.4951, 9.0579];
 
 type Props = {
   lat: number | null;
@@ -94,50 +16,48 @@ type Props = {
 };
 
 export default function LocationPinPicker({ lat, lng, city, onChange, onClear }: Props) {
-  const markerRef = useRef<L.Marker>(null);
-
-  const eventHandlers = useMemo(() => ({
-    dragend() {
-      const m = markerRef.current;
-      if (m) {
-        const pos = m.getLatLng();
-        onChange(pos.lat, pos.lng);
-      }
-    },
-  }), [onChange]);
-
-  const pinIcon = useMemo(() => makePinIcon(), []);
-
+  const mapRef = useRef<MapRef>(null);
   const hasPin = lat !== null && lng !== null;
-  const initialCenter: [number, number] = hasPin
-    ? [lat, lng]
-    : CITY_CENTERS[city] ?? NIGERIA_CENTER;
+  const initialCenter: [number, number] = hasPin ? [lng, lat] : CITY_CENTERS[city] ?? NIGERIA_CENTER;
   const initialZoom = hasPin ? 15 : city ? 13 : 7;
+
+  // Recenter when the city changes (before a pin exists) or a pin is set/cleared from outside.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (hasPin) {
+      map.flyTo({ center: [lng as number, lat as number], zoom: Math.max(map.getZoom(), 15), duration: 600 });
+    } else if (city && CITY_CENTERS[city]) {
+      map.flyTo({ center: CITY_CENTERS[city], zoom: 13, duration: 600 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lat, lng, city]);
+
+  function handleClick(e: MapMouseEvent) {
+    onChange(e.lngLat.lat, e.lngLat.lng);
+  }
+
+  function handleDragEnd(e: MarkerDragEvent) {
+    onChange(e.lngLat.lat, e.lngLat.lng);
+  }
 
   return (
     <div>
-      <MapContainer
-        center={initialCenter}
-        zoom={initialZoom}
-        style={{ height: 280, width: '100%', borderRadius: 10, border: '1px solid #E2E8F0', cursor: hasPin ? 'default' : 'crosshair' }}
-        scrollWheelZoom={false}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        />
-        <MapRecenterer lat={lat} lng={lng} city={city} />
-        <ClickToPlace onPlace={onChange} />
-        {hasPin && (
-          <Marker
-            draggable
-            eventHandlers={eventHandlers}
-            position={[lat, lng]}
-            icon={pinIcon}
-            ref={markerRef}
-          />
-        )}
-      </MapContainer>
+      <div style={{ height: 280, width: '100%', borderRadius: 10, border: '1px solid #E2E8F0', overflow: 'hidden', cursor: hasPin ? 'default' : 'crosshair' }}>
+        <OOHMap
+          ref={mapRef}
+          initialViewState={{ longitude: initialCenter[0], latitude: initialCenter[1], zoom: initialZoom }}
+          onClick={handleClick}
+          scrollZoom={false}
+          hideNavControl
+        >
+          {hasPin && (
+            <Marker longitude={lng as number} latitude={lat as number} anchor="bottom" draggable onDragEnd={handleDragEnd}>
+              <div style={{ width: 28, height: 28, background: '#7C3AED', border: '3px solid #fff', borderRadius: '50% 50% 50% 0', transform: 'rotate(-45deg)', boxShadow: '0 3px 10px rgba(124,58,237,0.45)' }} />
+            </Marker>
+          )}
+        </OOHMap>
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, minHeight: 20 }}>
         {hasPin ? (

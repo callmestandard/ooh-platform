@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
@@ -282,6 +282,34 @@ export default function CampaignPlannerPage() {
     });
   }, []);
 
+  // Corridor/radius tool — draws on the map, feeds matched boards straight
+  // into the same shortlist Smart Suggest and manual toggling use.
+  const [showCorridorTool, setShowCorridorTool] = useState(false);
+  const [corridorMatches, setCorridorMatches] = useState<Board[]>([]);
+  // Which of the matched boards are ticked in the results list (all, by default).
+  const [corridorPicked, setCorridorPicked] = useState<Set<string>>(new Set());
+  const handleCorridorMatch = useCallback((matched: Board[]) => {
+    setCorridorMatches(matched);
+    setCorridorPicked(new Set(matched.map(b => b.id)));
+  }, []);
+  const corridorMatchIds = useMemo(() => new Set(corridorMatches.map(b => b.id)), [corridorMatches]);
+  function toggleCorridorPick(id: string) {
+    setCorridorPicked(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  function addCorridorMatchesToShortlist() {
+    const picked = corridorMatches.filter(b => corridorPicked.has(b.id));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      picked.forEach(b => next.add(b.id));
+      return next;
+    });
+    showToast(`${picked.length} board${picked.length !== 1 ? 's' : ''} added to shortlist`);
+  }
+
   const selectedBoards = boards.filter(b => selectedIds.has(b.id));
   const budget = Number(form.total_budget) || 0;
   const totalCost = selectedBoards.reduce((s, b) => s + (b.asking_rate || 0), 0);
@@ -554,7 +582,56 @@ export default function CampaignPlannerPage() {
             selectedIds={selectedIds}
             onToggleBoard={toggleBoard}
             highlightedId={highlightedId}
+            showCorridorTool={showCorridorTool}
+            onCorridorMatch={handleCorridorMatch}
+            corridorMatchIds={corridorMatchIds}
+            focusCity={parsedBrief?.cities?.[0] ?? null}
           />
+        )}
+
+        {/* Corridor/radius tool toggle */}
+        <button
+          onClick={() => { setShowCorridorTool(v => !v); setCorridorMatches([]); }}
+          style={{
+            position: 'absolute', top: 16, right: 16, zIndex: 10,
+            display: 'flex', alignItems: 'center', gap: 7, padding: '7px 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
+            background: showCorridorTool ? '#1B4F8A' : 'rgba(255,255,255,0.97)', color: showCorridorTool ? '#fff' : '#374151',
+            fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'inherit', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', backdropFilter: 'blur(12px)',
+          }}
+        >
+          📍 {showCorridorTool ? 'Exit corridor tool' : 'Plan a corridor/radius'}
+        </button>
+
+        {/* Corridor matches → add to shortlist */}
+        {showCorridorTool && corridorMatches.length > 0 && (
+          <div style={{ position: 'absolute', top: 64, right: 16, zIndex: 10, width: 260, background: 'rgba(255,255,255,0.99)', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.15)', padding: '12px 14px' }}>
+            <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 8px' }}>
+              {corridorMatches.length} available board{corridorMatches.length !== 1 ? 's' : ''} found along the drawn shape
+            </p>
+            <div style={{ maxHeight: 220, overflowY: 'auto', margin: '0 -4px 10px' }}>
+              {corridorMatches.map(b => (
+                <label key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={corridorPicked.has(b.id)} onChange={() => toggleCorridorPick(b.id)} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.name}</span>
+                    <span style={{ display: 'block', fontSize: '0.6875rem', color: '#94A3B8' }}>
+                      {b.city || '—'}{selectedIds.has(b.id) ? ' · already in shortlist' : ''}
+                    </span>
+                  </span>
+                  <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#1B4F8A', fontFamily: 'monospace', flexShrink: 0 }}>
+                    {b.asking_rate != null ? '₦' + b.asking_rate.toLocaleString('en-NG') : '—'}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <button
+              onClick={addCorridorMatchesToShortlist}
+              disabled={corridorPicked.size === 0}
+              style={{ width: '100%', padding: '8px', background: corridorPicked.size === 0 ? '#F1F5F9' : '#1B4F8A', color: corridorPicked.size === 0 ? '#94A3B8' : '#fff', border: 'none', borderRadius: 7, fontSize: '0.8125rem', fontWeight: 600, cursor: corridorPicked.size === 0 ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}
+            >
+              Add {corridorPicked.size} to shortlist
+            </button>
+          </div>
         )}
 
         {/* Map legend overlay */}

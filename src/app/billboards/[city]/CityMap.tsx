@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import OOHMap, { Popup, type MapRef } from '@/components/map/OOHMap';
+import ClusteredPoints from '@/components/map/ClusteredPoints';
 
 export type CityMapBoard = {
   id: string;
@@ -24,35 +23,6 @@ const FORMAT_PIN_COLORS: Record<string, string> = {
   led:          '#15803D',
 };
 
-function makePin(format: string): L.DivIcon {
-  const bg = FORMAT_PIN_COLORS[format] || '#1B4F8A';
-  return L.divIcon({
-    html: `<div style="
-      width:18px;height:18px;border-radius:50%;
-      background:${bg};border:2.5px solid #fff;
-      box-shadow:0 2px 8px rgba(0,0,0,0.35);
-    "></div>`,
-    className: '',
-    iconSize:   [18, 18],
-    iconAnchor: [9, 9],
-  });
-}
-
-function FitBounds({ boards }: { boards: CityMapBoard[] }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!boards.length) return;
-    if (boards.length === 1) { map.setView([boards[0].lat, boards[0].lng], 13); return; }
-    const lats = boards.map(b => b.lat);
-    const lngs = boards.map(b => b.lng);
-    map.fitBounds(
-      [[Math.min(...lats), Math.min(...lngs)], [Math.max(...lats), Math.max(...lngs)]],
-      { padding: [40, 40] },
-    );
-  }, [boards, map]);
-  return null;
-}
-
 function fmtRate(n: number) {
   if (n >= 1_000_000) return '₦' + (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000)     return '₦' + Math.round(n / 1_000) + 'K';
@@ -65,47 +35,59 @@ type Props = {
 };
 
 export default function CityMap({ boards, city }: Props) {
-  const center: [number, number] = boards.length > 0
-    ? [boards[0].lat, boards[0].lng]
-    : [9.0579, 7.4951];
+  const mapRef = useRef<MapRef>(null);
+  const [poppedId, setPoppedId] = useState<string | null>(null);
+  const center = boards.length > 0 ? { longitude: boards[0].lng, latitude: boards[0].lat } : { longitude: 7.4951, latitude: 9.0579 };
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || boards.length === 0) return;
+    if (boards.length === 1) {
+      map.flyTo({ center: [boards[0].lng, boards[0].lat], zoom: 13, duration: 600 });
+      return;
+    }
+    const lngs = boards.map(b => b.lng);
+    const lats = boards.map(b => b.lat);
+    map.fitBounds(
+      [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+      { padding: 40, duration: 600 },
+    );
+  }, [boards]);
+
+  const points = useMemo(
+    () => boards.map(b => ({ id: b.id, lng: b.lng, lat: b.lat, color: FORMAT_PIN_COLORS[b.format] || '#1B4F8A', radius: 8 })),
+    [boards],
+  );
 
   return (
-    <MapContainer
-      center={center}
-      zoom={12}
-      style={{ height: '100%', width: '100%' }}
-      scrollWheelZoom={false}
-    >
-      <TileLayer
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-      />
-      <FitBounds boards={boards} />
-      {boards.map(b => (
-        <Marker
-          key={b.id}
-          position={[b.lat, b.lng]}
-          icon={makePin(b.format)}
-        >
-          <Popup>
-            <strong style={{ fontSize: '0.8125rem', display: 'block', marginBottom: 2 }}>{b.name}</strong>
-            <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{b.format}</span><br />
-            <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{fmtRate(b.asking_rate)}/mo</span>
-            <br />
-            <a
-              href={`/campaign-builder?city=${encodeURIComponent(city)}`}
-              style={{
-                display: 'inline-block', marginTop: 8,
-                padding: '4px 10px', borderRadius: 6,
-                background: '#1B4F8A', color: '#fff',
-                fontSize: '0.6875rem', fontWeight: 600, textDecoration: 'none',
-              }}
-            >
-              Plan a campaign →
-            </a>
+    <OOHMap ref={mapRef} initialViewState={{ ...center, zoom: 12 }} scrollZoom={false}>
+      <ClusteredPoints sourceId="city-boards" points={points} onPointClick={setPoppedId} />
+
+      {poppedId && (() => {
+        const b = boards.find(x => x.id === poppedId);
+        if (!b) return null;
+        return (
+          <Popup longitude={b.lng} latitude={b.lat} anchor="bottom" offset={14} closeOnClick={false} onClose={() => setPoppedId(null)}>
+            <div style={{ fontFamily: "'Inter', sans-serif", minWidth: 150 }}>
+              <strong style={{ fontSize: '0.8125rem', display: 'block', marginBottom: 2 }}>{b.name}</strong>
+              <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{b.format}</span><br />
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{fmtRate(b.asking_rate)}/mo</span>
+              <br />
+              <a
+                href={`/campaign-builder?city=${encodeURIComponent(city)}`}
+                style={{
+                  display: 'inline-block', marginTop: 8,
+                  padding: '4px 10px', borderRadius: 6,
+                  background: '#1B4F8A', color: '#fff',
+                  fontSize: '0.6875rem', fontWeight: 600, textDecoration: 'none',
+                }}
+              >
+                Plan a campaign →
+              </a>
+            </div>
           </Popup>
-        </Marker>
-      ))}
-    </MapContainer>
+        );
+      })()}
+    </OOHMap>
   );
 }

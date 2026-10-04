@@ -1,7 +1,7 @@
 'use client';
 
-import Map, { Marker, Popup, NavigationControl } from 'react-map-gl/maplibre';
 import { useState } from 'react';
+import OOHMap, { Marker, Popup } from '@/components/map/OOHMap';
 
 type BookingPin = {
   id: string;
@@ -43,15 +43,10 @@ export default function ClientPortalMap({ pins }: { pins: BookingPin[] }) {
     : { longitude: 3.3792, latitude: 6.5244 };
 
   return (
-    <Map
+    <OOHMap
       initialViewState={{ ...center, zoom: pins.length === 1 ? 13 : 10 }}
-      style={{ width: '100%', height: '100%' }}
-      mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
-      attributionControl={false}
       onClick={() => setPopup(null)}
     >
-      <NavigationControl position="bottom-right" />
-
       {pins.map(pin => {
         const color = STATUS_COLOR[pin.status] || '#94A3B8';
         return (
@@ -101,6 +96,6 @@ export default function ClientPortalMap({ pins }: { pins: BookingPin[] }) {
           </div>
         </Popup>
       )}
-    </Map>
+    </OOHMap>
   );
 }
