@@ -1237,6 +1237,9 @@ function Footer() {
           {/* Resources */}
           <div>
             <h6 style={{ fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#756e62', marginBottom: 16, fontWeight: 600 }}>Resources</h6>
+            {[['Formats guide', '/formats'], ['Glossary', '/glossary']].map(([l, href]) => (
+              <Link key={href} href={href} style={{ display: 'block', color: '#4a443b', fontSize: 14, marginBottom: 11, textDecoration: 'none' }}>{l}</Link>
+            ))}
             {['OOH rate guide','City profiles','Help center','API docs'].map(l => (
               <a key={l} href="/signup" style={{ display: 'block', color: '#4a443b', fontSize: 14, marginBottom: 11, textDecoration: 'none', transition: 'color .15s' }}
                 onMouseEnter={e => (e.target as HTMLElement).style.color='#1a1712'}

@@ -56,6 +56,7 @@ const agencyNav: NavItem[] = [
   { id: "invoices",    label: "Invoices",     path: "/dashboard/agency/invoices",     icon: <Icon path="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8" /> },
   { id: "reports",          label: "Reports",          path: "/dashboard/agency/reports",           icon: <Icon path="M18 20V10 M12 20V4 M6 20v-6" /> },
   { id: "rate-intelligence", label: "Rate Intel",       path: "/dashboard/agency/rate-intelligence", icon: <Icon path="M22 12 18 12 15 21 9 3 6 12 2 12" /> },
+  { id: "budget-estimator", label: "Budget Estimator", path: "/dashboard/agency/budget-estimator",  icon: <Icon path="M4 2h16v20H4z M8 6h8 M8 11h2 M14 11h2 M8 15h2 M14 15h2" /> },
   { id: "settings",         label: "Settings",         path: "/dashboard/settings",                 icon: <Icon path="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /> },
 ];
 

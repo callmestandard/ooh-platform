@@ -307,6 +307,12 @@ function MarketplaceContent() {
   const [priceMax, setPriceMax]     = useState(Infinity);
   const [selected, setSelected]     = useState<Board | null>(null);
 
+  // Deep link from the public formats guide: /marketplace?format=unipole
+  useEffect(() => {
+    const f = new URLSearchParams(window.location.search).get('format');
+    if (f) setFormatFilter(f);
+  }, []);
+
   useEffect(() => {
     async function load() {
       const [{ data }, { data: listingsData }] = await Promise.all([
