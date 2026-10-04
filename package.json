@@ -20,6 +20,7 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "mapbox-gl": "^3.32.0",
+    "mapillary-js": "^4.1.2",
     "next": "16.2.2",
     "pdfkit": "^0.18.0",
     "pptxgenjs": "^4.0.1",

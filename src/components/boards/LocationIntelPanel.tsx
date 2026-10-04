@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import type { Board } from '@/app/dashboard/agency/boards-map/page';
 import { authedFetch } from '@/lib/api';
+import StreetLevelView from '@/components/map/StreetLevelView';
 
 type Props = {
   lat: number;
@@ -305,31 +306,13 @@ export default function LocationIntelPanel({ lat, lng, name, nearbyBoards, onClo
 
         {/* STREET VIEW TAB */}
         {activeTab === 'streetview' && (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div>
             <div style={{ padding: '10px 16px', background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
-              <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0 }}>
-                Ground-level view of <strong>{name}</strong>
+              <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0, lineHeight: 1.4 }}>
+                Ground-level photos near <strong>{name}</strong> — use the arrows on the image to move along the street.
               </p>
             </div>
-            <div style={{ flex: 1, minHeight: 400 }}>
-              <iframe
-                src={`https://www.google.com/maps/embed/v1/streetview?key=AIzaSyD-placeholder&location=${lat},${lng}&heading=0&pitch=0&fov=90`}
-                style={{ width: '100%', height: '100%', border: 'none', minHeight: 400 }}
-                title="Street View"
-                allowFullScreen
-                loading="lazy"
-              />
-            </div>
-            <div style={{ padding: '10px 16px', borderTop: '1px solid #F1F5F9', display: 'flex', gap: 10 }}>
-              <a href={`https://maps.google.com/?q=${lat},${lng}&layer=c`} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: '0.75rem', color: '#1B4F8A', fontWeight: 600, textDecoration: 'none' }}>
-                Open Street View →
-              </a>
-              <a href={`https://maps.google.com/?q=${lat},${lng}`} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: '0.75rem', color: '#64748B', fontWeight: 500, textDecoration: 'none' }}>
-                Open in Maps
-              </a>
-            </div>
+            <StreetLevelView lat={lat} lng={lng} />
           </div>
         )}
       </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { authedFetch } from '@/lib/api';
+import StreetLevelView from '@/components/map/StreetLevelView';
 import type { AudienceProfile } from '@/lib/types';
 
 type Board = {
@@ -527,31 +528,13 @@ export default function BoardDetailPanel({ board, onClose, onBookingRequest, aud
 
         {/* STREET VIEW TAB */}
         {activeTab === 'streetview' && (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ padding: '12px 16px', background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
+          <div>
+            <div style={{ padding: '10px 16px', background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
               <p style={{ fontSize: '0.75rem', color: '#64748B', margin: 0, lineHeight: 1.4 }}>
-                Explore the street around this board location using Google Street View.
+                Ground-level photos near this board — use the arrows on the image to move along the street.
               </p>
             </div>
-            <div style={{ flex: 1, minHeight: 400 }}>
-              <iframe
-                src={`https://www.google.com/maps/embed/v1/streetview?key=AIzaSyD-placeholder&location=${board.latitude},${board.longitude}&heading=0&pitch=0&fov=90`}
-                style={{ width: '100%', height: '100%', border: 'none', minHeight: 400 }}
-                title="Street View"
-                allowFullScreen
-                loading="lazy"
-              />
-            </div>
-            <div style={{ padding: '10px 16px', background: '#F8FAFC', borderTop: '1px solid #F1F5F9' }}>
-              <a
-                href={`https://maps.google.com/?q=${board.latitude},${board.longitude}&layer=c`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: '0.75rem', color: '#1B4F8A', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}
-              >
-                Open in Google Maps →
-              </a>
-            </div>
+            <StreetLevelView lat={board.latitude} lng={board.longitude} />
           </div>
         )}
       </div>
