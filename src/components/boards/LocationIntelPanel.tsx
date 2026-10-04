@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import type { Board } from '@/app/dashboard/agency/boards-map/page';
+import { authedFetch } from '@/lib/api';
 
 type Props = {
   lat: number;
@@ -64,9 +65,11 @@ export default function LocationIntelPanel({ lat, lng, name, nearbyBoards, onClo
     setLoading(true);
     setIntel(null);
     try {
-      const res = await fetch(`/api/location-intel?lat=${lat}&lng=${lng}&name=${encodeURIComponent(name)}`);
+      // The route requires a signed-in user; an error body (401/429/500) must
+      // never be stored as intel — rendering it is what crashed the page.
+      const res = await authedFetch(`/api/location-intel?lat=${lat}&lng=${lng}&name=${encodeURIComponent(name)}`);
       const data = await res.json();
-      setIntel(data);
+      if (res.ok && data?.area && data?.scores) setIntel(data);
     } catch { /* ignore */ }
     setLoading(false);
   }

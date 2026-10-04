@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { authedFetch } from '@/lib/api';
 import type { AudienceProfile } from '@/lib/types';
 
 type Board = {
@@ -115,11 +116,11 @@ export default function BoardDetailPanel({ board, onClose, onBookingRequest, aud
     if (intel || intelLoading) return;
     setIntelLoading(true);
     try {
-      const res = await fetch(
+      const res = await authedFetch(
         `/api/location-intel?lat=${board.latitude}&lng=${board.longitude}&name=${encodeURIComponent(board.name)}`
       );
       const data = await res.json();
-      setIntel(data);
+      if (res.ok && data?.area && data?.scores) setIntel(data);
     } catch {
       // silently fail
     }
