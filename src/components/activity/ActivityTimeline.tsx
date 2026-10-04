@@ -37,6 +37,9 @@ const ACTION_ICONS: Record<string, string> = {
   'print_task.created': '🖨️',
   'print_task.status_changed': '🔄',
   'print_task.reinitialized': '🖨️',
+  'makegood.created': '🤝',
+  'makegood.status_changed': '🔄',
+  'makegood.updated': '📝',
 };
 
 function fmtTime(iso: string) {

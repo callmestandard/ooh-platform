@@ -73,6 +73,7 @@ const NOTIF_LABELS: Record<NotificationType, { label: string; desc: string; role
   agent_authorization_request:  { label: 'Agent authorization request', desc: 'When an agent claims to represent you on a board', roles: ['owner'] },
   agent_authorization_resolved: { label: 'Authorization resolved',      desc: 'When an owner confirms or denies your claim',      roles: ['agent'] },
   availability_request:  { label: 'Availability request',  desc: 'When an agency asks whether your boards are free', roles: ['owner'] },
+  makegood: { label: 'Makegood updates', desc: 'When a makegood is recorded or its status changes', roles: ['agency', 'owner', 'marketer'] },
   availability_response: { label: 'Availability reply',    desc: 'When an owner answers your availability request',  roles: ['agency'] },
 };
 
@@ -277,7 +278,7 @@ export default function SettingsPage() {
     poe_flagged: true, plan_approved: true, campaign_request: true,
     mpo_raised: true, invoice_sent: true, invoice_paid: true,
     agent_authorization_request: true, agent_authorization_resolved: true,
-    availability_request: true, availability_response: true,
+    availability_request: true, availability_response: true, makegood: true,
   });
 
   // Payout (owner only)

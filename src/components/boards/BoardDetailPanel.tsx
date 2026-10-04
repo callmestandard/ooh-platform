@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { authedFetch } from '@/lib/api';
+import { VendorPreferenceControl } from '@/components/vendors/VendorPreference';
 import StreetLevelView from '@/components/map/StreetLevelView';
 import type { AudienceProfile } from '@/lib/types';
 
@@ -26,6 +27,8 @@ type Props = {
   onClose: () => void;
   onBookingRequest?: () => void;
   audienceProfile?: AudienceProfile | null;
+  /** Fired after the agency marks this board's owner preferred / direct / excluded. */
+  onVendorPreferenceChange?: () => void;
 };
 
 type IntelData = {
@@ -92,7 +95,7 @@ function derivePersonas(p: AudienceProfile) {
 
 type TabId = 'details' | 'audience' | 'intelligence' | 'streetview';
 
-export default function BoardDetailPanel({ board, onClose, onBookingRequest, audienceProfile }: Props) {
+export default function BoardDetailPanel({ board, onClose, onBookingRequest, audienceProfile, onVendorPreferenceChange }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('details');
   const [intel, setIntel] = useState<IntelData | null>(null);
   const [intelLoading, setIntelLoading] = useState(false);
@@ -190,6 +193,7 @@ export default function BoardDetailPanel({ board, onClose, onBookingRequest, aud
             <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {board.address}
             </p>
+            <VendorPreferenceControl boardId={board.id} onChange={() => onVendorPreferenceChange?.()} />
           </div>
           <button
             onClick={onClose}

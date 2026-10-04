@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
+import { fetchBoardPreferences, applyVendorPreferences, type BoardPreferences } from '@/lib/vendor-preferences';
+import { VendorPreferencePill, ExcludedOwnersNote } from '@/components/vendors/VendorPreference';
 import { attachVisibleRates, fetchOwnAgreedRates } from '@/lib/board-rates';
 import { authedFetch } from '@/lib/api';
 import { createNotification } from '@/lib/notifications';
@@ -209,7 +211,11 @@ type ParsedBrief = {
 
 export default function CampaignPlannerPage() {
   const router = useRouter();
-  const [boards, setBoards] = useState<Board[]>([]);
+  // Loaded boards with this agency's media-partner preferences applied, so the
+  // map, the shortlist and Smart Suggest / brief matching never see an excluded owner.
+  const [rawBoards, setBoards] = useState<Board[]>([]);
+  const [vendorPrefs, setVendorPrefs] = useState<BoardPreferences>({ byBoard: {}, ownerOfBoard: {}, excludedOwnerCount: 0 });
+  const boards = useMemo(() => applyVendorPreferences(rawBoards, vendorPrefs), [rawBoards, vendorPrefs]);
   const [boardsError, setBoardsError] = useState<string | null>(null);
   const [audienceProfiles, setAudienceProfiles] = useState<Record<string, AudienceProfile>>({});
   const [loading, setLoading] = useState(true);
@@ -259,7 +265,7 @@ export default function CampaignPlannerPage() {
           return { ...b, activeListing: { id: l.id, sell_price: l.sell_price, badge } };
         });
         // Only rates the owner has opened to this agency come back; the rest stay "contact for rate".
-        attachVisibleRates(withBadges).then(b => { setBoards(b); setLoading(false); });
+        Promise.all([attachVisibleRates(withBadges), fetchBoardPreferences()]).then(([b, prefs]) => { setVendorPrefs(prefs); setBoards(b); setLoading(false); });
       });
 
     supabase
@@ -593,6 +599,10 @@ export default function CampaignPlannerPage() {
             corridorMatchIds={corridorMatchIds}
             focusCity={parsedBrief?.cities?.[0] ?? null}
           />
+        )}
+
+        {vendorPrefs.excludedOwnerCount > 0 && (
+          <div style={{ position: 'absolute', top: 60, left: 12, zIndex: 9 }}><ExcludedOwnersNote count={vendorPrefs.excludedOwnerCount} /></div>
         )}
 
         {/* Corridor/radius tool toggle */}
@@ -1108,6 +1118,7 @@ export default function CampaignPlannerPage() {
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#0F172A', margin: '0 0 1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{board.name}</p>
+                          {board.vendor_preference && <div style={{ margin: '0 0 2px' }}><VendorPreferencePill preference={board.vendor_preference} /></div>}
                           <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '0 0 3px' }}>
                             {board.format || 'Board'} · {board.city || board.state || '—'}
                           </p>

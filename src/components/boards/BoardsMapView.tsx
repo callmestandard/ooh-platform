@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import OOHMap, { Marker, Source, Layer, type MapRef } from '@/components/map/OOHMap';
 import ClusteredPoints from '@/components/map/ClusteredPoints';
 import MapSearchBar from '@/components/map/MapSearchBar';
+import { VendorPreferencePill } from '@/components/vendors/VendorPreference';
 import { MAPBOX_TOKEN, MAP_STYLES, MAP_LABEL_FONT, type MapStyleKey, boardStatusColor, fetchDrivingRoute, formatDistance, formatDuration, type DrivingRoute } from '@/components/map/ooh-map-shared';
 import type { Board } from '@/app/dashboard/agency/boards-map/page';
 
@@ -361,6 +362,7 @@ export default function BoardsMapView({ boards, selectedBoard, onSelectBoard, ac
             <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {hoveredBoard.name}
             </p>
+            {hoveredBoard.vendor_preference && <div style={{ margin: '0 0 4px' }}><VendorPreferencePill preference={hoveredBoard.vendor_preference} /></div>}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: boardStatusColor(hoveredBoard.status), flexShrink: 0 }} />

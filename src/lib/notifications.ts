@@ -18,7 +18,8 @@ export type NotificationType =
   | 'agent_authorization_request'
   | 'agent_authorization_resolved'
   | 'availability_request'
-  | 'availability_response';
+  | 'availability_response'
+  | 'makegood';
 
 export type Notification = {
   id: string;
@@ -86,4 +87,5 @@ export const NOTIF_ICONS: Record<NotificationType, string> = {
   agent_authorization_resolved: '✅',
   availability_request:  '📨',
   availability_response: '📬',
+  makegood: '🤝',
 };

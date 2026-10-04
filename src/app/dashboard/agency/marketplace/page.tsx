@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
+import { fetchBoardPreferences, applyVendorPreferences, type BoardPreferences, type VendorPreference } from '@/lib/vendor-preferences';
+import { VendorPreferencePill, VendorPreferenceControl, ExcludedOwnersNote } from '@/components/vendors/VendorPreference';
 import { attachVisibleRates } from '@/lib/board-rates';
 import { authedFetch } from '@/lib/api';
 import { useToast } from '@/components/ui/Toast';
@@ -22,6 +24,7 @@ const MapView = dynamic(() => import('./MapView'), {
 
 type Board = {
   id: string;
+  vendor_preference?: VendorPreference;
   name: string;
   format: string;
   address: string;
@@ -219,6 +222,7 @@ function BoardCard({ board, onViewDetail, isShortlisted, onToggleShortlist, mark
         <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: '0 0 3px', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
           {board.name}
         </p>
+        {board.vendor_preference && <div style={{ margin: '0 0 6px' }}><VendorPreferencePill preference={board.vendor_preference} /></div>}
         <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 4 }}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
           {[board.address, board.city].filter(Boolean).join(', ')}
@@ -377,7 +381,11 @@ function LocationMap({ lat, lng, label }: { lat: number; lng: number; label: str
 
 export default function MarketplacePage() {
   const router = useRouter();
-  const [boards, setBoards]           = useState<Board[]>([]);
+  // Loaded boards, then this agency's own media-partner preferences applied:
+  // excluded owners' boards are left out, preferred owners' boards come first.
+  const [rawBoards, setBoards]        = useState<Board[]>([]);
+  const [vendorPrefs, setVendorPrefs] = useState<BoardPreferences>({ byBoard: {}, ownerOfBoard: {}, excludedOwnerCount: 0 });
+  const boards = useMemo(() => applyVendorPreferences(rawBoards, vendorPrefs), [rawBoards, vendorPrefs]);
   const [loading, setLoading]         = useState(true);
   const [search, setSearch]           = useState('');
   const [cityFilter, setCityFilter]   = useState('');
@@ -406,7 +414,12 @@ export default function MarketplacePage() {
       .select('id, name, format, address, city, state, width, height, asking_rate, face_count, illuminated, status, photo_urls, latitude, longitude, notes, contact_phone, available_from, created_at')
       .order('created_at', { ascending: false })
       .limit(300)
-      .then(async ({ data }) => { setBoards(await attachVisibleRates((data as Board[]) || [])); setLoading(false); });
+      .then(async ({ data }) => {
+        const [list, prefs] = await Promise.all([attachVisibleRates((data as Board[]) || []), fetchBoardPreferences()]);
+        setVendorPrefs(prefs);
+        setBoards(list);
+        setLoading(false);
+      });
 
     supabase.from('campaigns').select('id, name').order('created_at', { ascending: false }).limit(50)
       .then(({ data }) => setCampaigns((data as { id: string; name: string }[]) || []));
@@ -705,6 +718,7 @@ if (search) {
           <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0, fontWeight: 500 }}>
             {loading ? 'Loading boards…' : `${filtered.length} board${filtered.length !== 1 ? 's' : ''} found${cityFilter ? ` in ${cityFilter}` : ''}${formatFilter ? ` · ${FORMAT_LABELS[formatFilter]}` : ''}`}
           </p>
+          <ExcludedOwnersNote count={vendorPrefs.excludedOwnerCount} />
           {viewMode === 'map' && !loading && (
             <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>
               {filtered.filter(b => b.latitude != null).length} of {filtered.length} boards have GPS — click a pin to view details
@@ -903,6 +917,10 @@ if (search) {
                   <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 10px' }}>
                     How to proceed
                   </p>
+
+                  <div style={{ marginBottom: 14 }}>
+                    <VendorPreferenceControl boardId={detail.id} onChange={() => { fetchBoardPreferences().then(setVendorPrefs); }} />
+                  </div>
 
                   {detail.status === 'available' ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

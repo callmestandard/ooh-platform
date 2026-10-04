@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { listMakegoods, isUnappliedCredit, type Makegood } from '@/lib/makegoods';
 import { createNotification } from '@/lib/notifications';
 import { useToast } from '@/components/ui/Toast';
 
@@ -95,6 +96,11 @@ export default function AgencyInvoicesPage() {
   // New direct client invoice modal
   const [showNewInvoice, setShowNewInvoice] = useState(false);
   const [newInvForm, setNewInvForm] = useState({ campaign_id: '', client_name: '', client_email: '', due_date: '', tax_rate: '7.5', notes: '' });
+  // Makegood credits the agency has agreed but not yet applied by hand — shown as a separate flagged item
+  const [makegoodCredits, setMakegoodCredits] = useState<Makegood[]>([]);
+  useEffect(() => {
+    listMakegoods().then(({ makegoods }) => setMakegoodCredits(makegoods.filter(isUnappliedCredit)));
+  }, []);
   const [newInvSaving, setNewInvSaving] = useState(false);
 
   // Inline client-ref editing
@@ -345,6 +351,23 @@ export default function AgencyInvoicesPage() {
         @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
         .inv-row:hover{background:#F5F8FF!important}
       `}</style>
+
+      {/* Makegood credits: a separate, flagged item. No invoice below has been changed by them. */}
+      {makegoodCredits.length > 0 && (
+        <div data-makegood-credits style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '12px 16px', marginBottom: 16 }}>
+          <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#92400E', margin: '0 0 6px' }}>
+            {makegoodCredits.length} makegood credit{makegoodCredits.length !== 1 ? 's' : ''} not yet applied · ₦{makegoodCredits.reduce((s, m) => s + (m.promised_value ?? 0), 0).toLocaleString('en-NG')}
+          </p>
+          {makegoodCredits.map(m => (
+            <p key={m.id} style={{ fontSize: '0.8125rem', color: '#78350F', margin: '0 0 3px' }}>
+              {m.bookings?.campaigns?.name ? `${m.bookings.campaigns.name} · ` : ''}{m.bookings?.boards?.name ?? 'Board'} — ₦{(m.promised_value ?? 0).toLocaleString('en-NG')}{m.promised_detail ? ` (${m.promised_detail})` : ''}
+            </p>
+          ))}
+          <p style={{ fontSize: '0.75rem', color: '#92400E', margin: '6px 0 0' }}>
+            These are recorded only. No invoice or rate has been altered — apply them yourself, then tick them off under <a href="/dashboard/agency/makegoods" style={{ color: '#92400E', fontWeight: 700 }}>Makegoods</a>.
+          </p>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>

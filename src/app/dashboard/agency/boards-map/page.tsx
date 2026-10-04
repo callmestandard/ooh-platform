@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchBoardPreferences, applyVendorPreferences, type BoardPreferences } from '@/lib/vendor-preferences';
+import { ExcludedOwnersNote } from '@/components/vendors/VendorPreference';
 import { attachVisibleRates } from '@/lib/board-rates';
 import dynamic from 'next/dynamic';
 import BoardDetailPanel from '@/components/boards/BoardDetailPanel';
@@ -25,6 +27,8 @@ const BoardsMapView = dynamic(() => import('@/components/boards/BoardsMapView'),
 
 export type Board = {
   id: string;
+  /** This agency's own marking of the board's owner (preferred / direct); excluded boards are never loaded into a list. */
+  vendor_preference?: import('@/lib/vendor-preferences').VendorPreference;
   name: string;
   address: string;
   latitude: number;
@@ -72,7 +76,9 @@ const LAYER_CONFIG: { key: OverlayLayer; label: string; color: string; bg: strin
 ];
 
 export default function BoardsMapPage() {
-  const [boards, setBoards]                         = useState<Board[]>([]);
+  const [rawBoards, setBoards]                      = useState<Board[]>([]);
+  const [vendorPrefs, setVendorPrefs]               = useState<BoardPreferences>({ byBoard: {}, ownerOfBoard: {}, excludedOwnerCount: 0 });
+  const boards = useMemo(() => applyVendorPreferences(rawBoards, vendorPrefs), [rawBoards, vendorPrefs]);
   const [filteredBoards, setFilteredBoards]         = useState<Board[]>([]);
   const [selectedBoard, setSelectedBoard]           = useState<Board | null>(null);
   const [bookingBoard, setBookingBoard]             = useState<Board | null>(null);
@@ -93,7 +99,9 @@ export default function BoardsMapPage() {
       .select('id, name, address, city, state, format, asking_rate, status, latitude, longitude, width, height, photo_urls')
       .order('created_at', { ascending: false })
       .limit(500);
-    setBoards(await attachVisibleRates((data as Board[]) || []));
+    const [list, prefs] = await Promise.all([attachVisibleRates((data as Board[]) || []), fetchBoardPreferences()]);
+    setVendorPrefs(prefs);
+    setBoards(list);
     setLoading(false);
   }
 
@@ -165,6 +173,7 @@ export default function BoardsMapPage() {
             <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>
               Live OOH inventory · Search any location · AI location intelligence
             </p>
+            {vendorPrefs.excludedOwnerCount > 0 && <div style={{ marginTop: 6 }}><ExcludedOwnersNote count={vendorPrefs.excludedOwnerCount} /></div>}
           </div>
 
           {/* Stats */}
@@ -374,6 +383,7 @@ export default function BoardsMapPage() {
             onClose={() => setSelectedBoard(null)}
             onBookingRequest={() => { setBookingBoard(selectedBoard); setSelectedBoard(null); }}
             audienceProfile={audienceProfiles[selectedBoard.id] ?? null}
+            onVendorPreferenceChange={() => { fetchBoardPreferences().then(setVendorPrefs); }}
           />
         )}
 

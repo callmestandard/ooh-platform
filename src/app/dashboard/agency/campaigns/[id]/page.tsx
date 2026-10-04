@@ -18,6 +18,8 @@ import { formatNaira, formatDate } from '@/lib/utils';
 import { getMarketRate, type MarketRate } from '@/lib/rate-intelligence';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 import PrintStatusPanel from '@/components/print/PrintStatusPanel';
+import { fetchBoardPreferences, applyVendorPreferences } from '@/lib/vendor-preferences';
+import { listMakegoodsForBookings, createMakegood, makegoodFromSwap, isUnresolved, isOverdue, isUnappliedCredit, type Makegood } from '@/lib/makegoods';
 import { attachVisibleRates } from '@/lib/board-rates';
 import {
   type PrintTask, type ResponsibleParty, PRINT_STATUS_LABELS, PRINT_STATUS_STYLE,
@@ -223,6 +225,10 @@ export default function CampaignPlanPage() {
   // Print progress tracking — keyed by booking id
   const [printTasksByBooking, setPrintTasksByBooking] = useState<Record<string, PrintTask>>({});
   const [printPanelFor, setPrintPanelFor] = useState<PlanItem | null>(null);
+  // Makegoods recorded against this plan's lines, and the one-click offer shown after a swap is approved
+  const [makegoods, setMakegoods] = useState<Makegood[]>([]);
+  const [swapOffer, setSwapOffer] = useState<{ original: PlanItem; replacement: PlanItem } | null>(null);
+  const [creatingMakegood, setCreatingMakegood] = useState(false);
 
   // Board-swap flow: "needs replacement" → attach a candidate → approve
   const [replacingItemId, setReplacingItemId] = useState<string | null>(null);
@@ -377,10 +383,11 @@ export default function CampaignPlanPage() {
             setCreativesByBooking(crMap);
           }
           setPrintTasksByBooking(await fetchPrintTasksForBookings(items.map(i => i.id)));
+          setMakegoods(await listMakegoodsForBookings(items.map(i => i.id)));
         }
       }
       if (boardsRes.data) {
-        const boards = await attachVisibleRates(boardsRes.data as Board[]);
+        const boards = applyVendorPreferences(await attachVisibleRates(boardsRes.data as Board[]), await fetchBoardPreferences());
         const listingsByBoard = new Map<string, { id: string; sell_price: number; agent_id: string | null; board_authorizations: { owner_verified: boolean } | null }>();
         (listingsRes.data || []).forEach((l: any) => {
           // multiple listings per board shouldn't normally happen, but if
@@ -708,7 +715,26 @@ export default function CampaignPlanPage() {
     ));
     setActivityKey(k => k + 1);
     setApprovingSwapFor(null);
+    setSwapOffer({ original, replacement });
     showToast(`Swap approved — plan is now v${nextVersion}. Raise a fresh MPO for ${replacement.boards?.name} from its negotiation page.`);
+  }
+
+  // One-click makegood from the swap just approved: records the replacement
+  // the owner provided against the original line. A record only — it changes
+  // no rate, invoice or MPO.
+  async function createSwapMakegood() {
+    if (!swapOffer) return;
+    setCreatingMakegood(true);
+    const { makegood, error } = await createMakegood(makegoodFromSwap(
+      { id: swapOffer.original.id, boardName: swapOffer.original.boards?.name || 'Board' },
+      { id: swapOffer.replacement.id, boardId: swapOffer.replacement.board_id, boardName: swapOffer.replacement.boards?.name || 'Board' },
+    ));
+    setCreatingMakegood(false);
+    if (error || !makegood) { showToast(error || 'Could not record the makegood', 'error'); return; }
+    setMakegoods(prev => [makegood, ...prev]);
+    setSwapOffer(null);
+    setActivityKey(k => k + 1);
+    showToast('Makegood recorded — manage it under Makegoods');
   }
 
   // ── Per-line financials ─────────────────────────────────────────────────
@@ -1011,6 +1037,34 @@ export default function CampaignPlanPage() {
         {/* Plan tab */}
         {activeTab === 'plan' && (
           <>
+            {/* ── Offer to record a makegood for the swap just approved ── */}
+            {swapOffer && (
+              <div data-swap-makegood-offer style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 12, padding: '12px 16px', marginBottom: '1.25rem' }}>
+                <p style={{ flex: '1 1 300px', fontSize: '0.8125rem', color: '#1E3A8A', margin: 0 }}>
+                  <strong>{swapOffer.original.boards?.name}</strong> was replaced by <strong>{swapOffer.replacement.boards?.name}</strong>. Record this as a makegood so what the owner provided stays on file?
+                </p>
+                <button onClick={createSwapMakegood} disabled={creatingMakegood} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#1B4F8A', color: '#fff', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {creatingMakegood ? 'Recording…' : 'Record makegood'}
+                </button>
+                <button onClick={() => setSwapOffer(null)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #BFDBFE', background: '#fff', color: '#1E3A8A', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Not now</button>
+              </div>
+            )}
+
+            {/* ── Makegood credits: recorded, never applied automatically ── */}
+            {makegoods.some(isUnappliedCredit) && (
+              <div data-makegood-credits style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 12, padding: '12px 16px', marginBottom: '1.25rem' }}>
+                <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#92400E', margin: '0 0 6px' }}>Makegood credits to apply — not included in any rate or invoice</p>
+                {makegoods.filter(isUnappliedCredit).map(m => (
+                  <p key={m.id} style={{ fontSize: '0.8125rem', color: '#78350F', margin: '0 0 3px' }}>
+                    {m.bookings?.boards?.name ?? 'Board'} — credit of <strong>{formatNaira(m.promised_value)}</strong>{m.promised_detail ? ` (${m.promised_detail})` : ''}
+                  </p>
+                ))}
+                <p style={{ fontSize: '0.75rem', color: '#92400E', margin: '6px 0 0' }}>
+                  Apply these yourself on the invoice or the next booking, then tick them off under <a href="/dashboard/agency/makegoods" style={{ color: '#92400E', fontWeight: 700 }}>Makegoods</a>.
+                </p>
+              </div>
+            )}
+
             {/* ── Swap review — lines flagged "needs replacement" ── */}
             {needsReplacementItems.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: '1.25rem' }}>
@@ -1172,6 +1226,17 @@ export default function CampaignPlanPage() {
                           </td>
                           <td style={{ padding: '12px 14px' }}>
                             <StatusPill status={item.status} />
+                            {(() => {
+                              const open = makegoods.filter(m => m.booking_id === item.id && isUnresolved(m));
+                              if (open.length === 0) return null;
+                              const late = open.some(m => isOverdue(m));
+                              return (
+                                <a href="/dashboard/agency/makegoods" data-makegood-badge={late ? 'overdue' : 'open'} title={late ? 'A makegood on this line is past its due date' : 'A makegood is outstanding on this line'}
+                                  style={{ display: 'inline-block', marginTop: 4, fontSize: '0.625rem', fontWeight: 700, padding: '2px 7px', borderRadius: 999, textDecoration: 'none', background: late ? '#FEE2E2' : '#FFFBEB', color: late ? '#991B1B' : '#92400E' }}>
+                                  {late ? 'Makegood overdue' : 'Makegood open'}
+                                </a>
+                              );
+                            })()}
                           </td>
                           <td style={{ padding: '12px 14px' }}>
                             {campaign.client_id ? (
