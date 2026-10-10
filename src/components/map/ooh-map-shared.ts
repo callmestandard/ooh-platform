@@ -18,6 +18,16 @@ export const MAP_STYLES = {
   satellite: { label: 'Satellite', icon: '🛰️', url: 'mapbox://styles/mapbox/satellite-streets-v12' },
 } as const;
 
+/**
+ * Neutral, low-saturation basemap for the market-intelligence choropleth, so
+ * the data carries the colour. Not in MAP_STYLES because it is not a style
+ * the user toggles to — that map always uses it.
+ */
+export const MARKET_INTEL_STYLE_URL = 'mapbox://styles/mapbox/light-v11';
+
+/** [[west, south], [east, north]] — the extent of the Nigeria boundary dataset. */
+export const NIGERIA_BOUNDS: [[number, number], [number, number]] = [[2.66, 4.26], [14.69, 13.9]];
+
 /** A bold fontstack that exists in every Mapbox style above — use for any symbol layer's `text-font`. */
 export const MAP_LABEL_FONT = ['DIN Pro Bold', 'Arial Unicode MS Bold'];
 

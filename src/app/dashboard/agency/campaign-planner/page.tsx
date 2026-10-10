@@ -14,6 +14,11 @@ import { useToast } from '@/components/ui/Toast';
 import type { Board } from '@/app/dashboard/agency/boards-map/page';
 import type { AudienceProfile } from '@/lib/types';
 import { computeTrustBadge, TrustBadgePill } from '@/lib/agent-listings';
+import PlannerTarget, { CorridorMarketSummary, SegmentTag } from '@/components/market-intel/PlannerTarget';
+import {
+  DEFAULT_TARGET, catchmentBonusPoints, catchmentLabel, catchmentResidents, fetchBoardMarketContext, rankBoardsForTarget,
+  type BoardMarketContext, type MarketTarget,
+} from '@/lib/geo/catchments';
 
 type ImportRow = {
   row_index:    number;
@@ -131,8 +136,17 @@ function smartSuggest(
   briefCities?: string[],
   briefFormats?: string[],
   locationHints?: string[],
+  // Market targeting (optional): `restrictTo` narrows the candidates to boards in the chosen
+  // segment/place, `bonus` is each board's catchment points at the weight the planner set.
+  market?: { restrictTo: Set<string> | null; bonus: Record<string, number> },
 ): string[] {
   let available = boards.filter(b => b.status === 'available' && b.asking_rate);
+
+  // Same rule as the city filter below: a target that matches nothing does not empty the shortlist.
+  if (market?.restrictTo) {
+    const inTarget = available.filter(b => market.restrictTo!.has(b.id));
+    if (inTarget.length > 0) available = inTarget;
+  }
 
   // Brief-derived city filter — hard filter, but only if it actually leaves
   // candidates (a mis-parsed city shouldn't zero out the whole shortlist).
@@ -171,7 +185,10 @@ function smartSuggest(
     // keyword match against the board's own notes/address/name.
     const hintBonus = boardMatchesHints(b, locationHints || []) ? 60 : 0;
 
-    const valueScore = (cityScore * 100 + normalizedFmt * 50 + audienceBonus + briefFormatBonus + hintBonus) / (rate / 100000);
+    // Modelled residents near the board, at the visible weight from the targeting panel (0 when off).
+    const catchmentBonus = market?.bonus[b.id] ?? 0;
+
+    const valueScore = (cityScore * 100 + normalizedFmt * 50 + audienceBonus + briefFormatBonus + hintBonus + catchmentBonus) / (rate / 100000);
     return { board: b, score: valueScore };
   });
 
@@ -317,6 +334,38 @@ export default function CampaignPlannerPage() {
     showToast(`${picked.length} board${picked.length !== 1 ? 's' : ''} added to shortlist`);
   }
 
+  // Market targeting: each board's LGA segment and modelled residents nearby (migrations 038/039).
+  const [marketContext, setMarketContext] = useState<BoardMarketContext | null>(null);
+  const [marketError, setMarketError] = useState<string | null>(null);
+  const [target, setTarget] = useState<MarketTarget>(DEFAULT_TARGET);
+  useEffect(() => {
+    if (boards.length === 0) return;
+    let cancelled = false;
+    fetchBoardMarketContext(boards)
+      .then(ctx => { if (!cancelled) { setMarketContext(ctx); setMarketError(null); } })
+      .catch(err => { if (!cancelled) setMarketError(err instanceof Error ? err.message : 'could not be loaded'); });
+    return () => { cancelled = true; };
+  }, [boards]);
+  const availableBoards = useMemo(() => boards.filter(b => b.status === 'available'), [boards]);
+  const rankedForTarget = useMemo(
+    () => (marketContext ? rankBoardsForTarget(availableBoards, marketContext, target) : []),
+    [availableBoards, marketContext, target],
+  );
+  // What Smart Suggest receives. With no target and no place chosen the candidates are not narrowed.
+  const marketSignal = useMemo(() => {
+    if (!marketContext) return undefined;
+    const narrowed = !!(target.segment || target.state || target.city);
+    return {
+      restrictTo: narrowed ? new Set(rankedForTarget.map(r => r.board.id)) : null,
+      bonus: target.weight > 0 ? catchmentBonusPoints(rankedForTarget, target.weight) : {},
+    };
+  }, [marketContext, rankedForTarget, target]);
+  const targetStates = useMemo(
+    () => [...new Set(availableBoards.map(b => marketContext?.byBoard[b.id]?.lga?.state_name).filter((s): s is string => !!s))].sort(),
+    [availableBoards, marketContext],
+  );
+  const targetCities = useMemo(() => [...new Set(availableBoards.map(b => b.city).filter((c): c is string => !!c))].sort(), [availableBoards]);
+
   const selectedBoards = boards.filter(b => selectedIds.has(b.id));
   const budget = Number(form.total_budget) || 0;
   const totalCost = selectedBoards.reduce((s, b) => s + (b.asking_rate || 0), 0);
@@ -331,7 +380,7 @@ export default function CampaignPlannerPage() {
     setSuggesting(true);
     setTimeout(() => {
       const profileCount = Object.keys(audienceProfiles).length;
-      const ids = smartSuggest(boards, budget, form.objective as Objective, audienceProfiles, parsedBrief?.cities, parsedBrief?.formats, parsedBrief?.location_hints);
+      const ids = smartSuggest(boards, budget, form.objective as Objective, audienceProfiles, parsedBrief?.cities, parsedBrief?.formats, parsedBrief?.location_hints, marketSignal);
       setSelectedIds(new Set(ids));
       setSuggesting(false);
       const suffix = profileCount > 0 ? ` (audience data from ${profileCount} enriched boards)` : '';
@@ -487,7 +536,7 @@ export default function CampaignPlannerPage() {
       // so step 2 doesn't start from a blank map — instead of waiting for
       // the user to separately hit Smart Suggest.
       if (parsed.total_budget > 0 && boards.length > 0) {
-        const ids = smartSuggest(boards, parsed.total_budget, (parsed.objective || 'awareness') as Objective, audienceProfiles, parsed.cities, parsed.formats, parsed.location_hints);
+        const ids = smartSuggest(boards, parsed.total_budget, (parsed.objective || 'awareness') as Objective, audienceProfiles, parsed.cities, parsed.formats, parsed.location_hints, marketSignal);
         setSelectedIds(new Set(ids));
         const where = parsed.cities.length > 0 ? ` in ${parsed.cities.join(', ')}` : '';
         const hintNote = parsed.location_hints.length > 0 ? ` (matched: ${parsed.location_hints.join(', ')})` : '';
@@ -624,6 +673,7 @@ export default function CampaignPlannerPage() {
             <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 8px' }}>
               {corridorMatches.length} available board{corridorMatches.length !== 1 ? 's' : ''} found along the drawn shape
             </p>
+            <CorridorMarketSummary boardIds={corridorMatches.filter(b => corridorPicked.has(b.id)).map(b => b.id)} context={marketContext} band={target.band} radius={target.radius} />
             <div style={{ maxHeight: 220, overflowY: 'auto', margin: '0 -4px 10px' }}>
               {corridorMatches.map(b => (
                 <label key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px', borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}>
@@ -1033,6 +1083,20 @@ export default function CampaignPlannerPage() {
                 )}
               </div>
 
+              {/* Market targeting — segment, place and modelled residents nearby */}
+              <PlannerTarget
+                context={marketContext}
+                error={marketError}
+                target={target}
+                onTarget={setTarget}
+                ranked={rankedForTarget}
+                states={targetStates}
+                cities={targetCities}
+                selectedIds={selectedIds}
+                onToggleBoard={toggleBoard}
+                onHighlight={setHighlightedId}
+              />
+
               {/* Smart Suggest */}
               <div style={{ background: '#FFFBEB', borderRadius: '10px', padding: '12px 14px', border: '1px solid #FDE68A' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
@@ -1123,6 +1187,12 @@ export default function CampaignPlannerPage() {
                             {board.format || 'Board'} · {board.city || board.state || '—'}
                           </p>
                           {board.activeListing && <TrustBadgePill badge={board.activeListing.badge} small />}
+                          {marketContext?.byBoard[board.id] && (
+                            <p style={{ fontSize: '0.6875rem', color: '#64748B', margin: '3px 0 0', display: 'flex', flexWrap: 'wrap', gap: '0 6px', fontVariantNumeric: 'tabular-nums' }}>
+                              <SegmentTag segment={marketContext.byBoard[board.id].lga?.segment ?? null} />
+                              <span>{catchmentLabel(catchmentResidents(marketContext.byBoard[board.id].catchments[target.radius], target.band), target.band, target.radius)}</span>
+                            </p>
+                          )}
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
                           <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1B4F8A', margin: '0 0 1px' }}>{board.activeListing || board.asking_rate ? formatNaira(board.activeListing ? board.activeListing.sell_price : board.asking_rate) : 'On request'}</p>

@@ -1,0 +1,1 @@
+{"tiles":"/geo/h3/{z}/{x}/{y}.pbf","source_layer":"h3","dataset":"worldpop_agesex_2020_constrained","levels":[{"resolution":7,"min_zoom":8,"max_zoom":8,"cells":155357,"breaks":{"d":[15.6,47,109.1,277.7],"yd":[5.1,15.3,35.2,89.3]}}]}

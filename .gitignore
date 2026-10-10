@@ -41,3 +41,7 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# geo pipeline raw downloads and intermediate outputs (reproducible — see scripts/geo/README.md)
+/scripts/geo/data/
+/scripts/geo/out/
