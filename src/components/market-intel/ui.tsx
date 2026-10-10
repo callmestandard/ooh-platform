@@ -6,11 +6,16 @@ import type { LgaMetrics, StateMetrics } from '@/lib/geo/types';
 
 /** What the evidence drawer is asked to explain: one figure, for one place. */
 export type EvidenceTarget = {
-  metric: MetricKey;
+  /** A catalogue metric, or the metric name a lookup returned (answers from Ask the map). */
+  metric: MetricKey | (string & {});
   /** The value exactly as it is printed on screen. */
   display: string;
   geography: string;
   row: LgaMetrics | StateMetrics | null;
+  /** For figures that do not come from a row on screen: their own label, unit and dataset ids. */
+  label?: string;
+  unit?: string;
+  datasetIds?: string[];
   /** Extra sourced context for this figure (e.g. a sample size), each already worded. */
   notes?: string[];
 };

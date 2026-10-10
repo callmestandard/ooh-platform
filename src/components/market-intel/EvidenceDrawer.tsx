@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { METRICS, metricDatasets } from '@/lib/geo/metrics';
+import { METRICS, metricDatasets, type MetricDef, type MetricKey } from '@/lib/geo/metrics';
 import { AFFLUENCE_COMPONENTS, type SegmentThresholds } from '@/lib/geo/segments';
 import type { GeoDataset } from '@/lib/geo/types';
 import { PanelHeader, T, numeric, sectionLabel, type EvidenceTarget } from './ui';
@@ -58,9 +58,18 @@ function DatasetBlock({ dataset }: { dataset: GeoDataset }) {
 
 export default function EvidenceDrawer({ target, datasets, ruleText, thresholds, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  const def = METRICS[target.metric];
-  const sources = target.row ? metricDatasets(target.row, target.metric, datasets) : [];
-  const isComposite = target.metric === 'affluence_index' || target.metric === 'segment';
+  const catalogued = METRICS[target.metric as MetricKey] as MetricDef | undefined;
+  const def = {
+    label: target.label ?? catalogued?.label ?? target.metric,
+    unit: target.unit ?? catalogued?.unit ?? '',
+    method: catalogued?.method ?? 'Returned by a lookup over the computed tables; see the source below for how those were produced.',
+  };
+  // The affluence index and segments are derived from several datasets by the stored rules.
+  const fromRules = !!target.datasetIds?.some(id => id.startsWith('segment_rules'));
+  const isComposite = target.metric === 'affluence_index' || target.metric === 'segment' || fromRules;
+  const sources = target.datasetIds
+    ? (fromRules ? ['worldpop_agesex_2020_constrained', 'ntl_npp_viirs_like_v2', 'osm_pois'] : target.datasetIds).map(id => datasets[id]).filter(Boolean)
+    : target.row && catalogued ? metricDatasets(target.row, catalogued.key, datasets) : [];
   const excluded = Object.values(datasets).filter(d => d.status === 'excluded');
   const unusedComponents = AFFLUENCE_COMPONENTS.filter(c => !thresholds.components_used.includes(c));
 
@@ -94,7 +103,7 @@ export default function EvidenceDrawer({ target, datasets, ruleText, thresholds,
           {isComposite && (
             <div style={{ marginTop: 10, fontSize: '0.8125rem', color: T.body, display: 'grid', gap: 6 }}>
               <p style={{ margin: 0 }}>{ruleText.affluence_index}</p>
-              {target.metric === 'segment' && (
+              {(target.metric === 'segment' || fromRules) && (
                 <>
                   <p style={{ margin: 0 }}><strong style={{ fontWeight: 600 }}>High value:</strong> {ruleText.high_value}</p>
                   <p style={{ margin: 0 }}><strong style={{ fontWeight: 600 }}>Youth hub:</strong> {ruleText.youth_hub}</p>

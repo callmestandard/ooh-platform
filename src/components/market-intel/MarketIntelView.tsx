@@ -12,6 +12,7 @@ import {
 } from '@/lib/geo/metrics';
 import { DEFAULT_WEIGHTS, SEGMENT_LABELS, computeSegments, segmentRuleText, type Segment, type SegmentWeights } from '@/lib/geo/segments';
 import type { H3Meta, LgaMetrics, MarketData, StateMetrics } from '@/lib/geo/types';
+import AskPanel, { AskBox, type AskOutcome } from './AskPanel';
 import EvidenceDrawer from './EvidenceDrawer';
 import LayerPanel, { type Legend } from './LayerPanel';
 import LgaDetail from './LgaDetail';
@@ -53,6 +54,7 @@ export default function MarketIntelView() {
   const [evidence, setEvidence] = useState<EvidenceTarget | null>(null);
   const [focusBounds, setFocusBounds] = useState<[number, number, number, number] | null>(null);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [asked, setAsked] = useState<AskOutcome | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -264,14 +266,17 @@ export default function MarketIntelView() {
     );
   }
 
+  const askOutcome = (outcome: AskOutcome) => { setEvidence(null); setAsked(outcome); };
   const profile = profileStates.map(c => stateByCode.get(c)).filter((s): s is StateMetrics => !!s);
   const lgaRow = selectedLga ? lgaByCode.get(selectedLga) ?? null : null;
-  const rightOpen = !!evidence || !!lgaRow || profile.length > 0;
-  const rightWidth = evidence || lgaRow ? 380 : Math.min(132 + profile.length * 220 + 16, 820);
+  const rightOpen = !!evidence || !!asked || !!lgaRow || profile.length > 0;
+  const rightWidth = evidence || asked || lgaRow ? 380 : Math.min(132 + profile.length * 220 + 16, 820);
   const selectedCode = level === 'lga' ? selectedLga : profile.length === 1 ? profile[0].state_pcode : null;
 
   const rightPanel = evidence ? (
     <EvidenceDrawer target={evidence} datasets={data.datasets} ruleText={derived.ruleText} thresholds={derived.thresholds} onClose={() => setEvidence(null)} />
+  ) : asked ? (
+    <AskPanel outcome={asked} datasets={data.datasets} onEvidence={setEvidence} onClose={() => setAsked(null)} />
   ) : lgaRow ? (
     <LgaDetail lga={lgaRow} ruleText={derived.ruleText} datasets={data.datasets} onEvidence={setEvidence} onOpenState={openState} onClose={() => setSelectedLga(null)} />
   ) : profile.length > 0 ? (
@@ -338,9 +343,12 @@ export default function MarketIntelView() {
       <div style={{ position: 'relative', height: 'calc(100dvh - 56px)', minHeight: 420, fontFamily: "'Inter', -apple-system, sans-serif", overflow: 'hidden' }}>
         {map}
         {!layersOpen && !rightOpen && (
-          <button type="button" onClick={() => setLayersOpen(true)} style={{ ...plainButton, position: 'absolute', top: 10, left: 10, zIndex: 6, fontWeight: 600 }}>
-            Layers and legend
-          </button>
+          <>
+            <button type="button" onClick={() => setLayersOpen(true)} style={{ ...plainButton, position: 'absolute', top: 10, left: 10, zIndex: 6, fontWeight: 600 }}>
+              Layers and legend
+            </button>
+            <div style={{ position: 'absolute', top: 52, left: 10, right: 10, zIndex: 6 }}><AskBox onOutcome={askOutcome} /></div>
+          </>
         )}
         {layersOpen && !rightOpen && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 7, background: T.surface, display: 'flex', flexDirection: 'column' }}>
@@ -362,7 +370,10 @@ export default function MarketIntelView() {
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 56px)', minHeight: 480, fontFamily: "'Inter', -apple-system, sans-serif", border: `1px solid ${T.line}`, borderRadius: 8, overflow: 'hidden', background: T.surface }}>
       <aside aria-label="Layers" style={{ width: 300, flexShrink: 0, borderRight: `1px solid ${T.line}`, minHeight: 0 }}>{layerPanel}</aside>
-      <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>{map}</div>
+      <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+        {map}
+        <div style={{ position: 'absolute', top: 10, left: 10, right: 10, maxWidth: 560, zIndex: 6 }}><AskBox onOutcome={askOutcome} /></div>
+      </div>
       {rightOpen && (
         <aside aria-label="Details" style={{ width: rightWidth, maxWidth: '55vw', flexShrink: 0, borderLeft: `1px solid ${T.line}`, minHeight: 0 }}>{rightPanel}</aside>
       )}

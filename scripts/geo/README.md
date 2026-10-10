@@ -85,6 +85,15 @@ against the local file at five fixed points.
 These are residents from a population model. They are not reach, impressions
 or traffic, and no UI text may describe them that way.
 
+## Ask the map
+
+`node scripts/geo/test-ask.mjs` runs the answer engine (`src/lib/geo/ask-core.ts`)
+with a scripted stand-in for the model. It needs no API key and proves that
+unsupported questions are refused before any model call and that an answer
+containing a figure no lookup returned is rejected and never shown. The live
+feature needs `ANTHROPIC_API_KEY` on the server and migration 040 for its
+audit log.
+
 ## Tiles
 
 The hexagon layers are static Mapbox Vector Tiles cut with `geojson-vt`
