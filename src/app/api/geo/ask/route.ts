@@ -41,7 +41,11 @@ export async function POST(req: NextRequest) {
   const started = Date.now();
   let result: AskResult;
   try {
-    const client = apiKey ? new Anthropic({ apiKey }) : null;
+    // A key that is not tied to one workspace must name the workspace on every request.
+    const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
+    const client = apiKey
+      ? new Anthropic({ apiKey, ...(workspaceId ? { defaultHeaders: { 'anthropic-workspace-id': workspaceId } } : {}) })
+      : null;
     result = await runAsk({
       question,
       tools: ASK_TOOLS,
