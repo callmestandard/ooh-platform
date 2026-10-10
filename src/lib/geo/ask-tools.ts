@@ -1,9 +1,10 @@
 /**
- * "Ask the map" — the read-only tools the model may call. Server only.
+ * The read-only lookups over the computed tables. Two callers use them: the
+ * "Ask the map" route (the model chooses which to call) and the query builder
+ * in the browser (the planner chooses, no model involved).
  *
- * Each tool reads the pre-computed tables through a Supabase client that
- * carries the asking user's own token, so row-level security decides what
- * they can see (boards in particular). Tools return figures only: a value,
+ * Each lookup reads through a Supabase client that carries the user's own
+ * token, so row-level security decides what they can see (boards in particular). Tools return figures only: a value,
  * the server-formatted display text, the geography and the dataset id.
  * Nothing is computed here beyond selecting, sorting and counting rows.
  */
@@ -18,7 +19,7 @@ import type { GeoDataset, LgaMetrics, SegmentRules, StateMetrics } from './types
 
 export const SEGMENT_RULES_ID = 'segment_rules:default';
 
-const QUERYABLE: MetricKey[] = [
+export const QUERYABLE_METRICS: MetricKey[] = [
   'pop_total', 'pop_15_24', 'pop_25_34', 'pop_15_34', 'pop_35_plus', 'youth_share', 'pop_density_km2',
   'ntl_mean', 'poi_affluence_density_km2', 'poi_university', 'poi_mall', 'poi_market', 'poi_bank', 'poi_hotel',
   'poi_airport', 'poi_bus_terminal', 'poi_hospital', 'affluence_index',
@@ -43,7 +44,7 @@ export const ASK_TOOLS: Anthropic.Tool[] = [
       type: 'object', additionalProperties: false, required: ['geography', 'metric'],
       properties: {
         geography: { type: 'string', enum: ['state', 'lga'] },
-        metric: { type: 'string', enum: QUERYABLE, description: 'pop_* are modelled residents; youth_share is the share aged 15-34; poi_* are mapped places (lower bounds); ntl_mean is night-time light.' },
+        metric: { type: 'string', enum: QUERYABLE_METRICS, description: 'pop_* are modelled residents; youth_share is the share aged 15-34; poi_* are mapped places (lower bounds); ntl_mean is night-time light.' },
         state: { ...str, description: 'Limit LGAs to this state (name as in Nigeria, e.g. "Lagos", "Federal Capital Territory").' },
         segment: { type: 'string', enum: SEGMENTS, description: 'Limit LGAs to this segment.' },
         sort: { type: 'string', enum: ['desc', 'asc'], description: 'desc = highest first (default).' },
@@ -118,7 +119,7 @@ export function createToolExecutor(context: Context) {
   };
 
   const DATASET_COLUMN: Partial<Record<MetricKey, 'population_dataset_id' | 'poi_dataset_id' | 'ntl_dataset_id'>> = {};
-  for (const key of QUERYABLE) {
+  for (const key of QUERYABLE_METRICS) {
     const column = METRICS[key].datasetColumn;
     if (column && column !== 'dhs_dataset_id') DATASET_COLUMN[key] = column;
   }
@@ -180,7 +181,7 @@ export function createToolExecutor(context: Context) {
   async function queryMetrics(input: Record<string, unknown>): Promise<ToolResult> {
     const data = await load();
     const key = input.metric as MetricKey;
-    if (!QUERYABLE.includes(key)) return { figures: [], error: `Unknown metric "${String(input.metric)}".` };
+    if (!QUERYABLE_METRICS.includes(key)) return { figures: [], error: `Unknown metric "${String(input.metric)}".` };
     const notes: string[] = [];
     let rows: (LgaMetrics | StateMetrics)[];
     if (input.geography === 'state') {

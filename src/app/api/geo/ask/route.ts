@@ -87,3 +87,8 @@ export async function POST(req: NextRequest) {
 }
 
 class MissingKeyError extends Error {}
+
+/** Whether free-text questions are available. The page hides the question box when they are not. */
+export async function GET() {
+  return NextResponse.json({ configured: !!process.env.ANTHROPIC_API_KEY });
+}

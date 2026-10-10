@@ -16,6 +16,7 @@ import AskPanel, { AskBox, type AskOutcome } from './AskPanel';
 import EvidenceDrawer from './EvidenceDrawer';
 import LayerPanel, { type Legend } from './LayerPanel';
 import LgaDetail from './LgaDetail';
+import QueryResult, { QueryBuilder, type QueryOutcome } from './QueryBuilder';
 import MarketMap, { HEX_MIN_ZOOM, type HexMetric, type HoverCard, type MapBoard } from './MarketMap';
 import StateProfile from './StateProfile';
 import { T, plainButton, useIsNarrow, type EvidenceTarget } from './ui';
@@ -55,6 +56,12 @@ export default function MarketIntelView() {
   const [focusBounds, setFocusBounds] = useState<[number, number, number, number] | null>(null);
   const [layersOpen, setLayersOpen] = useState(false);
   const [asked, setAsked] = useState<AskOutcome | null>(null);
+  const [queried, setQueried] = useState<QueryOutcome | null>(null);
+  // Free-text questions need a model key on the server; without one only the query builder is offered.
+  const [askConfigured, setAskConfigured] = useState(false);
+  useEffect(() => {
+    fetch('/api/geo/ask').then(r => (r.ok ? r.json() : null)).then(body => setAskConfigured(!!body?.configured)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -266,17 +273,26 @@ export default function MarketIntelView() {
     );
   }
 
-  const askOutcome = (outcome: AskOutcome) => { setEvidence(null); setAsked(outcome); };
+  const askOutcome = (outcome: AskOutcome) => { setEvidence(null); setQueried(null); setAsked(outcome); };
+  const queryOutcome = (outcome: QueryOutcome) => { setEvidence(null); setAsked(null); setQueried(outcome); };
+  const questionTools = (
+    <div style={{ display: 'grid', gap: 8, justifyItems: 'start' }}>
+      {askConfigured && <div style={{ width: '100%' }}><AskBox onOutcome={askOutcome} /></div>}
+      <QueryBuilder states={data.states} onOutcome={queryOutcome} />
+    </div>
+  );
   const profile = profileStates.map(c => stateByCode.get(c)).filter((s): s is StateMetrics => !!s);
   const lgaRow = selectedLga ? lgaByCode.get(selectedLga) ?? null : null;
-  const rightOpen = !!evidence || !!asked || !!lgaRow || profile.length > 0;
-  const rightWidth = evidence || asked || lgaRow ? 380 : Math.min(132 + profile.length * 220 + 16, 820);
+  const rightOpen = !!evidence || !!asked || !!queried || !!lgaRow || profile.length > 0;
+  const rightWidth = evidence || asked || queried || lgaRow ? 380 : Math.min(132 + profile.length * 220 + 16, 820);
   const selectedCode = level === 'lga' ? selectedLga : profile.length === 1 ? profile[0].state_pcode : null;
 
   const rightPanel = evidence ? (
     <EvidenceDrawer target={evidence} datasets={data.datasets} ruleText={derived.ruleText} thresholds={derived.thresholds} onClose={() => setEvidence(null)} />
   ) : asked ? (
     <AskPanel outcome={asked} datasets={data.datasets} onEvidence={setEvidence} onClose={() => setAsked(null)} />
+  ) : queried ? (
+    <QueryResult outcome={queried} datasets={data.datasets} onEvidence={setEvidence} onClose={() => setQueried(null)} />
   ) : lgaRow ? (
     <LgaDetail lga={lgaRow} ruleText={derived.ruleText} datasets={data.datasets} onEvidence={setEvidence} onOpenState={openState} onClose={() => setSelectedLga(null)} />
   ) : profile.length > 0 ? (
@@ -347,7 +363,7 @@ export default function MarketIntelView() {
             <button type="button" onClick={() => setLayersOpen(true)} style={{ ...plainButton, position: 'absolute', top: 10, left: 10, zIndex: 6, fontWeight: 600 }}>
               Layers and legend
             </button>
-            <div style={{ position: 'absolute', top: 52, left: 10, right: 10, zIndex: 6 }}><AskBox onOutcome={askOutcome} /></div>
+            <div style={{ position: 'absolute', top: 52, left: 10, right: 10, zIndex: 6 }}>{questionTools}</div>
           </>
         )}
         {layersOpen && !rightOpen && (
@@ -372,7 +388,7 @@ export default function MarketIntelView() {
       <aside aria-label="Layers" style={{ width: 300, flexShrink: 0, borderRight: `1px solid ${T.line}`, minHeight: 0 }}>{layerPanel}</aside>
       <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
         {map}
-        <div style={{ position: 'absolute', top: 10, left: 10, right: 10, maxWidth: 560, zIndex: 6 }}><AskBox onOutcome={askOutcome} /></div>
+        <div style={{ position: 'absolute', top: 10, left: 10, right: 10, maxWidth: 560, zIndex: 6 }}>{questionTools}</div>
       </div>
       {rightOpen && (
         <aside aria-label="Details" style={{ width: rightWidth, maxWidth: '55vw', flexShrink: 0, borderLeft: `1px solid ${T.line}`, minHeight: 0 }}>{rightPanel}</aside>
