@@ -15,6 +15,7 @@ import type { Board } from '@/app/dashboard/agency/boards-map/page';
 import type { AudienceProfile } from '@/lib/types';
 import { computeTrustBadge, TrustBadgePill } from '@/lib/agent-listings';
 import PlannerTarget, { CorridorMarketSummary, SegmentTag } from '@/components/market-intel/PlannerTarget';
+import { useIsNarrow } from '@/components/market-intel/ui';
 import {
   DEFAULT_TARGET, catchmentBonusPoints, catchmentLabel, catchmentResidents, fetchBoardMarketContext, rankBoardsForTarget,
   type BoardMarketContext, type MarketTarget,
@@ -244,6 +245,8 @@ export default function CampaignPlannerPage() {
   const { toast: showToast } = useToast();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [step, setStep] = useState<1 | 2>(1); // 1 = details, 2 = boards
+  // On a phone the planner panel covers the map, so the map's own overlays would sit on top of it.
+  const narrow = useIsNarrow();
   const [form, setForm] = useState<PlanForm>({
     name: '', client_name: '', start_date: '', end_date: '',
     total_budget: '', objective: '',
@@ -701,7 +704,7 @@ export default function CampaignPlannerPage() {
         )}
 
         {/* Map legend overlay */}
-        <div style={{
+        {!narrow && <div style={{
           position: 'absolute', bottom: 16, left: 16, zIndex: 10,
           background: 'rgba(255,255,255,0.95)', borderRadius: '10px',
           padding: '10px 14px', boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
@@ -718,10 +721,10 @@ export default function CampaignPlannerPage() {
               {label}
             </div>
           ))}
-        </div>
+        </div>}
 
         {/* Selected count badge */}
-        {selectedIds.size > 0 && (
+        {!narrow && selectedIds.size > 0 && (
           <div style={{
             position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
             zIndex: 10, background: '#1B4F8A', color: '#fff',
@@ -733,7 +736,7 @@ export default function CampaignPlannerPage() {
         )}
 
         {/* Hint when no boards selected */}
-        {selectedIds.size === 0 && !loading && (
+        {!narrow && selectedIds.size === 0 && !loading && (
           <div style={{
             position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
             zIndex: 10, background: 'rgba(255,255,255,0.95)', color: '#475569',
