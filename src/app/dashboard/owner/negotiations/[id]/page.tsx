@@ -255,19 +255,19 @@ export default function OwnerNegotiationDetailPage() {
       });
     }
 
-    // Notify the agency (in-app)
+    // Notify the agency on this booking (in-app)
+    const agencyId = booking.campaigns?.agency_id;
     if (actionMode === 'accept') {
-      await createNotification({ recipientRole: 'agency', type: 'offer_accepted', title: `Owner accepted — deal agreed!`, body: `${boardName} at ${formatNaira(booking.offered_rate)}/month`, link: `/dashboard/agency/negotiations/${booking.id}` });
+      await createNotification({ recipientRole: 'agency', recipientUserId: agencyId, type: 'offer_accepted', title: `Owner accepted — deal agreed!`, body: `${boardName} at ${formatNaira(booking.offered_rate)}/month`, link: `/dashboard/agency/negotiations/${booking.id}` });
     } else if (actionMode === 'decline') {
-      await createNotification({ recipientRole: 'agency', type: 'offer_declined', title: 'Owner declined your request', body: `Booking for ${boardName} was declined`, link: `/dashboard/agency/negotiations/${booking.id}` });
+      await createNotification({ recipientRole: 'agency', recipientUserId: agencyId, type: 'offer_declined', title: 'Owner declined your request', body: `Booking for ${boardName} was declined`, link: `/dashboard/agency/negotiations/${booking.id}` });
     } else if (actionMode === 'counter') {
-      await createNotification({ recipientRole: 'agency', type: 'counter_offer', title: 'Owner sent a counter offer', body: `${formatNaira(parseFloat(counterRate))}/month for ${boardName}`, link: `/dashboard/agency/negotiations/${booking.id}` });
+      await createNotification({ recipientRole: 'agency', recipientUserId: agencyId, type: 'counter_offer', title: 'Owner sent a counter offer', body: `${formatNaira(parseFloat(counterRate))}/month for ${boardName}`, link: `/dashboard/agency/negotiations/${booking.id}` });
     } else {
-      await createNotification({ recipientRole: 'agency', type: 'message', title: 'New message from board owner', body: content.slice(0, 80), link: `/dashboard/agency/negotiations/${booking.id}` });
+      await createNotification({ recipientRole: 'agency', recipientUserId: agencyId, type: 'message', title: 'New message from board owner', body: content.slice(0, 80), link: `/dashboard/agency/negotiations/${booking.id}` });
     }
 
     // Email the agency (fire-and-forget)
-    const agencyId = booking.campaigns?.agency_id;
     if (agencyId) {
       const { actorId: ownerId } = await getActivityActor();
       if (actionMode === 'accept') {

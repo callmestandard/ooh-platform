@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { attachRatesToBookings } from '@/lib/board-rates';
 import { authedFetch } from '@/lib/api';
-import { createNotification } from '@/lib/notifications';
+import { createNotification, getBoardOwnerAccount } from '@/lib/notifications';
 import { getActivityActor, logActivity } from '@/lib/activity-log';
 import ActivityTimeline from '@/components/activity/ActivityTimeline';
 
@@ -23,6 +23,7 @@ type Booking = {
   mpo_agency_name?: string | null;
   boards: {
     id: string;
+    owner_id: string | null;
     name: string;
     address: string;
     city: string;
@@ -242,14 +243,15 @@ export default function NegotiationDetailPage() {
       });
     }
 
+    const ownerId = await getBoardOwnerAccount(booking.boards);
     if (actionMode === 'accept') {
-      await createNotification({ recipientRole: 'owner', type: 'offer_accepted', title: 'Agency accepted your terms', body: `Deal confirmed for ${boardName}`, link: `/dashboard/owner/negotiations/${booking.id}` });
+      await createNotification({ recipientRole: 'owner', recipientUserId: ownerId, type: 'offer_accepted', title: 'Agency accepted your terms', body: `Deal confirmed for ${boardName}`, link: `/dashboard/owner/negotiations/${booking.id}` });
     } else if (actionMode === 'decline') {
-      await createNotification({ recipientRole: 'owner', type: 'offer_declined', title: 'Agency declined', body: `Booking for ${boardName} was declined`, link: `/dashboard/owner/negotiations/${booking.id}` });
+      await createNotification({ recipientRole: 'owner', recipientUserId: ownerId, type: 'offer_declined', title: 'Agency declined', body: `Booking for ${boardName} was declined`, link: `/dashboard/owner/negotiations/${booking.id}` });
     } else if (actionMode === 'counter') {
-      await createNotification({ recipientRole: 'owner', type: 'counter_offer', title: 'Agency sent a counter offer', body: `${formatNaira(parseFloat(counterRate))}/month for ${boardName}`, link: `/dashboard/owner/negotiations/${booking.id}` });
+      await createNotification({ recipientRole: 'owner', recipientUserId: ownerId, type: 'counter_offer', title: 'Agency sent a counter offer', body: `${formatNaira(parseFloat(counterRate))}/month for ${boardName}`, link: `/dashboard/owner/negotiations/${booking.id}` });
     } else {
-      await createNotification({ recipientRole: 'owner', type: 'message', title: 'New message from agency', body: content.slice(0, 80), link: `/dashboard/owner/negotiations/${booking.id}` });
+      await createNotification({ recipientRole: 'owner', recipientUserId: ownerId, type: 'message', title: 'New message from agency', body: content.slice(0, 80), link: `/dashboard/owner/negotiations/${booking.id}` });
     }
 
     await fetchBooking();
@@ -344,7 +346,7 @@ export default function NegotiationDetailPage() {
     });
 
     await createNotification({
-      recipientRole: 'owner', type: 'offer_accepted', title: 'Deal logged',
+      recipientRole: 'owner', recipientUserId: await getBoardOwnerAccount(booking.boards), type: 'offer_accepted', title: 'Deal logged',
       body: `Agreed ${formatNaira(finalRate)}/month for ${boardName}`,
       link: `/dashboard/owner/negotiations/${booking.id}`,
     });
@@ -406,6 +408,7 @@ export default function NegotiationDetailPage() {
       // Notify the owner so they know to create their invoice
       await createNotification({
         recipientRole: 'owner',
+        recipientUserId: await getBoardOwnerAccount(booking.boards),
         type: 'mpo_raised',
         title: 'MPO received — create your invoice',
         body: `${agencyName} has raised MPO ${mpoNum} for ${booking.boards?.name || 'your board'}`,
