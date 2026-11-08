@@ -7,6 +7,9 @@ import { attachRatesToBookings } from '@/lib/board-rates';
 import { authedFetch } from '@/lib/api';
 import { createNotification } from '@/lib/notifications';
 import { getActivityActor, logActivity } from '@/lib/activity-log';
+import { MVP_MODE } from '@/lib/mvp';
+
+type Buyer = { buyer_id: string | null; buyer_name: string | null; request_id: string | null };
 
 type Booking = {
   id: string;
@@ -89,6 +92,8 @@ export default function OwnerNegotiationDetailPage() {
   const [counterRate, setCounterRate] = useState('');
   const [sending, setSending] = useState(false);
   const [exportingContract, setExportingContract] = useState(false);
+  // Owners can't read the buyer's campaign, so look the buyer up (044).
+  const [buyer, setBuyer] = useState<Buyer | null>(null);
 
   async function handleDownloadContract() {
     if (!booking) return;
@@ -146,6 +151,8 @@ export default function OwnerNegotiationDetailPage() {
         .single();
       if (error) throw error;
       if (data) setBooking((await attachRatesToBookings([data as unknown as Booking]))[0]);
+      const { data: who } = await supabase.rpc('booking_buyer', { p_booking_id: id });
+      setBuyer(((who as Buyer[] | null) ?? [])[0] ?? null);
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Failed to load booking');
     } finally {
@@ -256,7 +263,7 @@ export default function OwnerNegotiationDetailPage() {
     }
 
     // Notify the agency on this booking (in-app)
-    const agencyId = booking.campaigns?.agency_id;
+    const agencyId = booking.campaigns?.agency_id ?? buyer?.buyer_id ?? null;
     if (actionMode === 'accept') {
       await createNotification({ recipientRole: 'agency', recipientUserId: agencyId, type: 'offer_accepted', title: `Owner accepted — deal agreed!`, body: `${boardName} at ${formatNaira(booking.offered_rate)}/month`, link: `/dashboard/agency/negotiations/${booking.id}` });
     } else if (actionMode === 'decline') {
@@ -327,9 +334,15 @@ export default function OwnerNegotiationDetailPage() {
         .action-btn:active { transform: translateY(0); }
         @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
         .slide-up { animation: slideUp 0.2s ease forwards; }
+        @media (max-width: 760px) {
+          .neg-page { height: auto !important; }
+          .neg-layout { flex-direction: column !important; }
+          .neg-side { width: 100% !important; overflow: visible !important; }
+          .neg-thread { min-height: 70vh; }
+        }
       `}</style>
 
-      <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 8rem)', fontFamily: "'Inter', -apple-system, sans-serif" }}>
+      <div className="neg-page" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 8rem)', fontFamily: "'Inter', -apple-system, sans-serif" }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1.25rem' }}>
@@ -357,16 +370,18 @@ export default function OwnerNegotiationDetailPage() {
               </span>
             </div>
             <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>
-              {booking.campaigns?.client_name || '—'} · {booking.campaigns?.name || '—'}
+              {buyer?.request_id
+                ? <>Request from {buyer.buyer_name || 'a buyer'} · {formatDate(booking.start_date)} → {formatDate(booking.end_date)}</>
+                : <>{booking.campaigns?.client_name || buyer?.buyer_name || '—'} · {booking.campaigns?.name || '—'}</>}
             </p>
           </div>
         </div>
 
         {/* Main layout */}
-        <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
+        <div className="neg-layout" style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
 
           {/* Left panel: board + deal info */}
-          <div style={{ width: 272, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
+          <div className="neg-side" style={{ width: 272, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
 
             {/* Request highlight */}
             {booking.status === 'pending' && (
@@ -414,7 +429,7 @@ export default function OwnerNegotiationDetailPage() {
                 Deal terms
               </p>
               {[
-                { label: 'Agency offer',  value: booking.offered_rate ? formatNaira(booking.offered_rate) : 'Quote requested', highlight: false },
+                { label: buyer?.request_id ? 'Offer on the table' : 'Agency offer',  value: booking.offered_rate ? formatNaira(booking.offered_rate) : 'Quote requested', highlight: false },
                 { label: 'Agreed rate',   value: booking.agreed_rate ? formatNaira(booking.agreed_rate) : 'Pending', highlight: !!booking.agreed_rate },
                 { label: 'Start date',    value: formatDate(booking.start_date), highlight: false },
                 { label: 'End date',      value: formatDate(booking.end_date), highlight: false },
@@ -443,8 +458,16 @@ export default function OwnerNegotiationDetailPage() {
               </div>
             )}
 
+            {/* MVP: our team completes agreed deals by hand */}
+            {MVP_MODE && ['agreed', 'signed', 'live'].includes(booking.status) && (
+              <div data-handoff style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '10px', padding: '12px 14px' }}>
+                <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#065F46', margin: '0 0 4px' }}>Deal agreed</p>
+                <p style={{ fontSize: '0.8125rem', color: '#065F46', margin: 0, lineHeight: 1.5 }}>Our team will contact you and the buyer to complete the booking.</p>
+              </div>
+            )}
+
             {/* Download contract — visible once deal is agreed */}
-            {['agreed', 'signed', 'live'].includes(booking.status) && (
+            {!MVP_MODE && ['agreed', 'signed', 'live'].includes(booking.status) && (
               <button
                 onClick={handleDownloadContract}
                 disabled={exportingContract}
@@ -469,7 +492,7 @@ export default function OwnerNegotiationDetailPage() {
           </div>
 
           {/* Right panel: message thread */}
-          <div style={{
+          <div className="neg-thread" style={{
             flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0,
             background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden',
           }}>

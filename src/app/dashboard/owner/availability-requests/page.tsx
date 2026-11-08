@@ -9,7 +9,7 @@ import {
 } from '@/lib/availability-requests';
 
 type Item = { request: AvailabilityRequest; recipient: AvailabilityRecipient };
-type Answer = { available: boolean | null; rate: string; note: string; accepted: boolean };
+type Answer = { available: boolean | null; rate: string; note: string; from: string; to: string; conditions: string; accepted: boolean };
 
 const naira = (n: number) => '₦' + Math.round(n).toLocaleString('en-NG');
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -29,6 +29,7 @@ export default function OwnerAvailabilityRequestsPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [boards, setBoards] = useState<OwnerBoard[]>([]);
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
+  const [existingBooking, setExistingBooking] = useState<Record<string, string>>({});
   const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -54,11 +55,12 @@ export default function OwnerAvailabilityRequestsPage() {
     matching.forEach(b => {
       const e = existing.find(x => x.board_id === b.id);
       next[b.id] = e
-        ? { available: e.available, rate: e.quoted_rate ? String(e.quoted_rate) : '', note: e.note ?? '', accepted: !!e.accepted_booking_id }
-        : { available: null, rate: '', note: '', accepted: false };
+        ? { available: e.available, rate: e.quoted_rate ? String(e.quoted_rate) : '', note: e.note ?? '', from: e.available_from ?? '', to: e.available_to ?? '', conditions: e.conditions ?? '', accepted: !!e.accepted_booking_id }
+        : { available: null, rate: '', note: '', from: '', to: '', conditions: '', accepted: false };
     });
     setBoards(matching);
     setAnswers(next);
+    setExistingBooking(Object.fromEntries(existing.filter(x => x.accepted_booking_id).map(x => [x.board_id, x.accepted_booking_id as string])));
     setDetailLoading(false);
   }
 
@@ -66,10 +68,13 @@ export default function OwnerAvailabilityRequestsPage() {
   const answered = boards.filter(b => answers[b.id]?.available !== null);
 
   async function handleSubmit(item: Item) {
+    const badPeriod = answered.find(b => answers[b.id].available && answers[b.id].from && answers[b.id].to && answers[b.id].from > answers[b.id].to);
+    if (badPeriod) { setError(`${badPeriod.name}: the "available from" date is after the "available to" date.`); return; }
     setSaving(true);
     setError(null);
     const { error } = await submitOwnerResponses(item.request, answered.map(b => ({
       boardId: b.id, available: answers[b.id].available!, quotedRate: Number(answers[b.id].rate) > 0 ? Number(answers[b.id].rate) : null, note: answers[b.id].note,
+      availableFrom: answers[b.id].from, availableTo: answers[b.id].to, conditions: answers[b.id].conditions,
     })));
     setSaving(false);
     if (error) { setError('Could not send your reply — ' + error); return; }
@@ -127,7 +132,7 @@ export default function OwnerAvailabilityRequestsPage() {
                 <div style={{ marginTop: 12, padding: 14, background: '#F8FAFC', borderRadius: 10 }}>
                   {r.notes && <p style={{ fontSize: '0.8125rem', color: '#334155', margin: '0 0 8px' }}><strong>{r.board_id ? 'Campaign requirement:' : 'Note from the agency:'}</strong> {r.notes}</p>}
                   {r.extra_requirements && <p style={{ fontSize: '0.8125rem', color: '#334155', margin: '0 0 8px' }}><strong>Additional requirements:</strong> {r.extra_requirements}</p>}
-                  {r.board_id && <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 12px' }}>Reply <strong>Available</strong> with your price for these dates, or <strong>Not available</strong>. The buyer sees your reply straight away.</p>}
+                  {r.board_id && <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 12px' }}>Reply <strong>Available — send quote</strong> with your monthly price, or <strong>Not available</strong>. If you can only offer part of the buyer&rsquo;s dates, set the period you can offer. The buyer sees your reply straight away.</p>}
                   {detailLoading ? <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>Loading your boards…</p> : boards.length === 0 ? (
                     <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0 }}>None of your boards match this request any more.</p>
                   ) : (
@@ -143,7 +148,7 @@ export default function OwnerAvailabilityRequestsPage() {
                                 <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', margin: 0 }}>{b.name}</p>
                                 <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '2px 0 0' }}>{b.city} · {boardFormatLabel(b.format)}{b.asking_rate ? ` · your asking rate ${naira(b.asking_rate)}/mo` : ''}</p>
                               </div>
-                              {([[true, 'Available'], [false, 'Not available']] as const).map(([val, text]) => (
+                              {([[true, r.board_id ? 'Available — send quote' : 'Available'], [false, 'Not available']] as const).map(([val, text]) => (
                                 <button key={text} disabled={locked} onClick={() => set(b.id, { available: val })}
                                   style={{ padding: '6px 12px', borderRadius: 8, border: 'none', fontSize: '0.75rem', fontWeight: 600, fontFamily: 'inherit', cursor: locked ? 'not-allowed' : 'pointer',
                                     background: a.available === val ? (val ? '#10B981' : '#EF4444') : '#F1F5F9', color: a.available === val ? '#fff' : '#475569' }}>
@@ -159,7 +164,23 @@ export default function OwnerAvailabilityRequestsPage() {
                                 <input disabled={locked} value={a.note} onChange={e => set(b.id, { note: e.target.value })} placeholder="Note (optional)" style={{ ...input, flex: 1, minWidth: 180 }} aria-label="Note" />
                               </div>
                             )}
-                            {a.accepted && <p style={{ fontSize: '0.6875rem', color: '#065F46', margin: '6px 0 0', fontWeight: 600 }}>The agency has turned this into a booking request — see Bookings.</p>}
+                            {a.available && r.board_id && (
+                              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                                <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.6875rem', color: '#64748B', fontWeight: 600 }}>
+                                  Available from
+                                  <input type="date" disabled={locked} value={a.from} min={r.start_date} max={r.end_date} onChange={e => set(b.id, { from: e.target.value })} style={{ ...input, width: 160 }} />
+                                </label>
+                                <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.6875rem', color: '#64748B', fontWeight: 600 }}>
+                                  Available to
+                                  <input type="date" disabled={locked} value={a.to} min={a.from || r.start_date} max={r.end_date} onChange={e => set(b.id, { to: e.target.value })} style={{ ...input, width: 160 }} />
+                                </label>
+                                <input disabled={locked} value={a.conditions} onChange={e => set(b.id, { conditions: e.target.value })} placeholder="Conditions, e.g. printing not included, 50% upfront (optional)" style={{ ...input, flex: 1, minWidth: 200 }} aria-label="Conditions" />
+                                <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0, flexBasis: '100%' }}>Leave the dates empty if you can offer the full period the buyer asked for.</p>
+                              </div>
+                            )}
+                            {a.accepted && (r.board_id
+                              ? <p style={{ fontSize: '0.6875rem', color: '#065F46', margin: '6px 0 0', fontWeight: 600 }}>The buyer has answered your quote. <a href={`/dashboard/owner/negotiations/${existingBooking[b.id] ?? ''}`} style={{ color: '#065F46' }}>Open the conversation →</a></p>
+                              : <p style={{ fontSize: '0.6875rem', color: '#065F46', margin: '6px 0 0', fontWeight: 600 }}>The agency has turned this into a booking request — see Bookings.</p>)}
                           </div>
                         );
                       })}

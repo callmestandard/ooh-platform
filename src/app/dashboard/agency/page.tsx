@@ -92,7 +92,7 @@ export default function AgencyDashboardPage() {
       if (!uid) { setLoading(false); return; }
 
       const [campRes, bookRes, boardRes, invRes] = await Promise.all([
-        supabase.from('campaigns').select('*').eq('agency_id', uid).order('created_at', { ascending: false }).limit(100),
+        supabase.from('campaigns').select('*').eq('agency_id', uid).is('request_id', null).order('created_at', { ascending: false }).limit(100),
         supabase.from('bookings').select('*, boards(name, city), campaigns!inner(name, agency_id)').eq('campaigns.agency_id', uid).order('created_at', { ascending: false }).limit(5),
         supabase.from('boards').select('id', { count: 'exact', head: true }),
         supabase.from('invoices').select('id, invoice_number, client_name, status, total_amount, due_date, paid_at')

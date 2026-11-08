@@ -59,7 +59,7 @@ export default function AgencyAvailabilityRequestsPage() {
       await refresh();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
-      const { data } = await supabase.from('campaigns').select('id, name, status').eq('agency_id', session.user.id).order('created_at', { ascending: false });
+      const { data } = await supabase.from('campaigns').select('id, name, status').is('request_id', null).eq('agency_id', session.user.id).order('created_at', { ascending: false });
       setCampaigns((data ?? []) as CampaignOption[]);
     })();
   }, [role]);

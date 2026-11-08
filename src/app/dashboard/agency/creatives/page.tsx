@@ -333,7 +333,7 @@ export default function CreativesPage() {
 
   async function fetchData() {
     const [campRes, bookRes] = await Promise.all([
-      supabase.from('campaigns').select('id, name, client_name, status').order('created_at', { ascending: false }),
+      supabase.from('campaigns').select('id, name, client_name, status').is('request_id', null).order('created_at', { ascending: false }),
       supabase.from('bookings')
         .select('id, campaign_id, status, offered_rate, start_date, end_date, boards(id, name, city, state, format, width, height, illuminated), campaigns(name, client_name)')
         .order('created_at', { ascending: false }),

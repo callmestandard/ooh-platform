@@ -59,6 +59,7 @@ export default function BudgetEstimatorPage() {
           .from('campaigns')
           .select('id, name')
           .eq('agency_id', session.user.id)
+          .is('request_id', null)
           .eq('status', 'draft')
           .order('created_at', { ascending: false });
         setDrafts((data ?? []) as DraftCampaign[]);

@@ -8,6 +8,7 @@ import { authedFetch } from '@/lib/api';
 import { createNotification, getBoardOwnerAccount } from '@/lib/notifications';
 import { getActivityActor, logActivity } from '@/lib/activity-log';
 import ActivityTimeline from '@/components/activity/ActivityTimeline';
+import { MVP_MODE, MVP_HANDOFF_TEXT } from '@/lib/mvp';
 
 type Booking = {
   id: string;
@@ -40,6 +41,8 @@ type Booking = {
     id: string;
     name: string;
     client_name: string | null;
+    /** Set when this deal came from "Request this location" (044). */
+    request_id?: string | null;
   };
 };
 
@@ -129,7 +132,7 @@ export default function NegotiationDetailPage() {
     try {
       const { data, error } = await supabase
         .from('bookings')
-        .select(`*, boards!bookings_board_id_fkey (*), campaigns!bookings_campaign_id_fkey (id, name, client_name)`)
+        .select(`*, boards!bookings_board_id_fkey (*), campaigns!bookings_campaign_id_fkey (id, name, client_name, request_id)`)
         .eq('id', id)
         .single();
       if (error) throw error;
@@ -512,6 +515,7 @@ export default function NegotiationDetailPage() {
   }
 
   const statusCfg = STATUS[booking.status] || STATUS.pending;
+  const isRequest = !!booking.campaigns?.request_id;
   const isResolved = ['agreed', 'signed', 'live', 'completed', 'declined'].includes(booking.status);
   const photo = booking.boards?.photo_urls?.[0];
   const savingsAmt = booking.agreed_rate && booking.boards?.asking_rate
@@ -522,7 +526,7 @@ export default function NegotiationDetailPage() {
     ? Math.round((booking.offered_rate / booking.boards.asking_rate) * 100) : null;
 
   return (
-    <div style={{ fontFamily: "'DM Sans','Inter',sans-serif", display: 'flex', flexDirection: 'column', height: 'calc(100vh - 7rem)' }}>
+    <div className="neg-page" style={{ fontFamily: "'DM Sans','Inter',sans-serif", display: 'flex', flexDirection: 'column', height: 'calc(100vh - 7rem)' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
         .msg-thread::-webkit-scrollbar { width: 4px; }
@@ -539,6 +543,12 @@ export default function NegotiationDetailPage() {
         .left-panel::-webkit-scrollbar { width: 4px; }
         .left-panel::-webkit-scrollbar-track { background: transparent; }
         .left-panel::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 99px; }
+        @media (max-width: 760px) {
+          .neg-page { height: auto !important; }
+          .neg-layout { flex-direction: column !important; }
+          .neg-layout > .left-panel { width: 100% !important; overflow: visible !important; }
+          .neg-thread { min-height: 70vh; }
+        }
       `}</style>
 
       {/* ── Page header ── */}
@@ -580,7 +590,7 @@ export default function NegotiationDetailPage() {
       </div>
 
       {/* ── Two-column layout ── */}
-      <div style={{ display: 'flex', gap: '16px', flex: 1, minHeight: 0 }}>
+      <div className="neg-layout" style={{ display: 'flex', gap: '16px', flex: 1, minHeight: 0 }}>
 
         {/* ── Left panel ── */}
         <div className="left-panel" style={{ width: 264, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto' }}>
@@ -617,7 +627,7 @@ export default function NegotiationDetailPage() {
           </div>
 
           {/* Log a call — record an off-platform phone/WhatsApp negotiation fast */}
-          {!isResolved && (
+          {!MVP_MODE && !isResolved && (
             <button
               onClick={openLogCall}
               style={{
@@ -634,8 +644,15 @@ export default function NegotiationDetailPage() {
             </button>
           )}
 
-          {/* Contact owner card */}
-          {(() => {
+          {/* MVP: deals are completed by our team */}
+          {MVP_MODE && ['agreed', 'signed', 'live'].includes(booking.status) && (
+            <div data-handoff style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 14, padding: '12px 14px', flexShrink: 0 }}>
+              <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#065F46', margin: 0, lineHeight: 1.5 }}>{MVP_HANDOFF_TEXT}</p>
+            </div>
+          )}
+
+          {/* Contact owner card (hidden in MVP: our team connects both sides) */}
+          {!MVP_MODE && (() => {
             const raw = booking.boards?.contact_phone;
             const contactName = booking.boards?.contact_name;
             const wa  = raw?.replace(/\s/g, '').replace(/^0/, '234');
@@ -696,7 +713,7 @@ export default function NegotiationDetailPage() {
 
             <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
               <div style={{ flex: 1, background: '#F8FAFC', borderRadius: '10px', padding: '10px 12px' }}>
-                <p style={{ fontSize: '0.625rem', color: '#94A3B8', margin: '0 0 3px', fontWeight: 500 }}>YOUR OFFER</p>
+                <p style={{ fontSize: '0.625rem', color: '#94A3B8', margin: '0 0 3px', fontWeight: 500 }}>{isRequest ? 'OFFER ON THE TABLE' : 'YOUR OFFER'}</p>
                 <p style={{ fontSize: '1rem', fontWeight: 700, color: '#1B4F8A', margin: 0, fontFamily: "'DM Mono', monospace", letterSpacing: '-0.02em' }}>
                   {booking.agreed_rate || booking.offered_rate ? formatNaira(booking.agreed_rate || booking.offered_rate) : 'Quote requested'}
                 </p>
@@ -756,8 +773,8 @@ export default function NegotiationDetailPage() {
 
           {/* Campaign + dates */}
           <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '14px 16px' }}>
-            <p style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Campaign</p>
-            <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', margin: '0 0 8px' }}>{booking.campaigns?.name}</p>
+            <p style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>{isRequest ? 'Your dates' : 'Campaign'}</p>
+            {!isRequest && <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', margin: '0 0 8px' }}>{booking.campaigns?.name}</p>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {[
                 { label: 'Start', value: formatDate(booking.start_date) },
@@ -771,14 +788,14 @@ export default function NegotiationDetailPage() {
             </div>
           </div>
 
-          <ActivityTimeline
+          {!isRequest && <ActivityTimeline
             entityType="booking"
             entityId={id}
             title="Audit trail"
             refreshKey={activityKey}
-          />
+          />}
 
-          {booking.notes && (
+          {booking.notes && !isRequest && (
             <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '14px', padding: '14px 16px' }}>
               <p style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>Initial notes</p>
               <p style={{ fontSize: '0.75rem', color: '#78350F', lineHeight: 1.6, margin: 0, fontStyle: 'italic' }}>&quot;{booking.notes}&quot;</p>
@@ -786,7 +803,7 @@ export default function NegotiationDetailPage() {
           )}
 
           {/* Raise MPO — only available once deal is agreed/live */}
-          {['agreed', 'signed', 'live'].includes(booking.status) && (
+          {!MVP_MODE && ['agreed', 'signed', 'live'].includes(booking.status) && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {booking.mpo_issued_at && (
                 <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -876,7 +893,7 @@ export default function NegotiationDetailPage() {
         </div>
 
         {/* ── Right panel: message thread ── */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: '#fff', borderRadius: '14px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
+        <div className="neg-thread" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: '#fff', borderRadius: '14px', border: '1px solid #E2E8F0', overflow: 'hidden' }}>
 
           {/* Thread header */}
           <div style={{ padding: '14px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>

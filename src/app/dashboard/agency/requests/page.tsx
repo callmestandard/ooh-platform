@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDashboardRole } from '@/components/layout/DashboardLayout';
 import { boardFormatLabel } from '@/lib/board-formats';
 import {
-  listMyBoardRequests, cancelBoardRequest, STAGE_META, STAGE_PATH, CANCELLABLE_STAGES,
+  listMyBoardRequests, cancelBoardRequest, answerBoardQuote, STAGE_META, STAGE_PATH, CANCELLABLE_STAGES, ANSWERABLE_STAGES,
   type BoardRequest, type RequestStage,
 } from '@/lib/availability-requests';
 
@@ -14,6 +15,12 @@ const card: React.CSSProperties = { background: '#fff', border: '1px solid #E2E8
 
 type Filter = 'active' | 'all';
 const DONE: RequestStage[] = ['confirmed', 'cancelled', 'unavailable'];
+const DEAL_STAGES: RequestStage[] = ['negotiating', 'accepted', 'booking_in_progress', 'confirmed'];
+
+const btn = (primary: boolean): React.CSSProperties => ({
+  padding: '8px 14px', borderRadius: 8, fontSize: '0.8125rem', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', textDecoration: 'none',
+  border: primary ? 'none' : '1px solid #CBD5E1', background: primary ? '#1B4F8A' : '#fff', color: primary ? '#fff' : '#1B4F8A', whiteSpace: 'nowrap',
+});
 
 function StagePill({ stage }: { stage: RequestStage }) {
   const m = STAGE_META[stage];
@@ -44,6 +51,8 @@ function Progress({ stage }: { stage: RequestStage }) {
 
 export default function MyRequestsPage() {
   const role = useDashboardRole();
+  const router = useRouter();
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [requests, setRequests] = useState<BoardRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +77,17 @@ export default function MyRequestsPage() {
     setBusy(null);
     if (error) { setError('Could not cancel — ' + error); return; }
     await refresh();
+  }
+
+  async function answer(r: BoardRequest, accept: boolean) {
+    setBusy(r.id);
+    setError(null);
+    const { bookingId, error } = await answerBoardQuote(r.id, accept);
+    setBusy(null);
+    setConfirming(null);
+    if (error || !bookingId) { setError((accept ? 'Could not accept — ' : 'Could not open the conversation — ') + (error ?? 'please try again')); return; }
+    if (accept) { await refresh(); return; }
+    router.push(`/dashboard/agency/negotiations/${bookingId}`);
   }
 
   if (role !== 'agency') {
@@ -120,6 +140,9 @@ export default function MyRequestsPage() {
             const resp = r.responses?.[0];
             const photo = r.board?.photo_urls?.[0];
             const ownerReached = (r.recipients?.length ?? 0) > 0;
+            const canAnswer = ANSWERABLE_STAGES.includes(r.stage) && !!resp?.available;
+            const dealId = DEAL_STAGES.includes(r.stage) ? resp?.accepted_booking_id ?? null : null;
+            const handedOff = r.stage === 'accepted' || r.stage === 'booking_in_progress' || r.stage === 'confirmed';
             return (
               <div key={r.id} data-request={r.id} style={{ ...card, padding: 16 }}>
                 <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
@@ -141,8 +164,8 @@ export default function MyRequestsPage() {
 
                 <Progress stage={r.stage} />
 
-                <div style={{ background: '#F8FAFC', borderRadius: 10, padding: '10px 12px', marginTop: 10 }}>
-                  <p style={{ fontSize: '0.8125rem', color: '#334155', margin: 0, lineHeight: 1.5 }}>
+                <div data-stage-help style={{ background: handedOff ? '#ECFDF5' : '#F8FAFC', border: handedOff ? '1px solid #A7F3D0' : 'none', borderRadius: 10, padding: '10px 12px', marginTop: 10 }}>
+                  <p style={{ fontSize: '0.8125rem', color: handedOff ? '#065F46' : '#334155', fontWeight: handedOff ? 600 : 400, margin: 0, lineHeight: 1.5 }}>
                     {STAGE_META[r.stage].help}
                     {r.stage === 'requested' && !ownerReached && ' Our team is contacting the owner for you.'}
                   </p>
@@ -154,15 +177,53 @@ export default function MyRequestsPage() {
                       {resp.note ? <> · &ldquo;{resp.note}&rdquo;</> : null}
                     </p>
                   )}
+                  {resp?.available && (resp.available_from || resp.available_to) && (
+                    <p style={{ fontSize: '0.75rem', color: '#475569', margin: '4px 0 0' }}>
+                      Available {resp.available_from ? fmtDate(resp.available_from) : 'now'} → {resp.available_to ? fmtDate(resp.available_to) : 'open-ended'}
+                    </p>
+                  )}
+                  {resp?.available && resp.conditions && (
+                    <p style={{ fontSize: '0.75rem', color: '#475569', margin: '4px 0 0' }}><strong>Conditions:</strong> {resp.conditions}</p>
+                  )}
                 </div>
+
+                {canAnswer && (
+                  <div data-answer style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                    {confirming === r.id && resp?.quoted_rate ? (
+                      <>
+                        <p style={{ fontSize: '0.8125rem', color: '#0F172A', margin: 0, flexBasis: '100%' }}>
+                          Accept <strong>{naira(resp.quoted_rate)} per month</strong> for {fmtDate(r.start_date)} → {fmtDate(r.end_date)}? Our team will then contact you to complete the booking.
+                        </p>
+                        <button onClick={() => answer(r, true)} disabled={busy === r.id} style={btn(true)}>{busy === r.id ? 'Accepting…' : 'Yes, accept quote'}</button>
+                        <button onClick={() => setConfirming(null)} disabled={busy === r.id} style={btn(false)}>Back</button>
+                      </>
+                    ) : (
+                      <>
+                        {resp?.quoted_rate ? (
+                          <button onClick={() => setConfirming(r.id)} disabled={busy === r.id} style={btn(true)}>Accept quote</button>
+                        ) : null}
+                        <button onClick={() => answer(r, false)} disabled={busy === r.id} style={btn(!resp?.quoted_rate)}>
+                          {busy === r.id ? 'Opening…' : resp?.quoted_rate ? 'Negotiate' : 'Ask the owner for a price'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+                {dealId && (
+                  <div style={{ marginTop: 10 }}>
+                    <a href={`/dashboard/agency/negotiations/${dealId}`} style={btn(r.stage === 'negotiating')}>
+                      {r.stage === 'negotiating' ? 'Continue conversation →' : 'View conversation'}
+                    </a>
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
                   <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>
                     Sent {fmtDate(r.created_at)}{r.budget ? ` · budget ${naira(r.budget)}` : ''}{r.sites_needed ? ` · ${r.sites_needed} site${r.sites_needed > 1 ? 's' : ''}` : ''}
                   </p>
-                  {CANCELLABLE_STAGES.includes(r.stage) && r.stage !== 'unavailable' && (
+                  {CANCELLABLE_STAGES.includes(r.stage) && r.stage !== 'unavailable' && confirming !== r.id && (
                     <button onClick={() => cancel(r)} disabled={busy === r.id} style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', fontSize: '0.75rem', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
-                      {busy === r.id ? 'Cancelling…' : 'Cancel request'}
+                      {busy === r.id ? 'Working…' : r.stage === 'negotiating' ? 'Withdraw request' : 'Cancel request'}
                     </button>
                   )}
                 </div>

@@ -13,6 +13,7 @@ export async function getCampaigns(): Promise<Campaign[]> {
     .from('campaigns')
     .select('*')
     .eq('agency_id', uid)
+    .is('request_id', null)
     .order('created_at', { ascending: false });
   if (error) {
     console.error('Error fetching campaigns:', JSON.stringify(error));

@@ -108,6 +108,7 @@ export default function BookingRequestPanel({ board, onClose, onSuccess }: Props
     const { data } = await supabase
       .from('campaigns')
       .select('id, name, client_name, status')
+      .is('request_id', null)
       .in('status', ['active', 'draft'])
       .order('created_at', { ascending: false });
     if (data) setCampaigns(data as Campaign[]);

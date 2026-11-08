@@ -421,7 +421,7 @@ export default function MarketplacePage() {
         setLoading(false);
       });
 
-    supabase.from('campaigns').select('id, name').order('created_at', { ascending: false }).limit(50)
+    supabase.from('campaigns').select('id, name').is('request_id', null).order('created_at', { ascending: false }).limit(50)
       .then(({ data }) => setCampaigns((data as { id: string; name: string }[]) || []));
   }, []);
 
