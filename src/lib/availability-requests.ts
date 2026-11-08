@@ -24,7 +24,35 @@ export type AvailabilityRequest = {
   notes: string | null;
   status: 'open' | 'closed';
   created_at: string;
+  /** Set for "Request this location" (043): the request is for this one board. */
+  board_id?: string | null;
+  stage?: RequestStage;
+  stage_updated_at?: string;
+  sites_needed?: number | null;
+  extra_requirements?: string | null;
 };
+
+export type RequestStage =
+  | 'requested' | 'owner_responded' | 'quote_received' | 'unavailable'
+  | 'negotiating' | 'accepted' | 'booking_in_progress' | 'confirmed' | 'cancelled';
+
+/** Buyer-facing labels for each stage. */
+export const STAGE_META: Record<RequestStage, { label: string; help: string; bg: string; color: string }> = {
+  requested:           { label: 'Requested',           help: 'Sent. Waiting for the media owner to reply.',                           bg: '#FEF3C7', color: '#92400E' },
+  owner_responded:     { label: 'Owner responded',     help: 'The owner says it is available. A price will follow.',                 bg: '#DBEAFE', color: '#1E40AF' },
+  quote_received:      { label: 'Quote received',      help: 'The owner sent a price for your dates.',                               bg: '#DBEAFE', color: '#1E40AF' },
+  unavailable:         { label: 'Unavailable',         help: 'The owner says this board is not free for your dates.',                bg: '#F1F5F9', color: '#475569' },
+  negotiating:         { label: 'Negotiating',         help: 'You and the owner are agreeing a price.',                              bg: '#EDE9FE', color: '#5B21B6' },
+  accepted:            { label: 'Accepted',            help: 'Request accepted. Our team will contact you to complete the booking.', bg: '#D1FAE5', color: '#065F46' },
+  booking_in_progress: { label: 'Booking in progress', help: 'Our team is completing the booking with you and the owner.',            bg: '#D1FAE5', color: '#065F46' },
+  confirmed:           { label: 'Confirmed',           help: 'Booking confirmed.',                                                    bg: '#065F46', color: '#FFFFFF' },
+  cancelled:           { label: 'Cancelled',           help: 'You cancelled this request.',                                           bg: '#F1F5F9', color: '#64748B' },
+};
+
+/** The main path a request moves along, for the progress bar. */
+export const STAGE_PATH: RequestStage[] = ['requested', 'quote_received', 'negotiating', 'accepted', 'booking_in_progress', 'confirmed'];
+
+export const CANCELLABLE_STAGES: RequestStage[] = ['requested', 'owner_responded', 'quote_received', 'unavailable'];
 
 export type AvailabilityRecipient = {
   id: string;
@@ -78,6 +106,7 @@ export async function listAgencyRequests(): Promise<{ requests: (AvailabilityReq
     .from('availability_requests')
     .select('*, recipients:availability_request_recipients(*)')
     .eq('agency_id', session.user.id)
+    .is('board_id', null)
     .order('created_at', { ascending: false });
   return { requests: (data ?? []) as (AvailabilityRequest & { recipients: AvailabilityRecipient[] })[], error: err(error) };
 }
@@ -146,6 +175,57 @@ export async function acceptResponses(
   return { created, error: null };
 }
 
+// ── Buyer: "Request this location" (043) ────────────────────────────────────
+
+export type BoardRequestInput = {
+  boardId: string; startDate: string; endDate: string;
+  name: string; company: string; email: string; phone: string; message: string;
+  budget: number | null; sites: number | null; extra: string;
+};
+
+export async function sendBoardRequest(input: BoardRequestInput): Promise<{ id: string | null; error: string | null }> {
+  const { data, error } = await supabase.rpc('send_board_request', {
+    p_board_id: input.boardId,
+    p_start: input.startDate,
+    p_end: input.endDate,
+    p_name: input.name,
+    p_company: input.company,
+    p_email: input.email,
+    p_phone: input.phone,
+    p_message: input.message,
+    p_budget: input.budget,
+    p_sites: input.sites,
+    p_extra: input.extra,
+  });
+  return { id: (data as string) ?? null, error: err(error) };
+}
+
+export type BoardRequest = AvailabilityRequest & {
+  board_id: string | null;
+  stage: RequestStage;
+  stage_updated_at: string;
+  board: { id: string; name: string; city: string | null; area: string | null; format: string | null; photo_urls: string[] | null } | null;
+  responses: Pick<AvailabilityResponse, 'id' | 'available' | 'quoted_rate' | 'note' | 'updated_at'>[];
+  recipients: Pick<AvailabilityRecipient, 'id' | 'responded_at'>[];
+};
+
+export async function listMyBoardRequests(): Promise<{ requests: BoardRequest[]; error: string | null }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return { requests: [], error: 'Not signed in' };
+  const { data, error } = await supabase
+    .from('availability_requests')
+    .select('*, board:boards(id, name, city, area, format, photo_urls), responses:availability_responses(id, available, quoted_rate, note, updated_at), recipients:availability_request_recipients(id, responded_at)')
+    .eq('agency_id', session.user.id)
+    .not('board_id', 'is', null)
+    .order('created_at', { ascending: false });
+  return { requests: (data ?? []) as unknown as BoardRequest[], error: err(error) };
+}
+
+export async function cancelBoardRequest(requestId: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.from('availability_requests').update({ stage: 'cancelled' }).eq('id', requestId);
+  return { error: err(error) };
+}
+
 // ── Owner ───────────────────────────────────────────────────────────────────
 
 /**
@@ -204,6 +284,7 @@ export async function fetchOwnerMatchingBoards(request: AvailabilityRequest): Pr
   const cities = request.cities.map(c => c.trim().toLowerCase());
   return (await attachVisibleRates([...all.values()])).filter(b =>
     b.status !== 'decommissioned'
+    && (!request.board_id || b.id === request.board_id)
     && !!b.city && cities.includes(b.city.trim().toLowerCase())
     && (request.formats.length === 0 || (!!b.format && request.formats.includes(b.format))),
   );
@@ -236,13 +317,26 @@ export async function submitOwnerResponses(
   );
   if (error) return { error: error.message };
 
-  await createNotification({
-    recipientRole: 'agency',
-    recipientUserId: request.agency_id,
-    type: 'availability_response',
-    title: 'An owner answered your availability request',
-    body: `${request.title} — ${answers.filter(a => a.available).length} of ${answers.length} boards available`,
-    link: '/dashboard/agency/availability-requests',
-  });
+  if (request.board_id) {
+    const a = answers[0];
+    await createNotification({
+      recipientRole: 'agency',
+      recipientUserId: request.agency_id,
+      type: 'availability_response',
+      title: !a?.available ? `${request.title} is not available for your dates`
+        : a.quotedRate ? `Quote received for ${request.title}` : `${request.title} is available`,
+      body: a?.available && a.quotedRate ? `₦${Math.round(a.quotedRate).toLocaleString('en-NG')} per month` : (a?.note || undefined),
+      link: '/dashboard/agency/requests',
+    });
+  } else {
+    await createNotification({
+      recipientRole: 'agency',
+      recipientUserId: request.agency_id,
+      type: 'availability_response',
+      title: 'An owner answered your availability request',
+      body: `${request.title} — ${answers.filter(a => a.available).length} of ${answers.length} boards available`,
+      link: '/dashboard/agency/availability-requests',
+    });
+  }
   return { error: null };
 }

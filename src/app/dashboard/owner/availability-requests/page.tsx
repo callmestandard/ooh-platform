@@ -73,7 +73,7 @@ export default function OwnerAvailabilityRequestsPage() {
     })));
     setSaving(false);
     if (error) { setError('Could not send your reply — ' + error); return; }
-    setNotice('Reply sent to the agency.');
+    setNotice(item.request.board_id ? 'Reply sent to the buyer.' : 'Reply sent to the agency.');
     await refresh();
   }
 
@@ -85,7 +85,7 @@ export default function OwnerAvailabilityRequestsPage() {
     <div style={{ maxWidth: 940, margin: '0 auto', padding: '8px 0 48px', fontFamily: 'inherit' }}>
       <h1 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: '0 0 4px', letterSpacing: '-0.02em' }}>Availability requests</h1>
       <p style={{ fontSize: '0.875rem', color: '#64748B', margin: '0 0 20px', maxWidth: 660 }}>
-        Agencies asking whether your boards are free for specific dates. Answer once per board. Your rate and reply are seen only by the agency that asked.
+        Buyers asking whether your boards are free for their dates. Answer once per board. Your price and reply are seen only by the buyer who asked and the platform team.
       </p>
 
       {error && <div style={{ ...card, borderColor: '#FECACA', background: '#FEF2F2', color: '#B91C1C', fontSize: '0.8125rem', marginBottom: 16 }}>{error}</div>}
@@ -103,10 +103,16 @@ export default function OwnerAvailabilityRequestsPage() {
             <div key={r.id} data-request={r.id} style={{ borderTop: '1px solid #F1F5F9', padding: '12px 0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>{r.title}</p>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
+                    {r.title}
+                    {r.board_id && <span style={{ marginLeft: 8, fontSize: '0.625rem', fontWeight: 700, color: '#1B4F8A', background: '#EFF6FF', padding: '2px 7px', borderRadius: 999, verticalAlign: 'middle' }}>This board</span>}
+                  </p>
                   <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '2px 0 0' }}>
-                    {r.agency_name ?? 'An agency'} · {r.cities.join(', ')} · {r.formats.length ? [...new Set(r.formats.map(boardFormatLabel))].join(', ') : 'Any format'} · {fmtDate(r.start_date)} → {fmtDate(r.end_date)}
+                    {r.agency_name ?? 'A buyer'}
+                    {r.board_id ? '' : ` · ${r.cities.join(', ')} · ${r.formats.length ? [...new Set(r.formats.map(boardFormatLabel))].join(', ') : 'Any format'}`}
+                    {' · '}{fmtDate(r.start_date)} → {fmtDate(r.end_date)}
                     {r.budget ? ` · budget ${naira(r.budget)}` : ''}
+                    {r.sites_needed ? ` · ${r.sites_needed} site${r.sites_needed > 1 ? 's' : ''} needed` : ''}
                   </p>
                 </div>
                 <span style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '3px 9px', borderRadius: 999, flexShrink: 0, background: closed ? '#F1F5F9' : item.recipient.responded_at ? '#D1FAE5' : '#FEF3C7', color: closed ? '#64748B' : item.recipient.responded_at ? '#065F46' : '#92400E' }}>
@@ -119,7 +125,9 @@ export default function OwnerAvailabilityRequestsPage() {
 
               {isOpen && (
                 <div style={{ marginTop: 12, padding: 14, background: '#F8FAFC', borderRadius: 10 }}>
-                  {r.notes && <p style={{ fontSize: '0.8125rem', color: '#334155', margin: '0 0 12px' }}><strong>Note from the agency:</strong> {r.notes}</p>}
+                  {r.notes && <p style={{ fontSize: '0.8125rem', color: '#334155', margin: '0 0 8px' }}><strong>{r.board_id ? 'Campaign requirement:' : 'Note from the agency:'}</strong> {r.notes}</p>}
+                  {r.extra_requirements && <p style={{ fontSize: '0.8125rem', color: '#334155', margin: '0 0 8px' }}><strong>Additional requirements:</strong> {r.extra_requirements}</p>}
+                  {r.board_id && <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 12px' }}>Reply <strong>Available</strong> with your price for these dates, or <strong>Not available</strong>. The buyer sees your reply straight away.</p>}
                   {detailLoading ? <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>Loading your boards…</p> : boards.length === 0 ? (
                     <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0 }}>None of your boards match this request any more.</p>
                   ) : (
@@ -146,7 +154,7 @@ export default function OwnerAvailabilityRequestsPage() {
                             {a.available !== null && (
                               <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                                 {a.available && (
-                                  <input type="number" min={0} disabled={locked} value={a.rate} onChange={e => set(b.id, { rate: e.target.value })} placeholder="Your rate, ₦ per month (optional)" style={{ ...input, width: 240 }} aria-label="Quoted rate per month" />
+                                  <input type="number" min={0} disabled={locked} value={a.rate} onChange={e => set(b.id, { rate: e.target.value })} placeholder={r.board_id ? 'Your quote, ₦ per month' : 'Your rate, ₦ per month (optional)'} style={{ ...input, width: 240 }} aria-label="Quoted rate per month" />
                                 )}
                                 <input disabled={locked} value={a.note} onChange={e => set(b.id, { note: e.target.value })} placeholder="Note (optional)" style={{ ...input, flex: 1, minWidth: 180 }} aria-label="Note" />
                               </div>

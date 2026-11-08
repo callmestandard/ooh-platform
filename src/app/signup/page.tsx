@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { safeRedirect } from '@/lib/safe-redirect';
 import type { DemoRole } from '@/lib/constants';
 
 const ROLES: { role: DemoRole; label: string; desc: string; color: string; bg: string }[] = [
@@ -49,6 +50,18 @@ export default function SignupPage() {
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState('');
   const [success, setSuccess]     = useState(false);
+  // Where to go after sign-up, e.g. back to the board a buyer was requesting.
+  const [redirectTo, setRedirectTo] = useState<string | null>(null);
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const to = safeRedirect(q.get('redirect'));
+    const r = q.get('role');
+    queueMicrotask(() => {
+      setRedirectTo(to);
+      if (r === 'agency' || r === 'owner') setRole(r);
+    });
+  }, []);
 
   function nextStep() {
     if (!role) { setError('Please select your account type.'); return; }
@@ -75,7 +88,7 @@ export default function SignupPage() {
       email: email.trim().toLowerCase(),
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/login`,
+        emailRedirectTo: `${window.location.origin}/auth/login${redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ''}`,
         data: {
           full_name:    fullName.trim(),
           company_name: company.trim(),
@@ -93,7 +106,7 @@ export default function SignupPage() {
 
     // If email confirmation is disabled in Supabase, the session is ready immediately
     if (data.session) {
-      router.push(`/dashboard/${role}`);
+      router.push(redirectTo ?? `/dashboard/${role}`);
       return;
     }
 
@@ -115,7 +128,7 @@ export default function SignupPage() {
           <p style={{ fontSize: '0.9375rem', color: '#64748B', margin: '0 0 24px', lineHeight: 1.6 }}>
             We&apos;ve sent a confirmation link to <strong style={{ color: '#0F172A' }}>{email}</strong>. Click the link to activate your account.
           </p>
-          <a href="/auth/login" style={{ display: 'inline-block', padding: '10px 24px', background: '#1B4F8A', color: '#fff', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, textDecoration: 'none' }}>
+          <a href={redirectTo ? `/auth/login?redirect=${encodeURIComponent(redirectTo)}` : '/auth/login'} style={{ display: 'inline-block', padding: '10px 24px', background: '#1B4F8A', color: '#fff', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, textDecoration: 'none' }}>
             Back to sign in
           </a>
         </div>
@@ -354,7 +367,7 @@ export default function SignupPage() {
 
           <p style={{ textAlign: 'center', fontSize: '0.8125rem', color: '#94A3B8', margin: '20px 0 0' }}>
             Already have an account?{' '}
-            <a href="/auth/login" style={{ color: '#1B4F8A', fontWeight: 600, textDecoration: 'none' }}>Sign in</a>
+            <a href={redirectTo ? `/auth/login?redirect=${encodeURIComponent(redirectTo)}` : '/auth/login'} style={{ color: '#1B4F8A', fontWeight: 600, textDecoration: 'none' }}>Sign in</a>
           </p>
         </div>
       </div>

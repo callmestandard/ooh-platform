@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { attachVisibleRates } from '@/lib/board-rates';
+import RequestLocation, { OPEN_REQUEST_EVENT } from '@/components/boards/RequestLocation';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 import { VerificationBadge, VERIFICATION_META, verificationOf, formatVerifiedDate, dimensionsText, illuminationText, locationText, UNKNOWN } from '@/lib/board-verification';
 
@@ -71,6 +72,8 @@ export default function PublicBoardPage() {
   }, [id]);
 
   const effectiveRate = activeListing ? activeListing.sell_price : (board?.asking_rate ?? 0);
+
+  const openRequest = () => window.dispatchEvent(new Event(OPEN_REQUEST_EVENT));
 
   function shareBoard() {
     const url = window.location.href;
@@ -141,18 +144,19 @@ export default function PublicBoardPage() {
             </div>
             <span style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>OOH Platform</span>
           </a>
-          <a
-            href="/auth/login"
+          <button
+            type="button"
+            onClick={openRequest}
             className="pub-btn"
             style={{
-              background: '#1B4F8A', color: '#fff', borderRadius: 10,
-              padding: '9px 18px', fontSize: '0.8125rem', fontWeight: 700,
-              textDecoration: 'none', letterSpacing: '0.01em',
+              background: '#1B4F8A', color: '#fff', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              padding: '9px 16px', fontSize: '0.8125rem', fontWeight: 700,
+              letterSpacing: '0.01em', whiteSpace: 'nowrap',
               boxShadow: '0 2px 8px rgba(27,79,138,0.25)',
             }}
           >
-            Book this board
-          </a>
+            Request this location
+          </button>
         </div>
 
         {/* ── Content ── */}
@@ -271,17 +275,18 @@ export default function PublicBoardPage() {
                 {activeListing && <TrustBadgePill badge={activeListing.badge} small />}
               </div>
             </div>
-            <a href="/auth/login" className="pub-btn" style={{
-              background: isBooked ? '#94A3B8' : '#1B4F8A',
-              color: '#fff', borderRadius: 12, padding: '13px 22px',
-              fontSize: '0.9375rem', fontWeight: 700, textDecoration: 'none',
-              flexShrink: 0, letterSpacing: '0.01em',
-              boxShadow: isBooked ? 'none' : '0 4px 16px rgba(27,79,138,0.3)',
-              pointerEvents: isBooked ? 'none' : 'auto',
+            <button type="button" onClick={openRequest} className="pub-btn" style={{
+              background: '#1B4F8A', color: '#fff', borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              padding: '13px 18px', fontSize: '0.875rem', fontWeight: 700,
+              flexShrink: 0, letterSpacing: '0.01em', textAlign: 'center',
+              boxShadow: '0 4px 16px rgba(27,79,138,0.3)',
             }}>
-              {isBooked ? 'Currently booked' : 'Book this board'}
-            </a>
+              {isBooked ? <>Currently booked<br /><span style={{ fontSize: '0.75rem', fontWeight: 600, opacity: 0.85 }}>Request future dates</span></> : 'Request this location'}
+            </button>
           </div>
+
+          {/* ── Request form ── */}
+          <RequestLocation board={{ id: board.id, name: board.name, status: board.status }} />
 
           {/* ── Details grid ── */}
           <div style={{ background: '#fff', margin: '8px 0', borderTop: '1px solid #F1F5F9', borderBottom: '1px solid #F1F5F9' }}>

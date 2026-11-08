@@ -279,7 +279,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
                 boxSizing: 'border-box',
               }}
             >
-              View full listing{effectiveRate(board) ? ` — ${rateText(board)}/mo` : ''}
+              View &amp; request this location{effectiveRate(board) ? ` — ${rateText(board)}/mo` : ''}
             </a>
           ) : board.status === 'booked' ? (
             <button
@@ -290,7 +290,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
                 cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', boxSizing: 'border-box',
               }}
             >
-              This board is currently booked — join waitlist →
+              Currently booked — request future dates →
             </button>
           ) : (
             <div style={{ background: '#F8FAFC', borderRadius: 10, padding: '12px 16px', textAlign: 'center' }}>
@@ -368,9 +368,11 @@ function MarketplaceContent() {
   const states = ['all', ...Array.from(new Set(boards.map(b => b.state))).sort()];
   const formats = ['all', ...Array.from(new Set(boards.map(b => b.format))).sort()];
 
+  // Booked boards can still be requested for future dates.
   function handleQuote() {
+    const id = selected?.id;
     setSelected(null);
-    router.push('/auth/login?from=marketplace');
+    if (id) router.push(`/boards/${id}?request=1`);
   }
 
   return (

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { signInWithEmail, getSession, getCurrentProfile, signOut, DEMO_CREDENTIALS } from '@/lib/auth';
 import { ROLE_STORAGE_KEY, type DemoRole } from '@/lib/constants';
 import { supabase } from '@/lib/supabase';
+import { safeRedirect } from '@/lib/safe-redirect';
 
 function OOHLogoLarge() {
   return (
@@ -39,9 +40,12 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const fromParam = searchParams.get('from');
   const errorParam = searchParams.get('error');
+  // e.g. back to the board a buyer was requesting, or the page that sent them here
+  const redirectParam = safeRedirect(searchParams.get('redirect'));
 
   // Resolve where to send the user after login
   function postLoginRedirect(role: string) {
+    if (redirectParam) return redirectParam;
     if (fromParam === 'marketplace') return '/marketplace';
     return `/dashboard/${role}`;
   }
@@ -367,7 +371,7 @@ function LoginContent() {
 
           <p style={{ textAlign: 'center', fontSize: '0.8125rem', color: '#94A3B8', margin: '-8px 0 20px' }}>
             Don&apos;t have an account?{' '}
-            <a href="/signup" style={{ color: '#1B4F8A', fontWeight: 600, textDecoration: 'none' }}>Create one</a>
+            <a href={redirectParam ? `/signup?redirect=${encodeURIComponent(redirectParam)}` : '/signup'} style={{ color: '#1B4F8A', fontWeight: 600, textDecoration: 'none' }}>Create one</a>
           </p>
 
           {/* Divider */}
