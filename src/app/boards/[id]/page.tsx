@@ -5,6 +5,11 @@ import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { attachVisibleRates } from '@/lib/board-rates';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
+import { VerificationBadge, VERIFICATION_META, verificationOf, formatVerifiedDate, dimensionsText, illuminationText, locationText, UNKNOWN } from '@/lib/board-verification';
+
+// Direct WhatsApp contact lets buyers go around the platform. Off for the MVP:
+// requests go through the platform so the team can follow them up.
+const SHOW_DIRECT_CONTACT = false;
 
 type Board = {
   id: string;
@@ -16,14 +21,17 @@ type Board = {
   width: number | null;
   height: number | null;
   face_count: number | null;
-  illuminated: boolean;
-  asking_rate: number;
+  illuminated: boolean | null;
+  asking_rate: number | null;
   latitude: number | null;
   longitude: number | null;
   status: string;
   notes: string | null;
   photo_urls: string[] | null;
   contact_phone: string | null;
+  area: string | null;
+  verification_status: string | null;
+  last_verified_at: string | null;
 };
 
 type ActiveListing = { sell_price: number; badge: TrustBadge } | null;
@@ -244,7 +252,7 @@ export default function PublicBoardPage() {
                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
               </svg>
               <span style={{ fontSize: '0.875rem', lineHeight: 1.5 }}>
-                {board.address}, {board.city}, {board.state}
+                {locationText(board)}
                 <span style={{ display: 'inline-block', marginLeft: 6, fontSize: '0.75rem', color: '#1B4F8A', fontWeight: 600 }}>View on map ↗</span>
               </span>
             </a>
@@ -254,11 +262,14 @@ export default function PublicBoardPage() {
           <div style={{ background: '#fff', padding: '16px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
             <div>
               <p style={{ fontSize: '0.625rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>Asking rate</p>
-              <p style={{ fontSize: '1.625rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.03em', lineHeight: 1, fontFamily: "'DM Mono', 'Courier New', monospace", marginBottom: 6 }}>
-                {effectiveRate ? formatNaira(effectiveRate) : 'Contact for rate'}
+              <p style={{ fontSize: effectiveRate ? '1.625rem' : '1.125rem', fontWeight: 800, color: '#0F172A', letterSpacing: effectiveRate ? '-0.03em' : '-0.01em', lineHeight: 1.1, fontFamily: effectiveRate ? "'DM Mono', 'Courier New', monospace" : 'inherit', marginBottom: 6, whiteSpace: 'nowrap' }}>
+                {effectiveRate ? formatNaira(effectiveRate) : 'Request quote'}
                 {!!effectiveRate && <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#94A3B8', letterSpacing: 0, fontFamily: 'inherit' }}>/mo</span>}
               </p>
-              <TrustBadgePill badge={activeListing?.badge ?? 'Verified Owner'} small />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                <VerificationBadge status={board.verification_status} small />
+                {activeListing && <TrustBadgePill badge={activeListing.badge} small />}
+              </div>
             </div>
             <a href="/auth/login" className="pub-btn" style={{
               background: isBooked ? '#94A3B8' : '#1B4F8A',
@@ -279,16 +290,18 @@ export default function PublicBoardPage() {
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', padding: '4px 16px 12px' }}>
               {[
-                { label: 'Dimensions', value: board.width && board.height ? `${board.width}m × ${board.height}m` : '—' },
-                { label: 'Format',     value: FORMAT_LABELS[board.format] || board.format },
-                { label: 'Faces',      value: board.face_count ? String(board.face_count) : '1' },
-                { label: 'Illuminated', value: board.illuminated ? 'Yes ✦' : 'No' },
-                { label: 'City',       value: board.city },
-                { label: 'State',      value: board.state },
+                { label: 'Dimensions',   value: dimensionsText(board.width, board.height) },
+                { label: 'Format',       value: FORMAT_LABELS[board.format] || board.format || UNKNOWN },
+                { label: 'Illumination', value: illuminationText(board.illuminated) },
+                { label: 'Area',         value: board.area || UNKNOWN },
+                { label: 'City',         value: board.city || UNKNOWN },
+                { label: 'State',        value: board.state || UNKNOWN },
+                { label: 'Verification', value: VERIFICATION_META[verificationOf(board)].label },
+                { label: 'Last verified', value: formatVerifiedDate(board.last_verified_at) ?? 'Not yet verified' },
               ].map(({ label, value }) => (
                 <div key={label} style={{ padding: '10px 0', borderBottom: '1px solid #F8FAFC' }}>
                   <p style={{ fontSize: '0.6875rem', color: '#94A3B8', marginBottom: 3 }}>{label}</p>
-                  <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A' }}>{value}</p>
+                  <p style={{ fontSize: value === UNKNOWN ? '0.8125rem' : '0.9375rem', fontWeight: value === UNKNOWN ? 500 : 600, color: value === UNKNOWN ? '#94A3B8' : '#0F172A' }}>{value}</p>
                 </div>
               ))}
             </div>
@@ -304,7 +317,7 @@ export default function PublicBoardPage() {
 
           {/* ── Action buttons ── */}
           <div style={{ padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {board.contact_phone && (
+            {SHOW_DIRECT_CONTACT && board.contact_phone && (
               <a href={`https://wa.me/${wa}?text=${waMsg}`} target="_blank" rel="noopener noreferrer" className="pub-btn"
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,

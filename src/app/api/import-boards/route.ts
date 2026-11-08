@@ -11,7 +11,9 @@ type InsertRow = {
   name: string;
   address?: string;
   city: string;
+  area?: string;
   state?: string;
+  illuminated?: boolean | null;
   format: string;
   width?: number | null;
   height?: number | null;
@@ -35,13 +37,19 @@ export async function POST(req: NextRequest) {
     // A marketer or owner admin imports on behalf of their owner company
     // (migration 035); a marketer's rows are assigned to them.
     const { data: company } = await supabaseAdmin.rpc('owner_company_of', { p_uid: user.id });
-    const ownerId = (company as string | null) ?? user.id;
+    // Only a board owner or a member of an owner's team may import. Without
+    // this, any signed-in account could create boards under its own name.
+    const ownerId = company as string | null;
+    if (!ownerId) {
+      return NextResponse.json({ error: 'Only board owners and their teams can import boards' }, { status: 403 });
+    }
     const { data: isAdmin } = ownerId === user.id ? { data: true } : await supabaseAdmin.rpc('is_owner_admin', { p_owner_id: ownerId, p_uid: user.id });
 
     const payload = rows.map(r => ({
       name: String(r.name).trim(),
       address: String(r.address ?? '').trim() || null,
       city: String(r.city ?? '').trim() || null,
+      area: String(r.area ?? '').trim() || null,
       state: String(r.state ?? '').trim() || null,
       format: r.format,
       width: r.width ?? null,
@@ -56,7 +64,12 @@ export async function POST(req: NextRequest) {
       created_by: user.id,
       assigned_marketer_id: isAdmin ? null : user.id,
       face_count: 1,
-      illuminated: false,
+      // unknown stays unknown — never default to "not illuminated"
+      illuminated: typeof r.illuminated === 'boolean' ? r.illuminated : null,
+      // The owner's own team is importing its own boards (this route runs as
+      // the service role, which the 042 trigger trusts to set this).
+      verification_status: 'partner_verified',
+      last_verified_at: new Date().toISOString(),
     }));
 
     const { data, error } = await supabaseAdmin.from('boards').insert(payload).select('id');

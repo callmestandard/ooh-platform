@@ -13,6 +13,7 @@ import { getActivityActor, logActivity } from '@/lib/activity-log';
 import PrintStatusPanel from '@/components/print/PrintStatusPanel';
 import { attachVisibleRates } from '@/lib/board-rates';
 import { type PrintTask, PRINT_STATUS_LABELS, PRINT_STATUS_STYLE, fetchPrintTasksForBookings } from '@/lib/print-tasks';
+import { VerificationBadge } from '@/lib/board-verification';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,8 @@ type Board = {
   rate_card: RateCardData | null;
   photo_urls: string[] | null;
   contact_phone: string | null;
+  area: string | null;
+  verification_status: string | null;
   created_at: string;
 };
 
@@ -71,6 +74,7 @@ type BoardForm = {
   format: string;
   address: string;
   city: string;
+  area: string;
   state: string;
   width: string;
   height: string;
@@ -83,7 +87,7 @@ type BoardForm = {
 };
 
 const EMPTY_FORM: BoardForm = {
-  name: '', format: 'billboard', address: '', city: '', state: '',
+  name: '', format: 'billboard', address: '', city: '', area: '', state: '',
   width: '', height: '', asking_rate: '', face_count: '1',
   illuminated: false, latitude: '', longitude: '', contact_phone: '',
 };
@@ -698,6 +702,7 @@ function OwnerContent() {
       format: board.format,
       address: board.address || '',
       city: board.city || '',
+      area: board.area || '',
       state: board.state || '',
       width: board.width ? String(board.width) : '',
       height: board.height ? String(board.height) : '',
@@ -713,7 +718,7 @@ function OwnerContent() {
   }
 
   async function saveBoard() {
-    if (!form.name || !form.format || !form.city || !form.asking_rate) return;
+    if (!form.name || !form.format || !form.city) return;
     setSaving(true);
 
     const payload = {
@@ -721,10 +726,12 @@ function OwnerContent() {
       format: form.format,
       address: form.address.trim() || null,
       city: form.city.trim(),
+      area: form.area.trim() || null,
       state: form.state || null,
       width: form.width ? parseFloat(form.width) : null,
       height: form.height ? parseFloat(form.height) : null,
-      asking_rate: parseFloat(form.asking_rate),
+      // blank = buyers see "Request quote"
+      asking_rate: form.asking_rate ? parseFloat(form.asking_rate) : null,
       face_count: parseInt(form.face_count) || 1,
       illuminated: form.illuminated,
       latitude: form.latitude ? parseFloat(form.latitude) : null,
@@ -987,7 +994,7 @@ function OwnerContent() {
                       )}
                     </td>
                     <td style={{ padding: '13px 16px', fontSize: '0.8125rem', color: '#475569', whiteSpace: 'nowrap' }}>
-                      {[board.city, board.state].filter(Boolean).join(', ') || '—'}
+                      {[board.area, board.city, board.state].filter(Boolean).join(', ') || '—'}
                     </td>
                     <td style={{ padding: '13px 16px' }}>
                       <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#475569', background: '#F1F5F9', padding: '2px 7px', borderRadius: '4px' }}>
@@ -998,10 +1005,15 @@ function OwnerContent() {
                       {board.width && board.height ? `${board.width}m × ${board.height}m` : '—'}
                     </td>
                     <td style={{ padding: '13px 16px', fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                      {formatNaira(board.asking_rate)}<span style={{ fontSize: '0.6875rem', fontWeight: 400, color: '#94A3B8' }}>/mo</span>
+                      {board.asking_rate
+                        ? <>{formatNaira(board.asking_rate)}<span style={{ fontSize: '0.6875rem', fontWeight: 400, color: '#94A3B8' }}>/mo</span></>
+                        : <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#94A3B8', fontFamily: 'inherit' }}>Request quote</span>}
                     </td>
                     <td style={{ padding: '13px 16px' }}>
-                      <BoardStatusPill status={board.status} />
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                        <BoardStatusPill status={board.status} />
+                        <VerificationBadge status={board.verification_status} small />
+                      </div>
                     </td>
                     <td style={{ padding: '13px 16px' }}>
                       <div className="row-actions" style={{ display: 'flex', gap: 4 }}>
@@ -1765,6 +1777,11 @@ function OwnerContent() {
               </div>
 
               <div style={{ marginBottom: 14 }}>
+                <FieldLabel>Area</FieldLabel>
+                <FieldInput value={form.area} onChange={v => setForm(f => ({ ...f, area: v }))} placeholder="e.g. Ikeja GRA, Lekki Phase 1, Wuse 2" />
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
                 <FieldLabel>WhatsApp / contact phone</FieldLabel>
                 <FieldInput value={form.contact_phone} onChange={v => setForm(f => ({ ...f, contact_phone: v }))} placeholder="e.g. 08012345678" />
               </div>
@@ -1800,8 +1817,8 @@ function OwnerContent() {
                   <FieldInput type="number" value={form.height} onChange={v => setForm(f => ({ ...f, height: v }))} placeholder="e.g. 4" />
                 </div>
                 <div>
-                  <FieldLabel>Asking rate (₦/month) *</FieldLabel>
-                  <FieldInput type="number" value={form.asking_rate} onChange={v => setForm(f => ({ ...f, asking_rate: v }))} placeholder="e.g. 450000" required />
+                  <FieldLabel>Asking rate (₦/month)</FieldLabel>
+                  <FieldInput type="number" value={form.asking_rate} onChange={v => setForm(f => ({ ...f, asking_rate: v }))} placeholder="Blank = Request quote" />
                 </div>
               </div>
 
@@ -1904,13 +1921,13 @@ function OwnerContent() {
 
               <button
                 onClick={saveBoard}
-                disabled={saving || !form.name || !form.city || !form.asking_rate}
+                disabled={saving || !form.name || !form.city}
                 style={{
                   width: '100%', padding: '12px',
-                  background: saving || !form.name || !form.city || !form.asking_rate ? '#94A3B8' : '#7C3AED',
+                  background: saving || !form.name || !form.city ? '#94A3B8' : '#7C3AED',
                   color: '#fff', border: 'none', borderRadius: '8px',
                   fontSize: '0.875rem', fontWeight: 600,
-                  cursor: saving || !form.name || !form.city || !form.asking_rate ? 'not-allowed' : 'pointer',
+                  cursor: saving || !form.name || !form.city ? 'not-allowed' : 'pointer',
                   fontFamily: 'inherit',
                 }}
               >

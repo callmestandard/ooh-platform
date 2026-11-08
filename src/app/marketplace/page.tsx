@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { attachVisibleRates } from '@/lib/board-rates';
 import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
+import { VerificationBadge, dimensionsText, illuminationText, locationText, UNKNOWN } from '@/lib/board-verification';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -16,20 +17,28 @@ type Board = {
   city: string;
   state: string;
   format: string;
-  asking_rate: number;
-  width: number;
-  height: number;
-  illuminated: boolean;
-  face_count: number;
+  asking_rate: number | null;
+  width: number | null;
+  height: number | null;
+  illuminated: boolean | null;
+  face_count: number | null;
   status: 'available' | 'booked' | 'unavailable' | 'decommissioned';
   photo_urls: string[] | null;
+  area: string | null;
+  verification_status: string | null;
   activeListing?: { id: string; sell_price: number; badge: TrustBadge } | null;
 };
 
 /** The price an agency actually pays: the agent's sell price when the
  * board has an active listing, otherwise the owner's own asking rate. */
-function effectiveRate(board: Board) {
-  return board.activeListing ? board.activeListing.sell_price : board.asking_rate;
+function effectiveRate(board: Board): number | null {
+  return board.activeListing ? board.activeListing.sell_price : (board.asking_rate || null);
+}
+
+/** The rate as shown to buyers; a board without a visible rate is quoted on request. */
+function rateText(board: Board): string {
+  const r = effectiveRate(board);
+  return r ? formatNaira(r) : 'Request quote';
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -217,7 +226,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
         ) : (
           <div style={{ background: '#F8FAFC', padding: '24px 24px 0', borderBottom: '1px solid #F1F5F9' }}>
             <div style={{ maxWidth: 300, margin: '0 auto' }}>
-              <BoardMockup format={board.format} illuminated={board.illuminated} status={board.status} />
+              <BoardMockup format={board.format} illuminated={!!board.illuminated} status={board.status} />
             </div>
           </div>
         )}
@@ -229,7 +238,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
               <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
                 {board.name}
               </h2>
-              <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0 }}>{board.address}</p>
+              <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0 }}>{locationText(board)}</p>
             </div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: 4, marginTop: -4 }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -240,23 +249,24 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
             {[
-              { label: 'Format',      value: FORMAT_LABELS[board.format] ?? board.format },
-              { label: 'Dimensions',  value: `${board.width}m × ${board.height}m` },
-              { label: 'Location',    value: `${board.city}, ${board.state}` },
-              { label: 'Faces',       value: board.face_count === 1 ? 'Single face' : `${board.face_count} faces` },
-              { label: 'Illuminated', value: board.illuminated ? 'Yes — backlit' : 'No' },
-              { label: 'Monthly rate', value: formatNaira(effectiveRate(board)) },
+              { label: 'Format',       value: FORMAT_LABELS[board.format] ?? board.format ?? UNKNOWN },
+              { label: 'Dimensions',   value: dimensionsText(board.width, board.height) },
+              { label: 'Area',         value: board.area || UNKNOWN },
+              { label: 'City',         value: board.city || UNKNOWN },
+              { label: 'Illumination', value: illuminationText(board.illuminated) },
+              { label: 'Monthly rate', value: rateText(board) },
             ].map(({ label, value }) => (
               <div key={label} style={{ background: '#F8FAFC', borderRadius: 10, padding: '10px 14px' }}>
                 <p style={{ fontSize: '0.6875rem', color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 3px' }}>{label}</p>
-                <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: 0 }}>{value}</p>
+                <p style={{ fontSize: value === UNKNOWN ? '0.8125rem' : '0.875rem', fontWeight: value === UNKNOWN ? 500 : 600, color: value === UNKNOWN ? '#94A3B8' : '#0F172A', margin: 0 }}>{value}</p>
               </div>
             ))}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
             <StatusBadge status={board.status} />
-            <TrustBadgePill badge={board.activeListing?.badge ?? 'Verified Owner'} small />
+            <VerificationBadge status={board.verification_status} small />
+            {board.activeListing && <TrustBadgePill badge={board.activeListing.badge} small />}
           </div>
 
           {board.status === 'available' ? (
@@ -269,7 +279,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
                 boxSizing: 'border-box',
               }}
             >
-              View full listing — {formatNaira(effectiveRate(board))}/mo
+              View full listing{effectiveRate(board) ? ` — ${rateText(board)}/mo` : ''}
             </a>
           ) : board.status === 'booked' ? (
             <button
@@ -319,7 +329,7 @@ function MarketplaceContent() {
       const [{ data }, { data: listingsData }] = await Promise.all([
         supabase
           .from('boards')
-          .select('id, name, address, city, state, format, asking_rate, width, height, illuminated, face_count, status, photo_urls')
+          .select('id, name, address, city, state, area, format, asking_rate, width, height, illuminated, face_count, status, photo_urls, verification_status')
           .order('created_at', { ascending: false }),
         supabase.from('listings').select('id, board_id, sell_price, agent_id, board_authorizations(owner_verified)').eq('status', 'active'),
       ]);
@@ -345,7 +355,7 @@ function MarketplaceContent() {
       if (statusFilter !== 'all' && b.status !== statusFilter) return false;
       if (stateFilter !== 'all' && b.state !== stateFilter) return false;
       if (formatFilter !== 'all' && b.format !== formatFilter) return false;
-      if (effectiveRate(b) > priceMax) return false;
+      if ((effectiveRate(b) ?? 0) > priceMax) return false;
       if (search) {
         const q = search.toLowerCase();
         if (!b.name.toLowerCase().includes(q) && !b.address.toLowerCase().includes(q) && !b.city.toLowerCase().includes(q)) return false;
@@ -634,17 +644,23 @@ function MarketplaceContent() {
                   animation: `fadeUp 0.25s ease ${i * 0.03}s both`,
                 }}
               >
-                {/* Mockup */}
-                <div style={{ background: '#F8FAFC', padding: '20px 24px 10px', borderBottom: '1px solid #F1F5F9' }}>
-                  <BoardMockup format={board.format} illuminated={board.illuminated} status={board.status} />
-                </div>
+                {/* Photo when we have one, otherwise the format illustration */}
+                {board.photo_urls?.[0] ? (
+                  <div style={{ height: 170, overflow: 'hidden', background: '#0F172A', borderBottom: '1px solid #F1F5F9' }}>
+                    <img src={board.photo_urls[0]} alt={board.name} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  </div>
+                ) : (
+                  <div style={{ background: '#F8FAFC', padding: '20px 24px 10px', borderBottom: '1px solid #F1F5F9' }}>
+                    <BoardMockup format={board.format} illuminated={!!board.illuminated} status={board.status} />
+                  </div>
+                )}
 
                 {/* Info */}
                 <div style={{ padding: '14px 16px' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
                     <div>
                       <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: '0 0 3px', lineHeight: 1.3 }}>{board.name}</p>
-                      <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>{board.city}, {board.state}</p>
+                      <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>{[board.area, board.city].filter(Boolean).join(', ') || UNKNOWN}</p>
                     </div>
                     <StatusBadge status={board.status} />
                   </div>
@@ -653,23 +669,26 @@ function MarketplaceContent() {
                     <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#1B4F8A', background: '#EFF6FF', padding: '2px 8px', borderRadius: 999 }}>
                       {FORMAT_LABELS[board.format] ?? board.format}
                     </span>
-                    <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', background: '#F1F5F9', padding: '2px 8px', borderRadius: 999 }}>
-                      {board.width}m × {board.height}m
-                    </span>
+                    {board.width && board.height ? (
+                      <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', background: '#F1F5F9', padding: '2px 8px', borderRadius: 999 }}>
+                        {board.width}m × {board.height}m
+                      </span>
+                    ) : null}
                     {board.illuminated && (
                       <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#D97706', background: '#FFFBEB', padding: '2px 8px', borderRadius: 999 }}>
                         Illuminated
                       </span>
                     )}
-                    <TrustBadgePill badge={board.activeListing?.badge ?? 'Verified Owner'} small />
+                    <VerificationBadge status={board.verification_status} small />
+                    {board.activeListing && <TrustBadgePill badge={board.activeListing.badge} small />}
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
                       <p style={{ fontSize: '1.125rem', fontWeight: 800, color: '#1B4F8A', fontFamily: 'monospace', margin: 0, letterSpacing: '-0.02em' }}>
-                        {formatNaira(effectiveRate(board))}
+                        {rateText(board)}
                       </p>
-                      <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>per month</p>
+                      {effectiveRate(board) ? <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>per month</p> : null}
                     </div>
                     {board.status === 'available' && (
                       <button

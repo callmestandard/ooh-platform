@@ -9,6 +9,7 @@ import { formatNaira, formatDate } from '@/lib/utils';
 import type { ActivityEvent } from '@/lib/activity-log';
 import { useToast } from '@/components/ui/Toast';
 import { computeTrustBadge, TrustBadgePill } from '@/lib/agent-listings';
+import { VERIFICATION_META, verificationOf, formatVerifiedDate, type VerificationStatus } from '@/lib/board-verification';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,10 @@ type Board = {
   face_count: number;
   owner_id: string | null;
   created_at: string;
+  area: string | null;
+  verification_status: string | null;
+  last_verified_at: string | null;
+  source: string | null;
 };
 
 type Booking = {
@@ -243,7 +248,7 @@ function AdminContent() {
   async function fetchAll() {
     try {
       const [bRes, bookRes, campRes, compRes, profRes, actRes, disputedRes, payoutsRes] = await Promise.all([
-        supabase.from('boards').select('id, name, address, city, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at').order('created_at', { ascending: false }).limit(200),
+        supabase.from('boards').select('id, name, address, city, area, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at, verification_status, last_verified_at, source').order('created_at', { ascending: false }).limit(200),
         supabase.from('bookings').select('id, status, offered_rate, agreed_rate, start_date, end_date, duration_months, created_at, boards(name, city, format), campaigns(name, client_name)').order('created_at', { ascending: false }).limit(200),
         supabase.from('campaigns').select('id, name, client_name, status, total_budget, start_date, end_date, agency_id, created_at').order('created_at', { ascending: false }).limit(100),
         supabase.from('compliance_checks').select('id, booking_id, status, submitted_at, photo_url, notes').order('submitted_at', { ascending: false }).limit(100),
@@ -346,6 +351,16 @@ function AdminContent() {
     if (error) { showToast('Failed to flag', 'error'); return; }
     setCompliance(prev => prev.map(c => c.id === id ? { ...c, status: 'flagged' } : c));
     showToast('Flagged for review');
+  }
+
+  // The database stamps last_verified_at and blocks this for non-admins (042).
+  async function setBoardVerification(board: Board, next: VerificationStatus) {
+    if (next === verificationOf(board)) return;
+    const { data, error } = await supabase.from('boards').update({ verification_status: next }).eq('id', board.id)
+      .select('verification_status, last_verified_at').single();
+    if (error) { showToast(`Could not update ${board.name}: ${error.message}`, 'error'); return; }
+    setBoards(prev => prev.map(b => b.id === board.id ? { ...b, ...data } : b));
+    showToast(`${board.name} → ${VERIFICATION_META[next].label}`);
   }
 
   async function toggleBoardStatus(board: Board) {
@@ -814,7 +829,7 @@ function AdminContent() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#F8FAFC' }}>
-                    {['Board', 'Location', 'Format', 'Rate', 'Status', 'Listed', 'Actions'].map(h => (
+                    {['Board', 'Location', 'Format', 'Rate', 'Status', 'Verification', 'Listed', 'Actions'].map(h => (
                       <th key={h} style={{ padding: '10px 16px', fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'left', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -832,7 +847,7 @@ function AdminContent() {
                         </div>
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: '0.8125rem', color: '#475569', whiteSpace: 'nowrap' }}>
-                        {[board.city, board.state].filter(Boolean).join(', ') || '—'}
+                        {[board.area, board.city, board.state].filter(Boolean).join(', ') || '—'}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#475569', background: '#F1F5F9', padding: '2px 7px', borderRadius: 4, whiteSpace: 'nowrap' }}>
@@ -840,13 +855,32 @@ function AdminContent() {
                         </span>
                       </td>
                       <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>
-                        {formatNaira(board.asking_rate)}<span style={{ fontSize: '0.6875rem', fontWeight: 400, color: '#94A3B8' }}>/mo</span>
+                        {board.asking_rate
+                          ? <>{formatNaira(board.asking_rate)}<span style={{ fontSize: '0.6875rem', fontWeight: 400, color: '#94A3B8' }}>/mo</span></>
+                          : <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#94A3B8', fontFamily: 'inherit' }}>Request quote</span>}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: board.status === 'available' ? '#ECFDF5' : board.status === 'booked' ? '#EFF6FF' : '#FFFBEB', color: board.status === 'available' ? '#065F46' : board.status === 'booked' ? '#1E3A8A' : '#92400E', padding: '3px 9px', borderRadius: 999, fontSize: '0.6875rem', fontWeight: 600 }}>
                           <span style={{ width: 5, height: 5, borderRadius: '50%', background: board.status === 'available' ? '#10B981' : board.status === 'booked' ? '#3B82F6' : '#F59E0B' }} />
                           {board.status.charAt(0).toUpperCase() + board.status.slice(1)}
                         </span>
+                      </td>
+                      <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                        <select
+                          aria-label={`Verification for ${board.name}`}
+                          value={verificationOf(board)}
+                          onChange={e => setBoardVerification(board, e.target.value as VerificationStatus)}
+                          style={{ fontSize: '0.75rem', fontWeight: 600, padding: '4px 6px', borderRadius: 6, border: '1px solid #E2E8F0', fontFamily: 'inherit', background: VERIFICATION_META[verificationOf(board)].bg, color: VERIFICATION_META[verificationOf(board)].color }}
+                        >
+                          <option value="pending">Pending verification</option>
+                          <option value="verified">Verified (owner confirmed)</option>
+                          {/* Partner verified means the owner manages it here — only possible with an owner account. */}
+                          <option value="partner_verified" disabled={!board.owner_id}>Partner verified{board.owner_id ? '' : ' (needs owner account)'}</option>
+                        </select>
+                        <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '3px 0 0' }}>
+                          {formatVerifiedDate(board.last_verified_at) ? `Checked ${formatVerifiedDate(board.last_verified_at)}` : 'Never checked'}
+                          {board.source ? ` · ${board.source}` : ''}
+                        </p>
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94A3B8', whiteSpace: 'nowrap' }}>
                         {timeAgo(board.created_at)}

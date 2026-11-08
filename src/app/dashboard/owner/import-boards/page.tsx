@@ -27,9 +27,12 @@ type ImportRow = {
   name: string;
   address: string;
   city: string;
+  area: string;
   state: string;
   format: string;
   format_raw: string;
+  /** null when the sheet doesn't say — shown as "Information unavailable", never guessed. */
+  illuminated: boolean | null;
   width: number | null;
   height: number | null;
   asking_rate: number | null;
@@ -58,9 +61,11 @@ const FIELD_DEFS = [
   { field: 'format',       label: 'Format',        required: true },
   { field: 'asking_rate',  label: 'Monthly Rate',  required: false },
   { field: 'address',      label: 'Address',       required: false },
+  { field: 'area',         label: 'Area',          required: false },
   { field: 'state',        label: 'State',         required: false },
   { field: 'width',        label: 'Width (m)',      required: false },
   { field: 'height',       label: 'Height (m)',     required: false },
+  { field: 'illuminated',  label: 'Illuminated',   required: false },
   { field: 'latitude',     label: 'Latitude',      required: false },
   { field: 'longitude',    label: 'Longitude',     required: false },
   { field: 'notes',        label: 'Notes',         required: false },
@@ -69,11 +74,13 @@ const FIELD_DEFS = [
 const FIELD_HINTS: Record<string, string[]> = {
   name:        ['name', 'board name', 'site name', 'title', 'description', 'location name', 'board'],
   address:     ['address', 'location', 'street', 'site address', 'route', 'road'],
-  city:        ['city', 'town', 'lga', 'area'],
+  city:        ['city', 'town'],
+  area:        ['area', 'lga', 'neighbourhood', 'neighborhood', 'district', 'axis', 'zone', 'locality'],
   state:       ['state', 'region', 'province'],
   format:      ['format', 'type', 'board type', 'media type', 'face type', 'structure'],
   width:       ['width', 'w', 'width m', 'face width', 'breadth', 'w m'],
   height:      ['height', 'h', 'height m', 'face height', 'h m'],
+  illuminated: ['illuminated', 'illumination', 'lit', 'lighting', 'backlit', 'frontlit', 'light'],
   asking_rate: ['rate', 'price', 'cost', 'monthly rate', 'asking rate', 'amount', 'rental', 'tariff', 'fee', 'naira'],
   latitude:    ['lat', 'latitude', 'y coord', 'gps lat'],
   longitude:   ['lng', 'lon', 'longitude', 'long', 'x coord', 'gps lon'],
@@ -119,6 +126,15 @@ function parseRate(raw: unknown): number | null {
   if (suffix === 'm') return Math.round(n * 1_000_000);
   if (suffix === 'b') return Math.round(n * 1_000_000_000);
   return Math.round(n);
+}
+
+// Yes/no-style lighting values from owner decks. Anything unrecognised is null.
+function parseIlluminated(raw: string): boolean | null {
+  const v = raw.trim().toLowerCase();
+  if (!v) return null;
+  if (/^(no|n|none|unlit|non[- ]?lit|not lit|non[- ]?illuminated|false|0)$/.test(v)) return false;
+  if (/^(yes|y|lit|true|1|illuminated|backlit|back[- ]lit|frontlit|front[- ]lit|led|flood ?lit)$/.test(v)) return true;
+  return null;
 }
 
 function parseNumber(raw: unknown): number | null {
@@ -193,6 +209,8 @@ function validateRows(
     const asking_rate_raw = get(row, 'asking_rate');
     const address = get(row, 'address');
     const state = get(row, 'state');
+    const area = get(row, 'area');
+    const illuminated = parseIlluminated(get(row, 'illuminated'));
     const notes = get(row, 'notes');
 
     const format = normalizeFormat(format_raw);
@@ -261,7 +279,9 @@ function validateRows(
       name,
       address,
       city,
+      area,
       state,
+      illuminated,
       format: format ?? format_raw,
       format_raw,
       width,
@@ -562,7 +582,9 @@ export default function ImportBoardsPage() {
         name: r.name,
         address: r.address,
         city: r.city,
+        area: r.area,
         state: r.state,
+        illuminated: r.illuminated,
         format: normalizeFormat(r.format)!,
         width: r.width,
         height: r.height,

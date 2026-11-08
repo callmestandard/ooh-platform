@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { CityMapBoard } from './CityMap';
 import CityMap from './CityMapLoader';
 import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
+import { VerificationBadge } from '@/lib/board-verification';
 
 export const revalidate = 3600;
 
@@ -66,7 +67,9 @@ type DBBoard = {
   asking_rate: number;
   width: number | null;
   height: number | null;
-  illuminated: boolean;
+  illuminated: boolean | null;
+  area: string | null;
+  verification_status: string | null;
   photo_urls: string[] | null;
   latitude: number | null;
   longitude: number | null;
@@ -83,7 +86,7 @@ async function fetchCityData(cityName: string) {
   const db = getDB();
   const [boardsRes, allCitiesRes] = await Promise.all([
     db.from('boards')
-      .select('id, name, address, format, asking_rate, width, height, illuminated, photo_urls, latitude, longitude')
+      .select('id, name, address, area, format, asking_rate, width, height, illuminated, photo_urls, latitude, longitude, verification_status')
       .eq('status', 'available')
       .eq('city', cityName)
       .order('asking_rate', { ascending: false })
@@ -586,13 +589,14 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                         {board.name}
                       </h3>
                       <p style={{ color: '#64748B', fontSize: '0.75rem', margin: '0 0 12px', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                        {board.address}
+                        {[board.address, board.area].filter(Boolean).join(', ') || 'Information unavailable'}
                       </p>
+                      <div style={{ marginBottom: 10 }}><VerificationBadge status={board.verification_status} small /></div>
 
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <div>
                           <div style={{ color: '#0F172A', fontWeight: 700, fontSize: '0.9375rem', lineHeight: 1 }}>
-                            {board.asking_rate ? fmtRate(board.asking_rate) : 'Contact for rate'}
+                            {board.asking_rate ? fmtRate(board.asking_rate) : 'Request quote'}
                           </div>
                           {!!board.asking_rate && <div style={{ color: '#94A3B8', fontSize: '0.6875rem', marginTop: 2 }}>per month</div>}
                         </div>
