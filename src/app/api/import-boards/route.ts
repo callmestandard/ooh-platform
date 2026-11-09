@@ -36,6 +36,8 @@ const PHOTO_PREFIX = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/
 type AdminImport = {
   /** The owner account the boards belong to, or null for "no account yet" (claimable). */
   ownerId: string | null;
+  /** The owner's name when they have no account yet (admin-only record). */
+  ownerName?: string | null;
   /** Where the records came from, e.g. "Sule Outdoor deck, Oct 2026". */
   source: string;
   verification: 'pending' | 'verified';
@@ -166,5 +168,14 @@ async function adminImport(uid: string, rows: InsertRow[], admin: AdminImport) {
     console.error('[import-boards admin]', error);
     return NextResponse.json({ inserted: 0, error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ inserted: data?.length ?? 0, ids: (data ?? []).map(d => d.id) });
+  const ids = (data ?? []).map(d => d.id as string);
+  // Remember who owns boards whose owner has no account yet (admins only see this).
+  const ownerName = ownerId ? '' : String(admin.ownerName ?? '').trim().slice(0, 200);
+  if (ownerName && ids.length) {
+    const { error: nameError } = await supabaseAdmin.from('board_owner_names').upsert(
+      ids.map(id => ({ board_id: id, owner_name: ownerName, updated_by: uid, updated_at: new Date().toISOString() })),
+    );
+    if (nameError) console.error('[import-boards admin] owner name', nameError);
+  }
+  return NextResponse.json({ inserted: ids.length, ids });
 }

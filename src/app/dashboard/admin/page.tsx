@@ -207,6 +207,8 @@ function AdminContent() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [compliance, setCompliance] = useState<ComplianceCheck[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  // Owner names typed by our team for boards whose owner has no account yet.
+  const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
   const [disputedAuths, setDisputedAuths] = useState<DisputedAuthorization[]>([]);
   const [resolvingAuth, setResolvingAuth] = useState<string | null>(null);
@@ -276,6 +278,8 @@ function AdminContent() {
       ]);
       if (bRes.error) throw bRes.error;
       if (bRes.data) setBoards(await attachVisibleRates(bRes.data as Board[]));
+      supabase.from('board_owner_names').select('board_id, owner_name').then(({ data }) =>
+        setOwnerNames(Object.fromEntries(((data as { board_id: string; owner_name: string }[]) || []).map(r => [r.board_id, r.owner_name]))));
 
       // The rest are non-fatal individually (one tab's data shouldn't
       // block the whole page), but a silent failure here previously meant
@@ -875,6 +879,15 @@ function AdminContent() {
                           <div>
                             <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>{board.name}</p>
                             {board.address && <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{board.address}</p>}
+                            {(() => {
+                              const acct = board.owner_id ? profiles.find(p => p.id === board.owner_id) : null;
+                              const name = acct ? acct.company_name || acct.full_name : board.owner_id ? null : ownerNames[board.id];
+                              return (
+                                <p data-board-owner style={{ fontSize: '0.6875rem', color: board.owner_id || name ? '#475569' : '#B45309', margin: '2px 0 0', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {board.owner_id ? `Owner: ${name || 'account'}` : name ? `Owner: ${name} · no account yet` : 'Owner unknown · unclaimed'}
+                                </p>
+                              );
+                            })()}
                           </div>
                         </div>
                       </td>

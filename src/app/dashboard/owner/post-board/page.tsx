@@ -10,6 +10,7 @@ import { MVP_MODE } from '@/lib/mvp';
 import { createNotification } from '@/lib/notifications';
 import LocationPinPickerLoader from './LocationPinPickerLoader';
 import LocationSearch from './LocationSearch';
+import OwnerPicker, { type OwnerAccount, type OwnerChoice } from '@/components/admin/OwnerPicker';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -247,8 +248,8 @@ function PostBoardContent() {
   const router = useRouter();
   // Admins use this same form to add a board for an owner, or as unclaimed.
   const adminMode = useDashboardRole() === 'admin';
-  const [owners, setOwners] = useState<{ id: string; label: string }[]>([]);
-  const [adminOwner, setAdminOwner] = useState('');
+  const [owners, setOwners] = useState<OwnerAccount[]>([]);
+  const [adminOwner, setAdminOwner] = useState<OwnerChoice>({ ownerId: null, ownerName: '' });
   const [adminSource, setAdminSource] = useState('');
   const [adminVerification, setAdminVerification] = useState<'pending' | 'verified'>('pending');
   const [area, setArea] = useState('');
@@ -289,7 +290,7 @@ function PostBoardContent() {
     if (adminMode) {
       supabase.from('profiles').select('id, full_name, company_name, email').eq('role', 'owner').order('company_name')
         .then(({ data }) => setOwners(((data as { id: string; full_name: string | null; company_name: string | null; email: string | null }[]) || [])
-          .map(o => ({ id: o.id, label: o.company_name || o.full_name || o.email || o.id }))));
+          .map(o => ({ id: o.id, label: o.company_name || o.full_name || o.email || o.id, email: o.email }))));
       return;
     }
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -433,7 +434,7 @@ function PostBoardContent() {
       const res = await authedFetch('/api/import-boards', {
         method: 'POST',
         body: JSON.stringify({
-          admin: { ownerId: adminOwner || null, source: adminSource.trim(), verification: adminVerification },
+          admin: { ownerId: adminOwner.ownerId, ownerName: adminOwner.ownerId ? null : adminOwner.ownerName.trim() || null, source: adminSource.trim(), verification: adminVerification },
           rows: [{
             name: boardName.trim(), address: address.trim(), area: area.trim(), city, state: state || '',
             format, width: width ? parseFloat(width) : null, height: height ? parseFloat(height) : null,
@@ -522,7 +523,9 @@ function PostBoardContent() {
   // ── Success screen ────────────────────────────────────────────────────────────
 
   if (done && adminMode) {
-    const ownerLabel = adminOwner ? owners.find(o => o.id === adminOwner)?.label ?? 'the chosen owner' : 'unclaimed';
+    const ownerLabel = adminOwner.ownerId
+      ? `on ${owners.find(o => o.id === adminOwner.ownerId)?.label ?? 'the chosen owner'}'s account`
+      : adminOwner.ownerName.trim() ? `unclaimed, owner: ${adminOwner.ownerName.trim()}` : 'unclaimed';
     return (
       <div data-admin-board-done style={{ maxWidth: 560, margin: '0 auto', textAlign: 'center', padding: '3rem 0' }}>
         <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', fontSize: '2.5rem', color: '#059669' }}>
@@ -684,8 +687,10 @@ function PostBoardContent() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
               <div style={{ gridColumn: '1 / -1' }}>
                 <FieldLabel>Owner</FieldLabel>
-                <Select value={adminOwner} onChange={setAdminOwner} placeholder="No owner account yet (unclaimed)"
-                  options={owners.map(o => ({ value: o.id, label: o.label }))} />
+                <OwnerPicker owners={owners} value={adminOwner} onChange={setAdminOwner} />
+                <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '4px 0 0' }}>
+                  Pick their account if they have one; otherwise type their name and it’s kept for our team only
+                </p>
               </div>
               <div>
                 <FieldLabel required>Source</FieldLabel>
