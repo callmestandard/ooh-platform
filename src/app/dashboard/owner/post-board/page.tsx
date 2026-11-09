@@ -10,6 +10,8 @@ import { MVP_MODE } from '@/lib/mvp';
 import { createNotification } from '@/lib/notifications';
 import LocationPinPickerLoader from './LocationPinPickerLoader';
 import LocationSearch from './LocationSearch';
+import SavedContacts from './SavedContacts';
+import { ownerContactKey } from '@/lib/owner-contacts';
 import OwnerPicker, { type OwnerAccount, type OwnerChoice } from '@/components/admin/OwnerPicker';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -295,6 +297,20 @@ function PostBoardContent() {
   const [boardName, setBoardName] = useState('');
   const [askingRate, setAskingRate] = useState('');
   const [availableFrom, setAvailableFrom] = useState(new Date().toISOString().slice(0, 10));
+  // Admin only (migration 049): the brand on the board now and when their campaign ends.
+  const [currentBrand, setCurrentBrand] = useState('');
+  const [brandEndsOn, setBrandEndsOn] = useState('');
+  const autoAvailable = useRef<string | null>(null);
+  function changeBrandEndsOn(v: string) {
+    setBrandEndsOn(v);
+    // Move "Available from" to the day after the campaign ends, unless it was set by hand.
+    const today = new Date().toISOString().slice(0, 10);
+    if (availableFrom === today || availableFrom === autoAvailable.current || !availableFrom) {
+      const next = v ? new Date(Date.parse(v) + 86400000).toISOString().slice(0, 10) : today;
+      autoAvailable.current = v ? next : null;
+      setAvailableFrom(next);
+    }
+  }
   const [notes, setNotes] = useState('');
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
@@ -459,6 +475,7 @@ function PostBoardContent() {
             latitude: latitude ? parseFloat(latitude) : null, longitude: longitude ? parseFloat(longitude) : null,
             notes: notes.trim(), face_count: faceCount, available_from: availableFrom || null,
             contact_name: contactName.trim() || null, contact_phone: contactPhone.trim() || null,
+            current_brand: currentBrand.trim() || null, brand_ends_on: brandEndsOn || null,
             photo_urls: photos.filter(p => p.url).map(p => p.url as string),
           }],
         }),
@@ -568,6 +585,7 @@ function PostBoardContent() {
               setCity(''); setState(''); setArea(''); setAddress(''); setLatitude(''); setLongitude('');
               setFormat('billboard'); setWidth(''); setHeight(''); setFaceCount(1); setIlluminated(false); setPhotos([]);
               setBoardName(''); setAskingRate(''); setNotes(''); setContactName(''); setContactPhone('');
+              setCurrentBrand(''); setBrandEndsOn(''); autoAvailable.current = null; setAvailableFrom(new Date().toISOString().slice(0, 10));
             }}
             style={{ background: '#fff', color: '#1B4F8A', border: '1.5px solid #1B4F8A', padding: '12px 28px', borderRadius: 10, fontSize: '0.9375rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
           >
@@ -1048,7 +1066,17 @@ function PostBoardContent() {
                 </div>
 
                 {/* Sales contact name + WhatsApp / contact phone */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                {adminMode && (
+                  <SavedContacts
+                    ownerKey={ownerContactKey(adminOwner.ownerId, adminOwner.ownerName)}
+                    ownerLabel={adminOwner.ownerId ? owners.find(o => o.id === adminOwner.ownerId)?.label ?? 'this owner' : adminOwner.ownerName.trim()}
+                    name={contactName}
+                    phone={contactPhone}
+                    onUse={(n, ph) => { setContactName(n); setContactPhone(ph); }}
+                  />
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
                   <div>
                     <FieldLabel>Sales contact name</FieldLabel>
                     <Input
@@ -1067,9 +1095,12 @@ function PostBoardContent() {
                     />
                   </div>
                 </div>
+                </div>
                 <div>
                   <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '4px 0 0' }}>
-                    Agencies will use this to call, WhatsApp, or SMS you directly about the board
+                    {adminMode
+                      ? 'Saved against this owner so you can reuse it on their next board'
+                      : 'Agencies will use this to call, WhatsApp, or SMS you directly about the board'}
                   </p>
                 </div>
 
@@ -1103,6 +1134,23 @@ function PostBoardContent() {
                     </p>
                   </div>
                 </div>
+
+                {/* Brand on the board now (admin only, optional) */}
+                {adminMode && (
+                  <div data-current-brand style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                    <div>
+                      <FieldLabel>Brand on the board now (optional)</FieldLabel>
+                      <Input value={currentBrand} onChange={setCurrentBrand} placeholder="e.g. MTN, Dangote, Indomie" />
+                    </div>
+                    <div>
+                      <FieldLabel>Their campaign ends (optional)</FieldLabel>
+                      <Input value={brandEndsOn} onChange={changeBrandEndsOn} type="date" />
+                    </div>
+                    <p style={{ gridColumn: '1 / -1', fontSize: '0.6875rem', color: '#94A3B8', margin: '-6px 0 0' }}>
+                      For our team only. The end date moves &quot;Available from&quot; to the next day, so buyers see when it frees up.
+                    </p>
+                  </div>
+                )}
 
                 {/* Available from */}
                 <div>

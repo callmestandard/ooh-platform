@@ -209,6 +209,8 @@ function AdminContent() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   // Owner names typed by our team for boards whose owner has no account yet.
   const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
+  // The brand on each board now and when their campaign ends (migration 049).
+  const [currentBrands, setCurrentBrands] = useState<Record<string, { brand: string | null; ends_on: string | null }>>({});
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
   const [disputedAuths, setDisputedAuths] = useState<DisputedAuthorization[]>([]);
   const [resolvingAuth, setResolvingAuth] = useState<string | null>(null);
@@ -280,6 +282,8 @@ function AdminContent() {
       if (bRes.data) setBoards(await attachVisibleRates(bRes.data as Board[]));
       supabase.from('board_owner_names').select('board_id, owner_name').then(({ data }) =>
         setOwnerNames(Object.fromEntries(((data as { board_id: string; owner_name: string }[]) || []).map(r => [r.board_id, r.owner_name]))));
+      supabase.from('board_current_brand').select('board_id, brand, ends_on').then(({ data }) =>
+        setCurrentBrands(Object.fromEntries(((data as { board_id: string; brand: string | null; ends_on: string | null }[]) || []).map(r => [r.board_id, r]))));
 
       // The rest are non-fatal individually (one tab's data shouldn't
       // block the whole page), but a silent failure here previously meant
@@ -885,6 +889,16 @@ function AdminContent() {
                               return (
                                 <p data-board-owner style={{ fontSize: '0.6875rem', color: board.owner_id || name ? '#475569' : '#B45309', margin: '2px 0 0', maxWidth: 240, lineHeight: 1.4 }}>
                                   {board.owner_id ? `Owner: ${name || 'account'}` : name ? `Owner: ${name} · no account yet` : 'Owner unknown · unclaimed'}
+                                </p>
+                              );
+                            })()}
+                            {currentBrands[board.id] && (() => {
+                              const cb = currentBrands[board.id];
+                              const ends = cb.ends_on ? new Date(cb.ends_on + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+                              const over = cb.ends_on ? cb.ends_on < new Date().toISOString().slice(0, 10) : false;
+                              return (
+                                <p data-current-brand-row style={{ fontSize: '0.6875rem', color: '#6D28D9', margin: '2px 0 0', maxWidth: 240, lineHeight: 1.4 }}>
+                                  {cb.brand ? `Showing: ${cb.brand}` : 'Current campaign'}{ends ? ` · ${over ? 'ended' : 'ends'} ${ends}` : ''}
                                 </p>
                               );
                             })()}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { ownerContactKey, cleanContact } from '@/lib/owner-contacts';
 import { requireAuth, unauthorized } from '@/lib/require-auth';
 
 const supabaseAdmin = createClient(
@@ -27,6 +28,9 @@ type InsertRow = {
   available_from?: string | null;
   contact_name?: string | null;
   contact_phone?: string | null;
+  /** Admin only: the brand on the board now and when their campaign ends (YYYY-MM-DD). */
+  current_brand?: string | null;
+  brand_ends_on?: string | null;
 };
 
 // Only photos uploaded to our own board-photos bucket are accepted.
@@ -176,6 +180,30 @@ async function adminImport(uid: string, rows: InsertRow[], admin: AdminImport) {
       ids.map(id => ({ board_id: id, owner_name: ownerName, updated_by: uid, updated_at: new Date().toISOString() })),
     );
     if (nameError) console.error('[import-boards admin] owner name', nameError);
+  }
+  // The brand on each board now (admins only, migration 049). Rows come back in insert order.
+  const brands = ids.map((id, i) => {
+    const brand = String(rows[i]?.current_brand ?? '').trim().slice(0, 120) || null;
+    const end = String(rows[i]?.brand_ends_on ?? '').trim();
+    const endsOn = /^\d{4}-\d{2}-\d{2}$/.test(end) && !Number.isNaN(Date.parse(end)) ? end : null;
+    return brand || endsOn ? { board_id: id, brand, ends_on: endsOn, updated_by: uid, updated_at: new Date().toISOString() } : null;
+  }).filter(Boolean);
+  if (brands.length) {
+    const { error: brandError } = await supabaseAdmin.from('board_current_brand').upsert(brands);
+    if (brandError) console.error('[import-boards admin] current brand', brandError);
+  }
+  // Remember the sales contacts used, so they can be picked next time for this owner.
+  const key = ownerContactKey(ownerId, ownerName);
+  if (key && ids.length) {
+    const seen = new Set<string>();
+    const contacts = rows.map(r => cleanContact(r.contact_name, r.contact_phone))
+      .filter(c => (c.contact_name || c.contact_phone) && !seen.has(`${c.contact_name}|${c.contact_phone}`) && seen.add(`${c.contact_name}|${c.contact_phone}`))
+      .map(c => ({ ...c, owner_key: key, created_by: uid, last_used_at: new Date().toISOString() }));
+    if (contacts.length) {
+      const { error: contactError } = await supabaseAdmin.from('owner_sales_contacts')
+        .upsert(contacts, { onConflict: 'owner_key,contact_name,contact_phone' });
+      if (contactError) console.error('[import-boards admin] sales contacts', contactError);
+    }
   }
   return NextResponse.json({ inserted: ids.length, ids });
 }
