@@ -11,6 +11,8 @@ const OUT_MAX_PX = 1600;
 
 async function loadImage(src: string): Promise<HTMLImageElement> {
   const img = new Image();
+  // Stored photos come from another host; without this the canvas can't be saved.
+  if (!src.startsWith('blob:') && !src.startsWith('data:')) img.crossOrigin = 'anonymous';
   img.src = src;
   await img.decode();
   return img;
@@ -168,7 +170,7 @@ export default function PhotoCropper({ src, title, onSave, onRemove, onClose }: 
             <div ref={frame} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
               style={{ position: 'relative', display: 'inline-block', lineHeight: 0, touchAction: 'none', userSelect: 'none' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={preview} alt="" draggable={false} style={{ maxWidth: '100%', maxHeight: '58vh', display: 'block' }} />
+              <img src={preview} alt="" draggable={false} crossOrigin={preview.startsWith('blob:') ? undefined : 'anonymous'} style={{ maxWidth: '100%', maxHeight: '58vh', display: 'block' }} />
               {/* Shade outside the crop box */}
               <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'rgba(0,0,0,0.55)', clipPath: `polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 ${box.y * 100}%, ${box.x * 100}% ${box.y * 100}%, ${box.x * 100}% ${(box.y + box.h) * 100}%, ${(box.x + box.w) * 100}% ${(box.y + box.h) * 100}%, ${(box.x + box.w) * 100}% ${box.y * 100}%, 0 ${box.y * 100}%)` }} />
               <div data-crop-box onPointerDown={e => start('move', e)}

@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/Toast';
 import { computeTrustBadge, TrustBadgePill } from '@/lib/agent-listings';
 import { VERIFICATION_META, verificationOf, formatVerifiedDate, type VerificationStatus } from '@/lib/board-verification';
 import { MVP_MODE, mvpTabs } from '@/lib/mvp';
+import BoardPhotosEditor from '@/components/admin/BoardPhotosEditor';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ type Board = {
   verification_status: string | null;
   last_verified_at: string | null;
   source: string | null;
+  photo_urls: string[] | null;
 };
 
 type Booking = {
@@ -244,6 +246,8 @@ function AdminContent() {
   const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'agency' | 'client' | 'owner'>('all');
   // toast
   const { toast: showToast } = useToast();
+  // Board whose photos are open in the photo editor.
+  const [photoBoard, setPhotoBoard] = useState<Board | null>(null);
   // platform settings
   const [settings, setSettings] = useState<AdminSettings>(DEFAULT_SETTINGS);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -269,7 +273,7 @@ function AdminContent() {
   async function fetchAll() {
     try {
       const [bRes, bookRes, campRes, compRes, profRes, actRes, disputedRes, payoutsRes] = await Promise.all([
-        supabase.from('boards').select('id, name, address, city, area, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at, verification_status, last_verified_at, source').order('created_at', { ascending: false }).limit(200),
+        supabase.from('boards').select('id, name, address, city, area, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at, verification_status, last_verified_at, source, photo_urls').order('created_at', { ascending: false }).limit(200),
         supabase.from('bookings').select('id, status, offered_rate, agreed_rate, start_date, end_date, duration_months, created_at, boards(name, city, format), campaigns(name, client_name)').order('created_at', { ascending: false }).limit(200),
         supabase.from('campaigns').select('id, name, client_name, status, total_budget, start_date, end_date, agency_id, created_at').order('created_at', { ascending: false }).limit(100),
         supabase.from('compliance_checks').select('id, booking_id, status, submitted_at, photo_url, notes').order('submitted_at', { ascending: false }).limit(100),
@@ -561,6 +565,9 @@ function AdminContent() {
         @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
         .fade { animation: fadeUp 0.25s ease forwards; opacity: 0; }
         .row-hover:hover { background: #FFF8F8 !important; }
+        .inv-photo-edit { position: absolute; inset: auto 0 0 0; background: rgba(15,23,42,0.68); color: #fff; font-size: 9px; font-weight: 600; line-height: 1.6; text-align: center; opacity: 0; transition: opacity .15s; }
+        .inv-photo:hover .inv-photo-edit, .inv-photo:focus-visible .inv-photo-edit { opacity: 1; }
+        @media (hover: none) { .inv-photo-edit { opacity: 1; } }
         .admin-filter-btn { padding: 5px 12px; border-radius: 6px; border: 1px solid #E2E8F0; font-size: 0.75rem; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.15s; }
         .admin-filter-btn.active { background: #DC2626; color: #fff; border-color: #DC2626; }
         .admin-filter-btn:not(.active) { background: #fff; color: #475569; }
@@ -879,7 +886,18 @@ function AdminContent() {
                     <tr key={board.id} className="row-hover fade" style={{ borderBottom: i < filteredBoards.length - 1 ? '1px solid #F8FAFC' : 'none', background: '#fff', animationDelay: `${i * 0.03}s` }}>
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ width: 34, height: 34, borderRadius: 8, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.9375rem' }}>🏗</div>
+                          <button type="button" data-inv-photo onClick={() => setPhotoBoard(board)}
+                            title={board.photo_urls?.length ? 'Edit photos' : 'Add a photo'} aria-label={`Photos for ${board.name}`}
+                            className="inv-photo"
+                            style={{ width: 52, height: 40, borderRadius: 8, background: '#F5F3FF', border: board.photo_urls?.length ? '1px solid #E2E8F0' : '1px dashed #C4B5FD', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.625rem', fontWeight: 600, color: '#7C3AED', padding: 0, cursor: 'pointer', overflow: 'hidden', position: 'relative', fontFamily: 'inherit', lineHeight: 1.2 }}>
+                            {board.photo_urls?.length ? (
+                              <>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={board.photo_urls[0]} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                                <span className="inv-photo-edit">Edit</span>
+                              </>
+                            ) : '+ Photo'}
+                          </button>
                           <div>
                             <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>{board.name}</p>
                             {board.address && <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{board.address}</p>}
@@ -945,6 +963,15 @@ function AdminContent() {
                         {timeAgo(board.created_at)}
                       </td>
                       <td style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <button
+                          type="button"
+                          data-edit-photos
+                          onClick={() => setPhotoBoard(board)}
+                          style={{ background: '#F5F3FF', color: '#6D28D9', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                        >
+                          {board.photo_urls?.length ? 'Edit photo' : 'Add photo'}
+                        </button>
                         {(board.status === 'available' || board.status === 'unavailable') && (
                           <button
                             onClick={() => toggleBoardStatus(board)}
@@ -956,6 +983,7 @@ function AdminContent() {
                         {(board.status === 'booked' || board.status === 'decommissioned') && (
                           <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>{board.status.charAt(0).toUpperCase() + board.status.slice(1)}</span>
                         )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1635,6 +1663,16 @@ function AdminContent() {
             </button>
           </div>
         </div>
+      )}
+
+      {photoBoard && (
+        <BoardPhotosEditor
+          boardId={photoBoard.id}
+          boardName={photoBoard.name}
+          photos={photoBoard.photo_urls ?? []}
+          onChange={next => setBoards(prev => prev.map(b => b.id === photoBoard.id ? { ...b, photo_urls: next } : b))}
+          onClose={() => setPhotoBoard(null)}
+        />
       )}
     </div>
   );
