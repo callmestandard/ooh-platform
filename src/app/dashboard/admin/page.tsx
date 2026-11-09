@@ -883,7 +883,7 @@ function AdminContent() {
                               const acct = board.owner_id ? profiles.find(p => p.id === board.owner_id) : null;
                               const name = acct ? acct.company_name || acct.full_name : board.owner_id ? null : ownerNames[board.id];
                               return (
-                                <p data-board-owner style={{ fontSize: '0.6875rem', color: board.owner_id || name ? '#475569' : '#B45309', margin: '2px 0 0', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <p data-board-owner style={{ fontSize: '0.6875rem', color: board.owner_id || name ? '#475569' : '#B45309', margin: '2px 0 0', maxWidth: 240, lineHeight: 1.4 }}>
                                   {board.owner_id ? `Owner: ${name || 'account'}` : name ? `Owner: ${name} · no account yet` : 'Owner unknown · unclaimed'}
                                 </p>
                               );
