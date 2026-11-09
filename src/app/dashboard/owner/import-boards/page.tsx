@@ -12,6 +12,7 @@ import { extractBoard, deckCity, findContact, DECK_COLUMNS } from '@/lib/deck-im
 import SavedContacts from '@/components/admin/SavedContacts';
 import PhotoCropper from '@/components/admin/PhotoCropper';
 import { ownerContactKey } from '@/lib/owner-contacts';
+import { geocodeBoard } from '@/lib/geocode-board';
 
 const PreviewMap = dynamic(() => import('./PreviewMap'), {
   ssr: false,
@@ -622,48 +623,31 @@ export default function ImportBoardsPage() {
 
   const runGeocode = useCallback(async (initialRows: ImportRow[]) => {
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-    if (!token) return;
-
     const toGeocode = initialRows.filter(r => r.selected && !r.latitude && !r.longitude && (r.city || r.address));
 
     for (const row of toGeocode) {
       if (geocodeAbort.current) break;
-
       setRows(prev => prev.map(r => r._id === row._id ? { ...r, geocoding: true } : r));
-
-      const q = [row.address, row.city, 'Nigeria'].filter(Boolean).join(', ');
       try {
-        const res = await fetch(
-          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${token}&country=ng&limit=1&types=address,place,neighborhood`,
-        );
-        if (res.ok) {
-          const data = await res.json();
-          const feature = data.features?.[0];
-          if (feature) {
-            const [lng, lat] = feature.center as [number, number];
-            // Only a street-address match with a strong score counts as confident;
-            // a match on just the town or neighbourhood is a rough guess.
-            const confident = (feature.place_type as string[] | undefined)?.includes('address') && Number(feature.relevance) >= 0.8;
-            const note = confident
-              ? 'Pin placed from the address (no GPS in the sheet) — verify it on the map'
-              : `Pin is a rough guess from "${feature.place_name ?? q}" (low confidence) — check and correct it`;
-            setRows(prev => prev.map(r => r._id === row._id ? {
-              ...r, latitude: lat, longitude: lng, geocoded: true, geocoding: false,
-              geocode_confidence: confident ? 'high' : 'low',
-              issues: [...r.issues, note], status: r.status === 'ready' ? 'warning' : r.status,
-            } : r));
-          } else {
-            markNotLocated(row._id);
-          }
+        // Landmarks, junctions and markets from the address, searched near the board's city.
+        const hit = await geocodeBoard({ address: row.address || row.name, name: row.name, area: row.area, city: row.city, state: row.state }, token);
+        if (hit) {
+          const note = hit.confidence === 'high'
+            ? `Pin placed at "${hit.label}" from the address (no GPS given). Check it on the map`
+            : `Pin is a rough guess ("${hit.label}"). Drag it to the right spot on the map`;
+          setRows(prev => prev.map(r => r._id === row._id ? {
+            ...r, latitude: hit.lat, longitude: hit.lng, geocoded: true, geocoding: false,
+            geocode_confidence: hit.confidence,
+            issues: [...r.issues, note], status: r.status === 'ready' ? 'warning' : r.status,
+          } : r));
         } else {
           markNotLocated(row._id);
         }
       } catch {
         markNotLocated(row._id);
       }
-
-      // 5 req/sec rate limit
-      await new Promise(res => setTimeout(res, 200));
+      // Stay polite to the free map search services.
+      await new Promise(res => setTimeout(res, 250));
     }
     setGeocodingDone(true);
   }, []);

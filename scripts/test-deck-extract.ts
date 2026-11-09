@@ -1,6 +1,7 @@
 // Checks the deck-reading rules against slides written the way owners do.
 //   npx tsx scripts/test-deck-extract.ts
-import { extractBoard, deckCity, findContact } from '../src/lib/deck-import/extract';
+import { extractBoard, deckCity, findContact, findCity } from '../src/lib/deck-import/extract';
+import { addressQueries } from '../src/lib/geocode-board';
 
 type Case = { name: string; lines: string[]; expect: Partial<Record<string, string>> | null };
 const cases: Case[] = [
@@ -55,5 +56,23 @@ for (const [input, want] of contactCases) {
   if (JSON.stringify(got) !== JSON.stringify(want)) { fail++; console.log('FAIL contact', JSON.stringify(input), '→', JSON.stringify(got), 'want', JSON.stringify(want)); }
   else console.log('PASS contact', want ? want.phone : 'none');
 }
+
+// Where the board is: road names that mention two cities don't count.
+const cityCases: [string, string | undefined][] = [
+  ['Along Lagos Ibadan Expressway By Park Iwo Road Ibadan', 'Ibadan'],
+  ['Sango Ota, Ogun State', 'Ota'],
+  ['Egbeda Toll Gate', 'Ibadan'],
+  ['Mokola Roundabout', 'Ibadan'],
+  ['Along Lagos-Abeokuta Expressway, Abule Egba, Lagos', 'Lagos'],
+  ['Ikorodu Road by Anthony', 'Lagos'],
+];
+for (const [text, want] of cityCases) {
+  const got = findCity(text)?.city;
+  if (got !== want) { fail++; console.log('FAIL city', text, '→', got, 'want', want); } else console.log('PASS city', want);
+}
+const q = addressQueries('Along Eko Bridge By Apongbon (GIRAFFE ) FTT Costain');
+if (q[0] !== 'Apongbon' || q.some(x => /costain|giraffe/i.test(x))) { fail++; console.log('FAIL queries', q); } else console.log('PASS queries', q.join(' | '));
+const q2 = addressQueries('Along Lagos Ibadan Expressway By Central Motor Park Iwo Road Ibadan');
+if (!q2.some(x => /^Iwo Road$/i.test(x)) || !q2.some(x => /Central Motor Park/i.test(x))) { fail++; console.log('FAIL queries 2', q2); } else console.log('PASS queries 2', q2.join(' | '));
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

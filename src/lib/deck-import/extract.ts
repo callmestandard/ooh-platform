@@ -68,13 +68,23 @@ const CITIES: [RegExp, string, string][] = [
   [/\bbauchi\b/i, 'Bauchi', 'Bauchi'],
   [/\bminna\b/i, 'Minna', 'Niger'],
   [/\bsagamu|shagamu\b/i, 'Sagamu', 'Ogun'],
+  [/\b(sango[\s-]?)?ota\b/i, 'Ota', 'Ogun'],
+  [/\bijebu[\s-]?ode\b/i, 'Ijebu Ode', 'Ogun'],
+  [/\bogbomo(so|sho)\b/i, 'Ogbomoso', 'Oyo'],
+  [/\bile[\s-]?ife\b/i, 'Ile-Ife', 'Osun'],
+  [/\bzaria\b/i, 'Zaria', 'Kaduna'],
 ];
+// Intercity roads name two cities ("Lagos Ibadan Expressway"); they say nothing
+// about where the board is, so they're ignored when looking for the city.
+const CITY_NAMES = String.raw`lagos|ibadan|abeokuta|benin|ore|ijebu[\s-]?ode|ilorin|oyo|ife|kaduna|abuja|kano|zaria|keffi|lokoja|onitsha|enugu|port[\s-]?harcourt|aba|owerri|badagry|epe|sagamu|shagamu|ota|idiroko|ikorodu|iwo|ogbomoso|akure|ilesha|ilesa|osogbo|sokoto|jos|makurdi|calabar|uyo|warri|asaba`;
+const INTERCITY_ROAD = new RegExp(String.raw`\b(?:${CITY_NAMES})(?:[\s/-]+(?:${CITY_NAMES}))+[\s/-]+(?:express\s?way|exp\.?|road|rd\.?|highway)\b`, 'gi');
 const LAGOS_AREAS = ['Victoria Island', 'Ikoyi', 'Lekki', 'Ajah', 'Ikeja', 'Surulere', 'Yaba', 'Maryland', 'Ojota', 'Apapa', 'Oshodi', 'Festac', 'Gbagada', 'Ikorodu', 'Mushin', 'Agege', 'Obalende', 'Marina', 'Ojuelegba', 'Ogba', 'Magodo', 'Ketu', 'Mile 2', 'Iyana Ipaja', 'Alausa', 'Allen', 'Opebi', 'Oregun', 'Anthony', 'Ilupeju', 'Palmgroove', 'Onipanu', 'Ebute Metta', 'Oyingbo', 'Costain', 'Ijora', 'Orile', 'Sangotedo', 'Chevron', 'Ikota', 'Osapa', 'Agungi', 'Oniru', 'Eko Atlantic', 'Third Mainland', '3rd Mainland', 'Eko Bridge', 'Carter Bridge', 'Ozumba Mbadiwe', 'Adeola Odeku', 'Admiralty', 'Awolowo Road', 'Ikorodu Road', 'Lekki-Epe', 'Apapa-Oshodi', 'Agidingbi', 'Toyin', 'Obafemi Awolowo Way'];
 const ABUJA_AREAS = ['Wuse', 'Garki', 'Maitama', 'Asokoro', 'Jabi', 'Utako', 'Gwarinpa', 'Kubwa', 'Lugbe', 'Apo', 'Lokogoma', 'Katampe', 'Life Camp', 'Durumi', 'Gudu', 'Wuye', 'Mabushi', 'Kado', 'Airport Road', 'Nyanya', 'Karu', 'Central Business District', 'CBD'];
+const IBADAN_AREAS = ['Mokola', 'Iwo Road', 'Dugbe', 'Challenge', 'Bodija', 'Ojoo', 'Agodi', 'Adeoyo', 'Apata', 'Ring Road', 'New Garage', 'Alesinloye', 'Alenshinloye', 'Oke Ado', 'Eleyele', 'Moniya', 'Akobo', 'Egbeda', 'Secretariat', 'Oluyole', 'Jericho', 'Samonda', 'Idi Ape', 'Oja Oba'];
 const PH_AREAS = ['GRA Phase', 'Trans Amadi', 'Rumuokoro', 'Rumuola', 'Eleme', 'Aba Road', 'Garrison', 'Choba', 'Woji', 'Rumuibekwe', 'Elelenwo'];
 
 function areaHit(text: string): { area: string; city: string; state: string } | null {
-  for (const [list, city, state] of [[LAGOS_AREAS, 'Lagos', 'Lagos'], [ABUJA_AREAS, 'Abuja', 'FCT'], [PH_AREAS, 'Port Harcourt', 'Rivers']] as const) {
+  for (const [list, city, state] of [[LAGOS_AREAS, 'Lagos', 'Lagos'], [ABUJA_AREAS, 'Abuja', 'FCT'], [PH_AREAS, 'Port Harcourt', 'Rivers'], [IBADAN_AREAS, 'Ibadan', 'Oyo']] as const) {
     for (const a of list) {
       if (new RegExp(`\\b${a.replace(/[-]/g, '[-\\s]?').replace(/ /g, '\\s+')}\\b`, 'i').test(text)) return { area: a.replace('3rd Mainland', 'Third Mainland'), city, state };
     }
@@ -82,7 +92,8 @@ function areaHit(text: string): { area: string; city: string; state: string } | 
   return null;
 }
 
-export function findCity(text: string): { city: string; state: string } | null {
+export function findCity(raw: string): { city: string; state: string } | null {
+  const text = raw.replace(INTERCITY_ROAD, ' ');
   for (const [re, city, state] of CITIES) if (re.test(text)) return { city, state };
   const a = areaHit(text);
   return a ? { city: a.city, state: a.state } : null;
