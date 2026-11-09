@@ -8,7 +8,9 @@ import { useToast } from '@/components/ui/Toast';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import OwnerPicker, { type OwnerAccount, type OwnerChoice } from '@/components/admin/OwnerPicker';
 import { readDeck } from '@/lib/deck-import/read';
-import { extractBoard, deckCity, DECK_COLUMNS } from '@/lib/deck-import/extract';
+import { extractBoard, deckCity, findContact, DECK_COLUMNS } from '@/lib/deck-import/extract';
+import SavedContacts from '@/components/admin/SavedContacts';
+import { ownerContactKey } from '@/lib/owner-contacts';
 
 const PreviewMap = dynamic(() => import('./PreviewMap'), {
   ssr: false,
@@ -45,6 +47,9 @@ type ImportRow = {
   notes: string;
   /** Number of faces, when the file says (1–10). */
   face_count: number | null;
+  /** Sales contact from the sheet; blank rows use the contact set for the whole import. */
+  contact_name: string;
+  contact_phone: string;
   /** Deck imports: key of the slide's photo in deckPhotos ('' if none). */
   photo_key: string;
   /** True when the row came from a deck slide (row_no is then the slide number). */
@@ -78,6 +83,8 @@ const FIELD_DEFS = [
   { field: 'latitude',     label: 'Latitude',      required: false },
   { field: 'longitude',    label: 'Longitude',     required: false },
   { field: 'faces',        label: 'Faces',         required: false },
+  { field: 'contact_name', label: 'Sales contact name', required: false },
+  { field: 'contact_phone', label: 'Contact phone / WhatsApp', required: false },
   { field: 'notes',        label: 'Notes',         required: false },
 ];
 
@@ -103,6 +110,8 @@ const FIELD_HINTS: Record<string, string[]> = {
   latitude:    ['lat', 'latitude', 'y coord', 'gps lat'],
   longitude:   ['lng', 'lon', 'longitude', 'long', 'x coord', 'gps lon'],
   faces:       ['faces', 'face', 'no of faces', 'number of faces', 'sides', 'no of sides'],
+  contact_name: ['contact name', 'contact person', 'sales contact', 'contact', 'marketer', 'sales rep', 'sales person', 'salesperson', 'account manager'],
+  contact_phone: ['phone', 'phone number', 'tel', 'telephone', 'mobile', 'whatsapp', 'contact number', 'contact phone', 'gsm', 'phone no'],
   notes:       ['notes', 'remarks', 'comments', 'details', 'info', 'other'],
 };
 
@@ -233,6 +242,8 @@ function validateRows(
     const notes = get(row, 'notes');
     const facesRaw = parseNumber(get(row, 'faces'));
     const face_count = facesRaw && Number.isInteger(facesRaw) && facesRaw >= 1 && facesRaw <= 10 ? facesRaw : null;
+    const contact_name = get(row, 'contact_name').slice(0, 120);
+    const contact_phone = get(row, 'contact_phone').slice(0, 40);
     const from_slide = row['__slide'] != null;
     const rowNo = from_slide ? Number(row['__slide']) : idx + 2;
 
@@ -315,6 +326,8 @@ function validateRows(
       longitude: longitude && !isNaN(longitude) ? longitude : null,
       notes,
       face_count,
+      contact_name,
+      contact_phone,
       photo_key: String(row['__photo'] ?? ''),
       from_slide,
       status,
@@ -405,6 +418,10 @@ export default function ImportBoardsPage() {
   const [deckPhotos, setDeckPhotos] = useState<Record<string, { blob: Blob; url: string }>>({});
   const [deckSummary, setDeckSummary] = useState<{ file: string; slides: number; boards: number; skipped: number[] } | null>(null);
   const [deckProgress, setDeckProgress] = useState('');
+  // Sales contact for every board in this import (a sheet's own contact columns win).
+  const [importContactName, setImportContactName] = useState('');
+  const [importContactPhone, setImportContactPhone] = useState('');
+  const [contactFromDeck, setContactFromDeck] = useState(false);
   // Admin mode: our team imports a deck or list for an owner, or as unclaimed boards.
   const [adminMode, setAdminMode] = useState(false);
   const [owners, setOwners] = useState<OwnerAccount[]>([]);
@@ -457,6 +474,13 @@ export default function ImportBoardsPage() {
     try {
       const slides = await readDeck(file, (done, total) => setDeckProgress(`Reading slide ${done} of ${total}…`));
       const fallback = deckCity(slides.map(sl => sl.lines.join('\n')));
+      // The deck's own contact (usually its last slide) fills empty contact fields.
+      const deckContact = findContact(slides.map(sl => sl.lines));
+      if (deckContact && !importContactName.trim() && !importContactPhone.trim()) {
+        setImportContactName(deckContact.name);
+        setImportContactPhone(deckContact.phone);
+        setContactFromDeck(true);
+      }
       Object.values(deckPhotos).forEach(ph => URL.revokeObjectURL(ph.url));
       const photos: Record<string, { blob: Blob; url: string }> = {};
       const out: Record<string, unknown>[] = [];
@@ -699,6 +723,8 @@ export default function ImportBoardsPage() {
         longitude: r.longitude,
         notes: r.notes,
         ...(r.face_count ? { face_count: r.face_count } : {}),
+        contact_name: r.contact_name || importContactName.trim() || null,
+        contact_phone: r.contact_phone || importContactPhone.trim() || null,
         ...(photoUrl[r._id] ? { photo_urls: [photoUrl[r._id]] } : {}),
       }));
 
@@ -832,6 +858,27 @@ export default function ImportBoardsPage() {
                 <option value="verified">Verified by our team</option>
               </select>
             </label>
+            <div data-import-contact style={{ gridColumn: '1 / -1', borderTop: '1px solid #E2E8F0', paddingTop: 12, marginTop: 2 }}>
+              <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', margin: '0 0 8px' }}>Sales contact for these boards</p>
+              <SavedContacts
+                ownerKey={ownerContactKey(adminOwner.ownerId, adminOwner.ownerName)}
+                ownerLabel={adminOwner.ownerId ? owners.find(o => o.id === adminOwner.ownerId)?.label ?? 'this owner' : adminOwner.ownerName.trim()}
+                name={importContactName}
+                phone={importContactPhone}
+                onUse={(n, ph) => { setImportContactName(n); setImportContactPhone(ph); setContactFromDeck(false); }}
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                <input value={importContactName} onChange={e => { setImportContactName(e.target.value); setContactFromDeck(false); }} placeholder="Contact name, e.g. Chidi Okafor" maxLength={120} aria-label="Sales contact name"
+                  style={{ padding: '8px 10px', border: '1px solid #E2E8F0', borderRadius: 8, fontFamily: 'inherit', fontSize: '0.8125rem' }} />
+                <input value={importContactPhone} onChange={e => { setImportContactPhone(e.target.value); setContactFromDeck(false); }} placeholder="WhatsApp / phone, e.g. 08012345678" maxLength={40} type="tel" aria-label="Contact WhatsApp or phone number"
+                  style={{ padding: '8px 10px', border: '1px solid #E2E8F0', borderRadius: 8, fontFamily: 'inherit', fontSize: '0.8125rem' }} />
+              </div>
+              <p style={{ fontSize: '0.6875rem', color: contactFromDeck ? '#6D28D9' : '#94A3B8', margin: '6px 0 0' }}>
+                {contactFromDeck
+                  ? 'Found in the deck. Check it. It goes on every board in this import and is saved for this owner.'
+                  : 'Goes on every board in this import and is saved for this owner. A spreadsheet with its own contact columns uses those instead.'}
+              </p>
+            </div>
           </div>
         </div>
       )}

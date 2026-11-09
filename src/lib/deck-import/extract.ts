@@ -239,3 +239,34 @@ export function deckCity(allText: string[]): { city: string; state: string } | n
   const top = [...counts.entries()].sort((a, b) => b[1].n - a[1].n)[0];
   return top ? { city: top[0], state: top[1].state } : null;
 }
+
+// Nigerian mobile numbers: 0803 123 4567, 08031234567, +234 803 123 4567, 234-803-123-4567.
+const PHONE_RE = /(?:\+?234[\s-]?|0)[789][01]\d(?:[\s-]?\d){7}/;
+
+function tidyPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  const local = digits.startsWith('234') ? '0' + digits.slice(3) : digits;
+  return local.length === 11 ? local : raw.trim();
+}
+
+/**
+ * The sales contact a deck gives (usually on its last "Contact us" slide):
+ * the first Nigerian mobile number, and a name from a "Contact person:" style
+ * label if there is one. Slides are searched last-first.
+ */
+export function findContact(slides: string[][]): { name: string; phone: string } | null {
+  for (const lines of [...slides].reverse()) {
+    const text = lines.join('\n');
+    const phone = text.match(PHONE_RE);
+    if (!phone) continue;
+    let name = '';
+    for (const l of lines) {
+      const m = l.match(/^\s*(?:contact(?:\s+person)?|sales(?:\s+(?:contact|rep|manager|executive))?|marketer|account\s+manager|name|call)\s*[:\-–]\s*(.+)$/i);
+      if (!m) continue;
+      const candidate = m[1].replace(PHONE_RE, '').replace(/\b(tel|phone|mobile|whatsapp|on|at)\b\s*[:.]?\s*$/i, '').replace(/[\s,;|/\-–—]+$/, '').trim();
+      if (/^[A-Za-z][A-Za-z .'-]{1,60}$/.test(candidate) && !/@|www|\d/.test(candidate)) { name = candidate; break; }
+    }
+    return { name, phone: tidyPhone(phone[0]) };
+  }
+  return null;
+}

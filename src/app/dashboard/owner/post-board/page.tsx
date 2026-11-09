@@ -10,7 +10,7 @@ import { MVP_MODE } from '@/lib/mvp';
 import { createNotification } from '@/lib/notifications';
 import LocationPinPickerLoader from './LocationPinPickerLoader';
 import LocationSearch from './LocationSearch';
-import SavedContacts from './SavedContacts';
+import SavedContacts from '@/components/admin/SavedContacts';
 import { ownerContactKey } from '@/lib/owner-contacts';
 import OwnerPicker, { type OwnerAccount, type OwnerChoice } from '@/components/admin/OwnerPicker';
 

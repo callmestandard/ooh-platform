@@ -1,6 +1,6 @@
 // Checks the deck-reading rules against slides written the way owners do.
 //   npx tsx scripts/test-deck-extract.ts
-import { extractBoard, deckCity } from '../src/lib/deck-import/extract';
+import { extractBoard, deckCity, findContact } from '../src/lib/deck-import/extract';
 
 type Case = { name: string; lines: string[]; expect: Partial<Record<string, string>> | null };
 const cases: Case[] = [
@@ -43,5 +43,17 @@ for (const c of cases) {
 }
 const dc = deckCity(['XYZ Outdoor — Lagos inventory', 'Site at Lekki', 'Ikeja board', 'Abuja office']);
 if (dc?.city !== 'Lagos') { fail++; console.log('FAIL deck city', dc); } else console.log('PASS deck city');
+
+const contactCases: [string[][], { name: string; phone: string } | null][] = [
+  [[['Cover'], ['CONTACT US', 'Tel: 0803 123 4567', 'Email: sales@x.ng']], { name: '', phone: '08031234567' }],
+  [[['Contact person: Chidi Okafor', 'WhatsApp: +234 809 876 5432']], { name: 'Chidi Okafor', phone: '08098765432' }],
+  [[['Sales: Amaka Bello - 0703-555-1212']], { name: 'Amaka Bello', phone: '07035551212' }],
+  [[['Size: 40ft x 20ft', 'Rate: N7,000,000']], null],
+];
+for (const [input, want] of contactCases) {
+  const got = findContact(input);
+  if (JSON.stringify(got) !== JSON.stringify(want)) { fail++; console.log('FAIL contact', JSON.stringify(input), '→', JSON.stringify(got), 'want', JSON.stringify(want)); }
+  else console.log('PASS contact', want ? want.phone : 'none');
+}
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);
