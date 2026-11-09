@@ -334,6 +334,10 @@ export async function emailBookingCounterOffer(params: {
 // Every value below can come from a user (board names, company names, notes),
 // so it is escaped before going into the HTML.
 
+export function escapeHtml(s: string | null | undefined): string {
+  return esc(s);
+}
+
 function esc(s: string | null | undefined): string {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

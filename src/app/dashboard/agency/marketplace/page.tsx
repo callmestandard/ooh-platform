@@ -508,21 +508,10 @@ if (search) {
       showToast('Offer sent! Heading to negotiations…');
       // Fire-and-forget email to board owner
       if (booking?.id && offerBoard.owner_id) {
-        const { data: { user: agencyUser } } = await supabase.auth.getUser();
-        if (agencyUser) {
-          authedFetch('/api/notify/email', {
-            method: 'POST',
-            body: JSON.stringify({
-              type: 'booking_request',
-              ownerId: offerBoard.owner_id,
-              agencyId: agencyUser.id,
-              boardName: offerBoard.name,
-              campaignName: offerForm.campaign_id ? (campaigns.find(c => c.id === offerForm.campaign_id)?.name ?? 'New campaign') : 'New campaign',
-              rate: parseFloat(offerForm.offered_rate),
-              bookingId: booking.id,
-            }),
-          }).catch(() => {});
-        }
+        authedFetch('/api/notify/email', {
+          method: 'POST',
+          body: JSON.stringify({ type: 'booking_request', bookingId: booking.id }),
+        }).catch(() => {});
       }
       setOfferBoard(null);
       setOfferForm({ campaign_id: '', offered_rate: '', start_date: '', end_date: '', notes: '' });

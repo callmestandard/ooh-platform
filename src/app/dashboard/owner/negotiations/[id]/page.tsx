@@ -278,19 +278,9 @@ export default function OwnerNegotiationDetailPage() {
 
     // Email the agency (fire-and-forget)
     if (agencyId) {
-      const { actorId: ownerId } = await getActivityActor();
-      if (actionMode === 'accept') {
-        authedFetch('/api/notify/email', { method: 'POST',
-          body: JSON.stringify({ type: 'booking_accepted', agencyId, ownerId, boardName, agreedRate: booking.offered_rate, bookingId: booking.id }),
-        }).catch(() => {});
-      } else if (actionMode === 'decline') {
-        authedFetch('/api/notify/email', { method: 'POST',
-          body: JSON.stringify({ type: 'booking_declined', agencyId, ownerId, boardName, bookingId: booking.id }),
-        }).catch(() => {});
-      } else if (actionMode === 'counter') {
-        authedFetch('/api/notify/email', { method: 'POST',
-          body: JSON.stringify({ type: 'booking_counter_offer', agencyId, ownerId, boardName, counterRate: parseFloat(counterRate), bookingId: booking.id }),
-        }).catch(() => {});
+      const type = actionMode === 'accept' ? 'booking_accepted' : actionMode === 'decline' ? 'booking_declined' : actionMode === 'counter' ? 'booking_counter_offer' : null;
+      if (type) {
+        authedFetch('/api/notify/email', { method: 'POST', body: JSON.stringify({ type, bookingId: booking.id }) }).catch(() => {});
       }
     }
 

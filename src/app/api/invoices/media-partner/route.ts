@@ -11,6 +11,19 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+/** The owner company the caller works for (an owner or their team), or null. */
+async function callerOwnerCompany(uid: string): Promise<string | null> {
+  const { data } = await supabase.rpc('owner_company_of', { p_uid: uid });
+  return (data as string | null) ?? null;
+}
+
+async function isOwnerSide(ownerId: string | null | undefined, uid: string): Promise<boolean> {
+  if (!ownerId) return false;
+  if (ownerId === uid) return true;
+  const { data } = await supabase.rpc('is_owner_member', { p_owner_id: ownerId, p_uid: uid });
+  return !!data;
+}
+
 function nextInvoiceNumber(count: number): string {
   const year = new Date().getFullYear();
   return `MPI-${year}-${String(count + 1).padStart(4, '0')}`;
@@ -20,11 +33,13 @@ function nextInvoiceNumber(count: number): string {
 export async function POST(req: NextRequest) {
   const user = await requireAuth(req);
   if (!user) return unauthorized();
+  // Only a board owner (or their team) raises these, and always as their own company.
+  const owner_id = await callerOwnerCompany(user.id);
+  if (!owner_id) return NextResponse.json({ error: 'Only board owners can raise media partner invoices' }, { status: 403 });
   const body = await req.json();
   const {
     booking_id,
     campaign_id,
-    owner_id,
     agency_name,      // "client_name" field: the agency this invoice is addressed to
     agency_email,
     due_date,
@@ -41,6 +56,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Resolve booking details
+  let invoiceCampaignId: string | null = campaign_id ?? null;
   let items: {
     booking_id: string;
     description: string;
@@ -57,11 +73,13 @@ export async function POST(req: NextRequest) {
   if (booking_id) {
     const { data: booking } = await supabase
       .from('bookings')
-      .select('id, agreed_rate, offered_rate, start_date, end_date, boards(name, format, city, state)')
+      .select('id, campaign_id, agreed_rate, offered_rate, start_date, end_date, boards!inner(name, format, city, state, owner_id)')
       .eq('id', booking_id)
+      .eq('boards.owner_id', owner_id)
       .single() as {
         data: {
           id: string;
+          campaign_id: string | null;
           agreed_rate: number | null;
           offered_rate: number;
           start_date: string;
@@ -70,6 +88,9 @@ export async function POST(req: NextRequest) {
         } | null
       };
 
+    if (!booking) return NextResponse.json({ error: 'That booking is not on one of your boards' }, { status: 403 });
+    // Link the invoice to the booking's campaign, so it can only go to that agency.
+    invoiceCampaignId = booking.campaign_id ?? null;
     if (booking) {
       const rate = amount ?? booking.agreed_rate ?? booking.offered_rate ?? 0;
       const loc = [booking.boards?.city, booking.boards?.state].filter(Boolean).join(', ');
@@ -90,8 +111,9 @@ export async function POST(req: NextRequest) {
     // Invoice for all bookings in a campaign
     const { data: bookings } = await supabase
       .from('bookings')
-      .select('id, agreed_rate, offered_rate, start_date, end_date, boards(name, format, city, state)')
+      .select('id, agreed_rate, offered_rate, start_date, end_date, boards!inner(name, format, city, state, owner_id)')
       .eq('campaign_id', campaign_id)
+      .eq('boards.owner_id', owner_id)
       .in('status', ['agreed', 'signed', 'live', 'complete']) as {
         data: {
           id: string;
@@ -119,6 +141,7 @@ export async function POST(req: NextRequest) {
         total: rate,
       };
     });
+    if (items.length === 0) return NextResponse.json({ error: 'No agreed bookings on your boards in that campaign' }, { status: 403 });
   }
 
   const { count } = await supabase
@@ -135,8 +158,8 @@ export async function POST(req: NextRequest) {
     .insert({
       invoice_number,
       invoice_type: 'media_partner',
-      campaign_id: campaign_id ?? null,
-      owner_id: owner_id ?? null,
+      campaign_id: invoiceCampaignId,
+      owner_id,
       client_name: agency_name,
       client_email: agency_email ?? null,
       subtotal,
@@ -161,7 +184,7 @@ export async function POST(req: NextRequest) {
   await logActivity({
     entityType: 'invoice',
     entityId: invoice.id,
-    campaignId: campaign_id ?? null,
+    campaignId: invoiceCampaignId,
     action: 'invoice.mpi_created',
     summary: `Media partner invoice ${invoice_number} raised — ₦${Number(total_amount).toLocaleString('en-NG')}`,
     actorRole: 'owner',
@@ -207,6 +230,21 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const { id, status } = body;
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+  // Only the invoice's own owner side may change it.
+  const { data: current } = await supabase.from('invoices')
+    .select('owner_id, campaign:campaigns(agency_id)').eq('id', id).eq('invoice_type', 'media_partner').maybeSingle();
+  if (!current || !(await isOwnerSide(current.owner_id as string | null, user.id))) {
+    return NextResponse.json({ error: 'Not your invoice' }, { status: 403 });
+  }
+  // The invoice can only be addressed to the campaign's agency, or (with no
+  // campaign) to an agency account.
+  if ('agency_id' in body && body.agency_id) {
+    const campaignAgency = (current.campaign as { agency_id?: string } | null)?.agency_id;
+    if (campaignAgency ? body.agency_id !== campaignAgency : (await supabase.from('profiles').select('role').eq('id', body.agency_id).maybeSingle()).data?.role !== 'agency') {
+      return NextResponse.json({ error: 'That agency is not on this campaign' }, { status: 400 });
+    }
+  }
 
   const allowed = ['status', 'agency_id', 'due_date', 'notes'];
   const updates: Record<string, unknown> = {};

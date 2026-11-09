@@ -453,19 +453,10 @@ export default function CampaignPlanPage() {
       setShowSendToClient(false);
       showToast(`Plan sent to ${client?.company_name || client?.full_name || 'client'} for approval`);
       // Fire-and-forget email to client
-      const { data: { user: agencyUser } } = await supabase.auth.getUser();
-      if (agencyUser) {
-        authedFetch('/api/notify/email', {
-          method: 'POST',
-          body: JSON.stringify({
-            type: 'plan_sent_for_approval',
-            clientId: selectedClientId,
-            agencyId: agencyUser.id,
-            campaignName: campaign.name,
-            boardCount: planItems.length,
-          }),
-        }).catch(() => {});
-      }
+      authedFetch('/api/notify/email', {
+        method: 'POST',
+        body: JSON.stringify({ type: 'plan_sent_for_approval', campaignId: campaign.id }),
+      }).catch(() => {});
     } else {
       showToast('Failed to send to client', 'error');
     }

@@ -616,17 +616,9 @@ function ClientContent() {
       // Fire-and-forget email to agency
       const agencyId = activeCampaign?.agency_id;
       if (agencyId) {
-        const { data: { user: clientUser } } = await supabase.auth.getUser();
         authedFetch('/api/notify/email', {
           method: 'POST',
-          body: JSON.stringify({
-            type: 'plan_approved',
-            agencyId,
-            clientId: clientUser?.id ?? '',
-            campaignName: activeCampaign?.name ?? '',
-            boardCount: pendingIds.length,
-            campaignId: activeCampaign?.id ?? '',
-          }),
+          body: JSON.stringify({ type: 'plan_approved', campaignId: activeCampaign?.id, boardCount: pendingIds.length }),
         }).catch(() => {});
       }
     }
