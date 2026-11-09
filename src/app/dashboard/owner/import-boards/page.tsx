@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase';
 import { useToast } from '@/components/ui/Toast';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import OwnerPicker, { type OwnerAccount, type OwnerChoice } from '@/components/admin/OwnerPicker';
+import { readDeck } from '@/lib/deck-import/read';
+import { extractBoard, deckCity, DECK_COLUMNS } from '@/lib/deck-import/extract';
 
 const PreviewMap = dynamic(() => import('./PreviewMap'), {
   ssr: false,
@@ -41,6 +43,12 @@ type ImportRow = {
   latitude: number | null;
   longitude: number | null;
   notes: string;
+  /** Number of faces, when the file says (1–10). */
+  face_count: number | null;
+  /** Deck imports: key of the slide's photo in deckPhotos ('' if none). */
+  photo_key: string;
+  /** True when the row came from a deck slide (row_no is then the slide number). */
+  from_slide: boolean;
   status: 'ready' | 'warning' | 'skip';
   issues: string[];
   geocoded: boolean;
@@ -69,8 +77,17 @@ const FIELD_DEFS = [
   { field: 'illuminated',  label: 'Illuminated',   required: false },
   { field: 'latitude',     label: 'Latitude',      required: false },
   { field: 'longitude',    label: 'Longitude',     required: false },
+  { field: 'faces',        label: 'Faces',         required: false },
   { field: 'notes',        label: 'Notes',         required: false },
 ];
+
+// Deck imports name their own columns, so they map one-to-one.
+const DECK_COLUMN_MAP: Record<string, string> = {
+  name: 'Board Name', address: 'Address', city: 'City', area: 'Area', state: 'State', format: 'Format',
+  width: 'Width (m)', height: 'Height (m)', illuminated: 'Illuminated', asking_rate: 'Monthly Rate',
+  latitude: 'Latitude', longitude: 'Longitude', faces: 'Faces',
+};
+const DECK_EXT = /\.(pptx|ppt|pdf)$/i;
 
 const FIELD_HINTS: Record<string, string[]> = {
   name:        ['name', 'board name', 'site name', 'title', 'description', 'location name', 'board'],
@@ -85,6 +102,7 @@ const FIELD_HINTS: Record<string, string[]> = {
   asking_rate: ['rate', 'price', 'cost', 'monthly rate', 'asking rate', 'amount', 'rental', 'tariff', 'fee', 'naira'],
   latitude:    ['lat', 'latitude', 'y coord', 'gps lat'],
   longitude:   ['lng', 'lon', 'longitude', 'long', 'x coord', 'gps lon'],
+  faces:       ['faces', 'face', 'no of faces', 'number of faces', 'sides', 'no of sides'],
   notes:       ['notes', 'remarks', 'comments', 'details', 'info', 'other'],
 };
 
@@ -213,6 +231,10 @@ function validateRows(
     const area = get(row, 'area');
     const illuminated = parseIlluminated(get(row, 'illuminated'));
     const notes = get(row, 'notes');
+    const facesRaw = parseNumber(get(row, 'faces'));
+    const face_count = facesRaw && Number.isInteger(facesRaw) && facesRaw >= 1 && facesRaw <= 10 ? facesRaw : null;
+    const from_slide = row['__slide'] != null;
+    const rowNo = from_slide ? Number(row['__slide']) : idx + 2;
 
     const format = normalizeFormat(format_raw);
     const asking_rate = parseRate(asking_rate_raw !== '' ? asking_rate_raw : row[colMap['asking_rate'] || '']);
@@ -246,10 +268,10 @@ function validateRows(
       const prev = seenNames.get(normName);
       if (prev !== undefined) {
         duplicate = true;
-        duplicate_of = `Row ${prev + 1} in this file`;
+        duplicate_of = `${from_slide ? 'Slide' : 'Row'} ${prev} in this file`;
         issues.push('Duplicate of another row in file');
       } else {
-        seenNames.set(normName, idx);
+        seenNames.set(normName, rowNo);
       }
     }
 
@@ -276,7 +298,7 @@ function validateRows(
 
     return {
       _id: uid(),
-      row_no: idx + 2,
+      row_no: rowNo,
       name,
       address,
       city,
@@ -292,6 +314,9 @@ function validateRows(
       latitude: latitude && !isNaN(latitude) ? latitude : null,
       longitude: longitude && !isNaN(longitude) ? longitude : null,
       notes,
+      face_count,
+      photo_key: String(row['__photo'] ?? ''),
+      from_slide,
       status,
       issues,
       geocoded: false,
@@ -323,7 +348,7 @@ function Stepper({ step }: { step: Step }) {
         const done = step > n;
         const active = step === n;
         return (
-          <div key={n} style={{ display: 'flex', alignItems: 'center' }}>
+          <div key={n} style={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: i < STEP_LABELS.length - 1 ? '0 1 auto' : '0 0 auto' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
               <div style={{
                 width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -338,7 +363,7 @@ function Stepper({ step }: { step: Step }) {
               </span>
             </div>
             {i < STEP_LABELS.length - 1 && (
-              <div style={{ width: 60, height: 2, background: step > n ? '#10B981' : '#E2E8F0', margin: '0 4px', marginBottom: 18 }} />
+              <div style={{ flex: '0 1 60px', width: 60, minWidth: 12, height: 2, background: step > n ? '#10B981' : '#E2E8F0', margin: '0 4px', marginBottom: 18 }} />
             )}
           </div>
         );
@@ -375,6 +400,11 @@ export default function ImportBoardsPage() {
   const [savedMap, setSavedMap] = useState<Record<string, string>>({});
   const [usedSavedMap, setUsedSavedMap] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Deck imports (PowerPoint/PDF): slide photos waiting to upload, and what was read.
+  const [deckMode, setDeckMode] = useState(false);
+  const [deckPhotos, setDeckPhotos] = useState<Record<string, { blob: Blob; url: string }>>({});
+  const [deckSummary, setDeckSummary] = useState<{ file: string; slides: number; boards: number; skipped: number[] } | null>(null);
+  const [deckProgress, setDeckProgress] = useState('');
   // Admin mode: our team imports a deck or list for an owner, or as unclaimed boards.
   const [adminMode, setAdminMode] = useState(false);
   const [owners, setOwners] = useState<OwnerAccount[]>([]);
@@ -419,7 +449,51 @@ export default function ImportBoardsPage() {
 
   // ── File upload & parse ─────────────────────────────────────────────────
 
+  // An owner's deck: each slide (or PDF page) becomes a row, read by rules in
+  // src/lib/deck-import. Nothing is guessed; the review step shows what's missing.
+  async function handleDeck(file: File) {
+    setParsing(true);
+    setDeckProgress('Opening the deck…');
+    try {
+      const slides = await readDeck(file, (done, total) => setDeckProgress(`Reading slide ${done} of ${total}…`));
+      const fallback = deckCity(slides.map(sl => sl.lines.join('\n')));
+      Object.values(deckPhotos).forEach(ph => URL.revokeObjectURL(ph.url));
+      const photos: Record<string, { blob: Blob; url: string }> = {};
+      const out: Record<string, unknown>[] = [];
+      const skipped: number[] = [];
+      for (const sl of slides) {
+        const board = extractBoard(sl.lines);
+        if (!board) { skipped.push(sl.index); continue; }
+        if (!board.City && fallback) { board.City = fallback.city; if (!board.State) board.State = fallback.state; }
+        const key = sl.image ? `slide-${sl.index}` : '';
+        if (sl.image) photos[key] = { blob: sl.image, url: URL.createObjectURL(sl.image) };
+        out.push({ ...board, __slide: sl.index, __photo: key });
+      }
+      if (out.length === 0) {
+        toastError(slides.length === 0 ? 'No slides found in this file' : 'No boards found in this deck. If its slides are pictures of text (scanned), the text can’t be read. Use the spreadsheet template instead.');
+        return;
+      }
+      setDeckPhotos(photos);
+      setDeckMode(true);
+      setDeckSummary({ file: file.name, slides: slides.length, boards: out.length, skipped });
+      setRawHeaders([...DECK_COLUMNS]);
+      setRawRows(out);
+      setTruncated(false);
+      setUsedSavedMap(false);
+      setColMap(DECK_COLUMN_MAP);
+      if (adminMode && !adminSource.trim()) setAdminSource(`${file.name.replace(/\.[^.]+$/, '')} (deck)`.slice(0, 200));
+    } catch (e) {
+      toastError(e instanceof Error ? e.message : 'Could not read that deck');
+    } finally {
+      setParsing(false);
+      setDeckProgress('');
+    }
+  }
+
   async function handleFile(file: File) {
+    if (DECK_EXT.test(file.name)) return handleDeck(file);
+    setDeckMode(false);
+    setDeckSummary(null);
     setParsing(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -433,9 +507,6 @@ export default function ImportBoardsPage() {
       const data = await res.json();
       if (!res.ok) { toastError(data.error || 'Parse failed'); return; }
 
-      setRawHeaders(data.headers);
-      setRawRows(data.rows);
-      setTruncated(data.truncated);
       // Start from auto-detection, then prefer what this owner chose last time
       // for any of their headers that appear again in this file.
       const auto = buildAutoMap(data.headers);
@@ -451,6 +522,11 @@ export default function ImportBoardsPage() {
       const remembered = Object.fromEntries(Object.entries(saved).filter(([, header]) => (data.headers as string[]).includes(header)));
       setUsedSavedMap(Object.keys(remembered).length > 0);
       setColMap({ ...auto, ...remembered });
+      // Rows show only once the column matches are ready, so "Map columns"
+      // can't be clicked with an empty mapping.
+      setRawHeaders(data.headers);
+      setRawRows(data.rows);
+      setTruncated(data.truncated);
     } catch {
       toastError('Failed to read file');
     } finally {
@@ -471,8 +547,8 @@ export default function ImportBoardsPage() {
     for (const f of required) {
       if (!colMap[f]) { toastError(`Please map the "${FIELD_DEFS.find(d => d.field === f)?.label}" column`); return; }
     }
-    // Remember this mapping for the owner's next import.
-    if (ownerCompanyId) {
+    // Remember this mapping for the owner's next import (spreadsheets only).
+    if (ownerCompanyId && !deckMode) {
       const mapping = Object.fromEntries(Object.entries(colMap).filter(([, header]) => !!header));
       supabase.from('owner_import_mappings').upsert({ owner_id: ownerCompanyId, mapping, updated_at: new Date().toISOString() })
         .then(({ error }) => { if (!error) setSavedMap(mapping); });
@@ -601,6 +677,13 @@ export default function ImportBoardsPage() {
 
     for (let i = 0; i < selected.length; i += BATCH) {
       const batchRows = selected.slice(i, i + BATCH);
+      // Deck photos upload now, just before their boards are saved.
+      const photoUrl: Record<string, string> = {};
+      await Promise.all(batchRows.filter(r => r.photo_key && deckPhotos[r.photo_key]).map(async r => {
+        const path = `boards/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+        const { data: up } = await supabase.storage.from('board-photos').upload(path, deckPhotos[r.photo_key].blob, { contentType: 'image/jpeg', cacheControl: '3600', upsert: false });
+        if (up) photoUrl[r._id] = supabase.storage.from('board-photos').getPublicUrl(up.path).data.publicUrl;
+      }));
       const batch = batchRows.map(r => ({
         name: r.name,
         address: r.address,
@@ -615,6 +698,8 @@ export default function ImportBoardsPage() {
         latitude: r.latitude,
         longitude: r.longitude,
         notes: r.notes,
+        ...(r.face_count ? { face_count: r.face_count } : {}),
+        ...(photoUrl[r._id] ? { photo_urls: [photoUrl[r._id]] } : {}),
       }));
 
       try {
@@ -756,9 +841,9 @@ export default function ImportBoardsPage() {
       {/* ── Step 1: Upload ──────────────────────────────────────────────── */}
       {step === 1 && (
         <div style={cardStyle}>
-          <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px' }}>Upload your spreadsheet</h2>
-          <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '0 0 20px' }}>
-            Supported formats: .xlsx, .xls, .csv · Max 1,000 rows per import
+          <h2 style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px' }}>Upload a spreadsheet or an owner&apos;s deck</h2>
+          <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '0 0 20px', lineHeight: 1.5 }}>
+            Spreadsheet: .xlsx, .xls, .csv (max 1,000 rows) · Deck: PowerPoint (.pptx) or PDF, one board per slide. We read each slide&apos;s location, size, type, lighting, rate and GPS, and use its picture as the board photo.
           </p>
 
           {/* Drop zone */}
@@ -774,11 +859,11 @@ export default function ImportBoardsPage() {
             onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#1B4F8A'; (e.currentTarget as HTMLDivElement).style.background = '#EFF6FF'; }}
             onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#CBD5E1'; (e.currentTarget as HTMLDivElement).style.background = '#F8FAFC'; }}
           >
-            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv,.pptx,.pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
             {parsing ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
                 <div style={{ width: 28, height: 28, border: '3px solid #E2E8F0', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-                <span style={{ fontSize: '0.875rem', color: '#64748B' }}>Parsing file…</span>
+                <span style={{ fontSize: '0.875rem', color: '#64748B' }}>{deckProgress || 'Parsing file…'}</span>
               </div>
             ) : (
               <>
@@ -786,7 +871,7 @@ export default function ImportBoardsPage() {
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
                 </svg>
                 <p style={{ margin: 0, fontWeight: 600, color: '#374151', fontSize: '0.9375rem' }}>
-                  {rawRows.length > 0 ? 'Replace file' : 'Drop your file here'}
+                  {rawRows.length > 0 ? 'Replace file' : 'Drop your spreadsheet or deck here'}
                 </p>
                 <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: '#94A3B8' }}>or click to browse</p>
               </>
@@ -801,6 +886,26 @@ export default function ImportBoardsPage() {
             </a>
             <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>— 11 columns, 4 example rows, instructions sheet</span>
           </div>
+
+          {deckMode && deckSummary && (
+            <div data-deck-summary style={{ marginTop: 20, background: '#F5F3FF', border: '1px solid #DDD6FE', borderRadius: 10, padding: '12px 14px' }}>
+              <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: '#4C1D95' }}>
+                Found {deckSummary.boards} board{deckSummary.boards === 1 ? '' : 's'} in {deckSummary.slides} slide{deckSummary.slides === 1 ? '' : 's'} of {deckSummary.file}
+              </p>
+              <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#6D28D9', lineHeight: 1.5 }}>
+                {deckSummary.skipped.length > 0 ? `Skipped slide${deckSummary.skipped.length === 1 ? '' : 's'} ${deckSummary.skipped.slice(0, 12).join(', ')}${deckSummary.skipped.length > 12 ? '…' : ''} (no board details, e.g. cover or contact pages). ` : ''}
+                Next you&apos;ll check every board, fill in anything the deck didn&apos;t say, and untick any that aren&apos;t boards.
+              </p>
+              {Object.keys(deckPhotos).length > 0 && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto' }}>
+                  {rawRows.slice(0, 8).map(r => deckPhotos[String(r.__photo)] && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={String(r.__slide)} src={deckPhotos[String(r.__photo)].url} alt={`Slide ${String(r.__slide)}`} style={{ width: 84, height: 56, objectFit: 'cover', borderRadius: 6, border: '1px solid #E9D5FF', flexShrink: 0 }} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Preview of parsed rows */}
           {rawRows.length > 0 && (
@@ -843,10 +948,10 @@ export default function ImportBoardsPage() {
               disabled={rawRows.length === 0}
               onClick={() => {
                 if (adminMode && !adminSource.trim()) { toastError('Add a source — where these boards came from'); return; }
-                setStep(2);
+                if (deckMode) applyMapping(); else setStep(2);
               }}
             >
-              Map columns →
+              {deckMode ? 'Review boards →' : 'Map columns →'}
             </button>
           </div>
         </div>
@@ -939,7 +1044,7 @@ export default function ImportBoardsPage() {
               <div style={{ maxHeight: 220, overflowY: 'auto', marginTop: 8 }}>
                 {rows.filter(r => r.issues.length > 0).map(r => (
                   <p key={r._id} style={{ fontSize: '0.75rem', margin: '0 0 5px', color: r.status === 'skip' ? '#B91C1C' : '#92400E' }}>
-                    <strong>Row {r.row_no}{r.name ? ` · ${r.name}` : ''}</strong> — {r.status === 'skip' ? 'will be skipped: ' : 'will import, but: '}{r.issues.join('; ')}
+                    <strong>{r.from_slide ? 'Slide' : 'Row'} {r.row_no}{r.name ? ` · ${r.name}` : ''}</strong> — {r.status === 'skip' ? 'will be skipped: ' : 'will import, but: '}{r.issues.join('; ')}
                   </p>
                 ))}
               </div>
@@ -959,6 +1064,7 @@ export default function ImportBoardsPage() {
                       />
                     </th>
                     <th style={{ padding: '10px 8px', textAlign: 'left', color: '#64748B', fontWeight: 600, width: 36 }}>St</th>
+                    {deckMode && <th style={{ padding: '10px 8px', textAlign: 'left', color: '#64748B', fontWeight: 600 }}>Photo</th>}
                     <th style={{ padding: '10px 8px', textAlign: 'left', color: '#64748B', fontWeight: 600 }}>Name</th>
                     <th style={{ padding: '10px 8px', textAlign: 'left', color: '#64748B', fontWeight: 600 }}>City</th>
                     <th style={{ padding: '10px 8px', textAlign: 'left', color: '#64748B', fontWeight: 600 }}>Format</th>
@@ -992,6 +1098,14 @@ export default function ImportBoardsPage() {
                         <td style={{ padding: '8px' }}>
                           <span title={row.status} style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: statusColor }} />
                         </td>
+                        {deckMode && (
+                          <td style={{ padding: '6px 8px' }}>
+                            {row.photo_key && deckPhotos[row.photo_key] ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={deckPhotos[row.photo_key].url} alt={`Slide ${row.row_no}`} title={`Slide ${row.row_no}`} style={{ width: 56, height: 38, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+                            ) : <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>Slide {row.row_no}</span>}
+                          </td>
+                        )}
                         {/* Editable: name */}
                         <td style={{ padding: '8px', maxWidth: 180 }} className="imp-cell-edit">
                           {isEditing && editField === 'name' ? (
@@ -1170,7 +1284,7 @@ export default function ImportBoardsPage() {
                 <div style={{ maxHeight: 200, overflowY: 'auto', background: '#FEF2F2', borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
                   {publishResult.skipped.map(r => (
                     <p key={r._id} style={{ fontSize: '0.75rem', color: '#B91C1C', margin: '0 0 4px' }}>
-                      <strong>Row {r.row_no}{r.name ? ` · ${r.name}` : ''}</strong> — {r.issues.join('; ') || 'not selected'}
+                      <strong>{r.from_slide ? 'Slide' : 'Row'} {r.row_no}{r.name ? ` · ${r.name}` : ''}</strong> — {r.issues.join('; ') || 'not selected'}
                     </p>
                   ))}
                 </div>
