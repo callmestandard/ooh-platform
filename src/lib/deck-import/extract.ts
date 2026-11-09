@@ -56,7 +56,8 @@ const CITIES: [RegExp, string, string][] = [
   [/\bilorin\b/i, 'Ilorin', 'Kwara'],
   [/\bjos\b/i, 'Jos', 'Plateau'],
   [/\bakure\b/i, 'Akure', 'Ondo'],
-  [/\bosogbo\b/i, 'Osogbo', 'Osun'],
+  [/\bos(h)?ogbo\b/i, 'Osogbo', 'Osun'],
+  [/\biles(h)?a\b/i, 'Ilesa', 'Osun'],
   [/\bado[\s-]?ekiti\b/i, 'Ado-Ekiti', 'Ekiti'],
   [/\bmakurdi\b/i, 'Makurdi', 'Benue'],
   [/\blokoja\b/i, 'Lokoja', 'Kogi'],
@@ -105,7 +106,7 @@ const FORMAT_WORDS: [RegExp, string][] = [
   [/\b(gantry|gantries|overhead)\b/i, 'gantry'],
   [/\b(bridge[\s-]?(panel|board|banner)s?|flyover (panel|board))\b/i, 'bridge_panel'],
   [/\b(wall[\s-]?(drape|banner|wrap|scape)|drape|building wrap|facade)\b/i, 'wall_drape'],
-  [/\b(billboard|48[\s-]?sheet|96[\s-]?sheet|portrait board|landscape board|roof[\s-]?top|backlit board|bill[\s-]?board)\b/i, 'billboard'],
+  [/\b(billboard|48[\s-]?sheet|96[\s-]?sheet|portrait( board)?|landscape( board)?|roof[\s-]?top|backlit board|bill[\s-]?board|eye[\s-]?catchers?|super[\s-]?48|mega[\s-]?board|spectacular|lamp[\s-]?posts?|street[\s-]?poles?|hoarding|static board)\b/i, 'billboard'],
 ];
 
 export function findFormat(text: string): string {
@@ -181,6 +182,18 @@ function splitLabel(line: string): [Field, string] | null {
 }
 
 const NOT_A_TITLE = /^(size|rate|price|gps|location|type|format|illumination|faces?|available|contact|tel|phone|email|www\.|http)/i;
+// A line that only names the board type, e.g. "(GANTRY)", "EYE CATCHER", "(PORTRAIT)".
+const FORMAT_TAG = /^\s*[([]?\s*(led|digital|unipole|uni-?pole|gantry|billboard|eye[\s-]?catcher|portrait|landscape|bridge panel|wall drape|rooftop|roof top|super 48|48 sheet|96 sheet|mega board|lamp[\s-]?post|street pole)s?\s*(board)?\s*[)\]]?\s*$/i;
+
+/** Drops coordinates (3°20'01.4"E, 6.5123 3.3456) and stray punctuation from a title. */
+function cleanTitle(s: string): string {
+  return s
+    .replace(/\d{1,3}\s*°\s*\d{1,2}\s*['′’]\s*\d{1,2}(?:\.\d+)?\s*(?:["″”]|'')?\s*[NSEW]?/gi, ' ')
+    .replace(/-?\d{1,2}\.\d{4,}\s*[,;/ ]\s*-?\d{1,3}\.\d{4,}/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/[\s,;:–—-]+$/, '')
+    .trim();
+}
 // Tabs are kept: table cells arrive as "Label<TAB>value".
 const tidy = (s: string) => s.replace(/[  \r\n\f\v]+/g, ' ').replace(/\t+/g, '\t').replace(/^[\s•●▪‣◦\-–—*]+/, '').trim();
 
@@ -210,8 +223,9 @@ export function extractBoard(rawLines: string[]): DeckRow | null {
   gps = gps ?? findGps(text);
   const faces = findFaces(got.faces ? `${got.faces} faces` : text);
 
-  // Title: the first line that isn't a label or a number-only line.
-  const title = lines.find(l => !splitLabel(l) && !NOT_A_TITLE.test(l) && /[a-z]{3,}/i.test(l) && !findSize(l) && l.length >= 6) ?? '';
+  // Title: the first line that isn't a label, a number-only line, or just a
+  // format tag like "(GANTRY)" / "(EYE CATCHER)". GPS stuck on the end is cut off.
+  const title = cleanTitle(lines.find(l => !splitLabel(l) && !NOT_A_TITLE.test(l) && !FORMAT_TAG.test(l) && /[a-z]{3,}/i.test(cleanTitle(l)) && !findSize(l) && l.length >= 6) ?? '');
   const address = tidy(got.address ?? '') || title;
   const where = findCity(got.city ?? '') ?? findCity(`${address}\n${text}`);
   const area = tidy(got.area ?? '') || areaHit(`${address}\n${text}`)?.area || '';

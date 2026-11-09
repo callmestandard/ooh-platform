@@ -19,7 +19,7 @@ const CENTRES: Record<string, [number, number]> = {
   'Ado-Ekiti': [7.6211, 5.2214], 'Makurdi': [7.7337, 8.5214], 'Lokoja': [7.8023, 6.7333], 'Umuahia': [5.5249, 7.4942],
   'Aba': [5.1066, 7.3667], 'Sokoto': [13.0059, 5.2476], 'Maiduguri': [11.8311, 13.151], 'Yola': [9.2035, 12.4954],
   'Bauchi': [10.3158, 9.8442], 'Minna': [9.6139, 6.5569], 'Sagamu': [6.8322, 3.6319], 'Ota': [6.6918, 3.2357],
-  'Ijebu Ode': [6.8194, 3.9173], 'Ogbomoso': [8.1335, 4.2407], 'Oyo': [7.8526, 3.9312], 'Ile-Ife': [7.4824, 4.5603],
+  'Ijebu Ode': [6.8194, 3.9173], 'Ilesa': [7.6278, 4.7416], 'Ogbomoso': [8.1335, 4.2407], 'Oyo': [7.8526, 3.9312], 'Ile-Ife': [7.4824, 4.5603],
   'Zaria': [11.0855, 7.7199],
 };
 
@@ -36,7 +36,7 @@ function km(a: [number, number], b: [number, number]): number {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-const GENERIC = new Set(['road', 'street', 'junction', 'way', 'avenue', 'along', 'expressway', 'express', 'close', 'drive', 'bridge', 'park', 'market', 'state', 'board', 'static', 'roundabout', 'gate', 'toll', 'motor', 'garage', 'central', 'lagos', 'ibadan', 'abuja', 'nigeria', 'opposite', 'beside', 'third']);
+const GENERIC = new Set(['road', 'street', 'junction', 'way', 'avenue', 'along', 'expressway', 'express', 'close', 'drive', 'bridge', 'park', 'market', 'state', 'board', 'static', 'roundabout', 'gate', 'toll', 'motor', 'garage', 'central', 'lagos', 'ibadan', 'abuja', 'nigeria', 'opposite', 'beside', 'third', 'college', 'school', 'hospital', 'police', 'station', 'hotel', 'stop', 'former', 'stadium', 'international', 'adjacent', 'under', 'face', 'facing', 'traffic', 'from']);
 
 const STOP = new Set(['the', 'and', 'off', 'opp', 'old', 'new', 'via', 'gra']);
 
@@ -169,6 +169,7 @@ export async function geocodeBoard(b: { address: string; name?: string; area?: s
   if (area) queries.push(area);
 
   let district: GeoHit | null = null;
+  let tried = 0;
   for (const q of queries) {
     const suffix = [area && !strip(q).includes(strip(area)) ? area : '', b.city && !strip(q).includes(strip(b.city)) ? b.city : ''].filter(Boolean).join(', ');
     const full = suffix ? `${q}, ${suffix}` : q;
@@ -176,6 +177,7 @@ export async function geocodeBoard(b: { address: string; name?: string; area?: s
     const cityWords = words(b.city ?? '');
     const asked = words(q).filter(w => !cityWords.includes(w));
     if (!asked.length) continue;
+    tried++;
     const kind = q.match(KINDS)?.[1] ?? '';
     let best: (GeoHit & { s: number }) | null = null;
     try {
@@ -210,7 +212,9 @@ export async function geocodeBoard(b: { address: string; name?: string; area?: s
       // The area name alone, or a match without a known city, is only a rough guess.
       // A single shared word with nothing else agreeing, the area name alone,
       // or a match without a known city, is only a rough guess.
-      return { ...hit, confidence: centre && q !== area && best.s >= 12 ? 'high' : 'low' };
+      // Good only for the main landmark, or when two or more words agree.
+      const good = centre && q !== area && ((tried === 1 && best.s >= 12) || best.s >= 20);
+      return { ...hit, confidence: good ? 'high' : 'low' };
     }
   }
   if (district) return district;

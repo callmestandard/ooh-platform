@@ -74,5 +74,20 @@ const q = addressQueries('Along Eko Bridge By Apongbon (GIRAFFE ) FTT Costain');
 if (q[0] !== 'Apongbon' || q.some(x => /costain|giraffe/i.test(x))) { fail++; console.log('FAIL queries', q); } else console.log('PASS queries', q.join(' | '));
 const q2 = addressQueries('Along Lagos Ibadan Expressway By Central Motor Park Iwo Road Ibadan');
 if (!q2.some(x => /^Iwo Road$/i.test(x)) || !q2.some(x => /Central Motor Park/i.test(x))) { fail++; console.log('FAIL queries 2', q2); } else console.log('PASS queries 2', q2.join(' | '));
+
+// Slide shapes from a real owner deck: format tag as the first line, GPS on the title line, no type at all.
+const shapeCases: [string[], Partial<Record<string, string>>][] = [
+  [['(GANTRY)', 'ALONG IKORODU ROAD BY ANTHONY FTT OJOTA', 'SIZE: 40FT X 10FT'], { 'Board Name': 'ALONG IKORODU ROAD BY ANTHONY FTT OJOTA', Format: 'gantry', City: 'Lagos' }],
+  [['(EYE CATCHER)', 'OPPOSITE STADIUM ALONG AYETORO ROAD, OSOGBO.', 'SIZE: 10FT X 20FT'], { 'Board Name': 'OPPOSITE STADIUM ALONG AYETORO ROAD, OSOGBO.', Format: 'billboard', City: 'Osogbo' }],
+  [['ALONG PEN-CINEMA/OGBA ROAD BY PYTHAGORAS COLLEGE FTT OGBA/GUINNES, OBA AKRAN 3°20\'01.4"', 'SIZE: 48FT X 16FT'], { 'Board Name': 'ALONG PEN-CINEMA/OGBA ROAD BY PYTHAGORAS COLLEGE FTT OGBA/GUINNES, OBA AKRAN', City: 'Lagos' }],
+  [['OKE FIA ALONG FREEDOM PARK ROAD FACING TRAFFIC FROM OKE FIA UNDER BRIDGE, OSHOGBO', 'SIZE: 40FT X 20FT'], { City: 'Osogbo', State: 'Osun' }],
+  [['(PORTRAIT)', 'ILESHA GARAGE ROUNDABOUT , OSOGBO (FACE 2)', 'SIZE: 20FT X 40FT'], { Format: 'billboard', City: 'Osogbo' }],
+];
+for (const [lines, want] of shapeCases) {
+  const got = extractBoard(lines);
+  const bad = Object.entries(want).filter(([k, v]) => got?.[k as keyof typeof got] !== v);
+  if (!got || bad.length) { fail++; console.log('FAIL shape', lines[0], bad.map(([k, v]) => `${k}: got "${got?.[k as keyof typeof got]}" want "${v}"`).join('; ')); }
+  else console.log('PASS shape', lines[0].slice(0, 40));
+}
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

@@ -235,7 +235,7 @@ function validateRows(
   return rawRows.map((row, idx) => {
     const name = get(row, 'name');
     const city = get(row, 'city');
-    const format_raw = get(row, 'format');
+    let format_raw = get(row, 'format');
     const asking_rate_raw = get(row, 'asking_rate');
     const address = get(row, 'address');
     const state = get(row, 'state');
@@ -249,6 +249,10 @@ function validateRows(
     const from_slide = row['__slide'] != null;
     const rowNo = from_slide ? Number(row['__slide']) : idx + 2;
 
+    // A deck slide that never says the board type is most often a plain
+    // billboard: import it as one, flagged so the owner can change it.
+    const formatDefaulted = from_slide && !format_raw;
+    if (formatDefaulted) format_raw = 'billboard';
     const format = normalizeFormat(format_raw);
     const asking_rate = parseRate(asking_rate_raw !== '' ? asking_rate_raw : row[colMap['asking_rate'] || '']);
     const width = parseNumber(get(row, 'width'));
@@ -269,22 +273,26 @@ function validateRows(
       && (latitude < 3.5 || latitude > 14.5 || longitude < 2 || longitude > 15.5)) {
       issues.push(`GPS ${latitude}, ${longitude} is outside Nigeria — check the latitude and longitude columns`);
     }
-    if (!format_raw) issues.push('Missing format');
+    if (formatDefaulted) issues.push('Board type not stated in the deck — set to Billboard. Click the format to change it');
+    else if (!format_raw) issues.push('Missing format');
     else if (!format) issues.push(`Unknown format "${format_raw}" — select manually`);
 
-    // Dedup within file
+    // Dedup within file. Deck slides often share a title (two faces, two
+    // boards on one road), so they only count as repeats when GPS, size and
+    // rate match too.
     const normName = normalizeStr(name);
+    const dupKey = from_slide ? `${normName}|${latRaw},${lngRaw}|${width}x${height}|${asking_rate ?? ''}|${normalizeStr(address)}` : normName;
     let duplicate = false;
     let duplicate_of = '';
 
     if (normName) {
-      const prev = seenNames.get(normName);
+      const prev = seenNames.get(dupKey);
       if (prev !== undefined) {
         duplicate = true;
         duplicate_of = `${from_slide ? 'Slide' : 'Row'} ${prev} in this file`;
-        issues.push('Duplicate of another row in file');
+        issues.push(from_slide ? 'Looks the same as another slide — untick it if it is a repeat' : 'Duplicate of another row in file');
       } else {
-        seenNames.set(normName, rowNo);
+        seenNames.set(dupKey, rowNo);
       }
     }
 
@@ -675,7 +683,8 @@ export default function ImportBoardsPage() {
       }
       // Re-evaluate the four editable fields with the same rules as the first
       // pass, and keep every other note (GPS, pin confidence, duplicates).
-      const fieldIssue = (i: string) => /^(Missing (board name|city|format)|Unknown format|Could not read the rate)/.test(i);
+      const fieldIssue = (i: string) => /^(Missing (board name|city|format)|Unknown format|Could not read the rate)/.test(i)
+        || (editField === 'format' && i.startsWith('Board type not stated'));
       const issues: string[] = [];
       if (!updated.name) issues.push('Missing board name');
       if (!updated.city) issues.push('Missing city');
