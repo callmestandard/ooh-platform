@@ -12,6 +12,7 @@ import { computeTrustBadge, TrustBadgePill } from '@/lib/agent-listings';
 import { VERIFICATION_META, verificationOf, formatVerifiedDate, type VerificationStatus } from '@/lib/board-verification';
 import { MVP_MODE, mvpTabs } from '@/lib/mvp';
 import BoardPhotosEditor from '@/components/admin/BoardPhotosEditor';
+import BoardPinEditor from '@/components/admin/BoardPinEditor';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,8 @@ type Board = {
   last_verified_at: string | null;
   source: string | null;
   photo_urls: string[] | null;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 type Booking = {
@@ -248,6 +251,8 @@ function AdminContent() {
   const { toast: showToast } = useToast();
   // Board whose photos are open in the photo editor.
   const [photoBoard, setPhotoBoard] = useState<Board | null>(null);
+  // Board whose map pin is being moved.
+  const [pinBoard, setPinBoard] = useState<Board | null>(null);
   // platform settings
   const [settings, setSettings] = useState<AdminSettings>(DEFAULT_SETTINGS);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -273,7 +278,7 @@ function AdminContent() {
   async function fetchAll() {
     try {
       const [bRes, bookRes, campRes, compRes, profRes, actRes, disputedRes, payoutsRes] = await Promise.all([
-        supabase.from('boards').select('id, name, address, city, area, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at, verification_status, last_verified_at, source, photo_urls').order('created_at', { ascending: false }).limit(200),
+        supabase.from('boards').select('id, name, address, city, area, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at, verification_status, last_verified_at, source, photo_urls, latitude, longitude').order('created_at', { ascending: false }).limit(200),
         supabase.from('bookings').select('id, status, offered_rate, agreed_rate, start_date, end_date, duration_months, created_at, boards(name, city, format), campaigns(name, client_name)').order('created_at', { ascending: false }).limit(200),
         supabase.from('campaigns').select('id, name, client_name, status, total_budget, start_date, end_date, agency_id, created_at').order('created_at', { ascending: false }).limit(100),
         supabase.from('compliance_checks').select('id, booking_id, status, submitted_at, photo_url, notes').order('submitted_at', { ascending: false }).limit(100),
@@ -924,7 +929,10 @@ function AdminContent() {
                         </div>
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: '0.8125rem', color: '#475569', whiteSpace: 'nowrap' }}>
-                        {[board.area, board.city, board.state].filter(Boolean).join(', ') || '—'}
+                        {[board.area && board.area.length <= 40 ? board.area : '', board.city, board.state].filter(Boolean).join(', ') || '—'}
+                        <p data-pin-status style={{ fontSize: '0.6875rem', margin: '2px 0 0', color: board.latitude != null ? '#94A3B8' : '#B45309' }}>
+                          {board.latitude != null && board.longitude != null ? `📍 ${board.latitude.toFixed(4)}, ${board.longitude.toFixed(4)}` : 'No map pin'}
+                        </p>
                       </td>
                       <td style={{ padding: '12px 16px' }}>
                         <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#475569', background: '#F1F5F9', padding: '2px 7px', borderRadius: 4, whiteSpace: 'nowrap' }}>
@@ -971,6 +979,14 @@ function AdminContent() {
                           style={{ background: '#F5F3FF', color: '#6D28D9', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
                         >
                           {board.photo_urls?.length ? 'Edit photo' : 'Add photo'}
+                        </button>
+                        <button
+                          type="button"
+                          data-move-pin
+                          onClick={() => setPinBoard(board)}
+                          style={{ background: '#EFF6FF', color: '#1E40AF', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                        >
+                          {board.latitude != null ? 'Move pin' : 'Add pin'}
                         </button>
                         {(board.status === 'available' || board.status === 'unavailable') && (
                           <button
@@ -1672,6 +1688,18 @@ function AdminContent() {
           photos={photoBoard.photo_urls ?? []}
           onChange={next => setBoards(prev => prev.map(b => b.id === photoBoard.id ? { ...b, photo_urls: next } : b))}
           onClose={() => setPhotoBoard(null)}
+        />
+      )}
+
+      {pinBoard && (
+        <BoardPinEditor
+          board={pinBoard}
+          onSaved={(lat, lng) => {
+            setBoards(prev => prev.map(b => b.id === pinBoard.id ? { ...b, latitude: lat, longitude: lng } : b));
+            setPinBoard(null);
+            showToast('Pin saved', 'success');
+          }}
+          onClose={() => setPinBoard(null)}
         />
       )}
     </div>
