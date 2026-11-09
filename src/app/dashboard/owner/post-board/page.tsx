@@ -4,6 +4,9 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { RoleGuard } from '@/components/layout/RoleGuard';
+import { useDashboardRole } from '@/components/layout/DashboardLayout';
+import { authedFetch } from '@/lib/api';
+import { MVP_MODE } from '@/lib/mvp';
 import { createNotification } from '@/lib/notifications';
 import LocationPinPickerLoader from './LocationPinPickerLoader';
 
@@ -241,6 +244,13 @@ function Select({ value, onChange, options, placeholder }: {
 
 function PostBoardContent() {
   const router = useRouter();
+  // Admins use this same form to add a board for an owner, or as unclaimed.
+  const adminMode = useDashboardRole() === 'admin';
+  const [owners, setOwners] = useState<{ id: string; label: string }[]>([]);
+  const [adminOwner, setAdminOwner] = useState('');
+  const [adminSource, setAdminSource] = useState('');
+  const [adminVerification, setAdminVerification] = useState<'pending' | 'verified'>('pending');
+  const [area, setArea] = useState('');
   const [step, setStep] = useState<Step>(1);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState<string | null>(null); // board id after success
@@ -275,6 +285,12 @@ function PostBoardContent() {
   // Pre-fill the sales contact from the owner's registered profile — still
   // editable per board in case a specific listing needs a different contact.
   useEffect(() => {
+    if (adminMode) {
+      supabase.from('profiles').select('id, full_name, company_name, email').eq('role', 'owner').order('company_name')
+        .then(({ data }) => setOwners(((data as { id: string; full_name: string | null; company_name: string | null; email: string | null }[]) || [])
+          .map(o => ({ id: o.id, label: o.company_name || o.full_name || o.email || o.id }))));
+      return;
+    }
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
       const { data } = await supabase.from('profiles').select('sales_contact_name, phone, full_name').eq('id', user.id).single();
@@ -283,7 +299,7 @@ function PostBoardContent() {
         setContactPhone(prev => prev || data.phone || '');
       }
     });
-  }, []);
+  }, [adminMode]);
 
   // ── GPS location ────────────────────────────────────────────────────────────
 
@@ -374,6 +390,7 @@ function PostBoardContent() {
   function nextStep() {
     setError('');
     if (step === 1) {
+      if (adminMode && !adminSource.trim()) { setError('Add a source — where this board came from'); return; }
       if (!city) { setError('Please select a city'); return; }
       if (!address) { setError('Please enter a street address'); return; }
       setStep(2);
@@ -403,9 +420,36 @@ function PostBoardContent() {
     e.preventDefault();
     setError('');
     if (!boardName) { setError('Please give your board a name'); return; }
-    if (!askingRate || isNaN(Number(askingRate))) { setError('Please enter a valid monthly rate'); return; }
+    // Admins may leave the rate blank: the board shows "Request quote".
+    if (adminMode ? (askingRate && (isNaN(Number(askingRate)) || Number(askingRate) <= 0)) : (!askingRate || isNaN(Number(askingRate)))) {
+      setError('Please enter a valid monthly rate'); return;
+    }
+    if (photos.some(p => p.uploading)) { setError('Wait for the photos to finish uploading'); return; }
 
     setSubmitting(true);
+
+    if (adminMode) {
+      const res = await authedFetch('/api/import-boards', {
+        method: 'POST',
+        body: JSON.stringify({
+          admin: { ownerId: adminOwner || null, source: adminSource.trim(), verification: adminVerification },
+          rows: [{
+            name: boardName.trim(), address: address.trim(), area: area.trim(), city, state: state || '',
+            format, width: width ? parseFloat(width) : null, height: height ? parseFloat(height) : null,
+            illuminated, asking_rate: askingRate ? parseFloat(askingRate) : null,
+            latitude: latitude ? parseFloat(latitude) : null, longitude: longitude ? parseFloat(longitude) : null,
+            notes: notes.trim(), face_count: faceCount, available_from: availableFrom || null,
+            contact_name: contactName.trim() || null, contact_phone: contactPhone.trim() || null,
+            photo_urls: photos.filter(p => p.url).map(p => p.url as string),
+          }],
+        }),
+      });
+      const result = await res.json().catch(() => ({}));
+      setSubmitting(false);
+      if (!res.ok || !result.inserted) { setError(result.error || 'Could not save the board'); return; }
+      setDone(result.ids?.[0] ?? 'added');
+      return;
+    }
 
     const { data: { session: pbSession } } = await supabase.auth.getSession();
     const uploadedPhotos = photos.filter(p => p.url).map(p => p.url as string);
@@ -416,6 +460,7 @@ function PostBoardContent() {
       address: address.trim(),
       city,
       state: state || null,
+      area: area.trim() || null,
       width: width ? parseFloat(width) : null,
       height: height ? parseFloat(height) : null,
       face_count: faceCount,
@@ -429,7 +474,10 @@ function PostBoardContent() {
       contact_name: contactName.trim() || null,
       contact_phone: contactPhone.trim() || null,
       photo_urls: uploadedPhotos.length > 0 ? uploadedPhotos : null,
-      owner_id: pbSession?.user?.id ?? null,
+      // A marketer or team admin lists boards for their owner company (035).
+      owner_id: pbSession?.user?.id
+        ? (((await supabase.rpc('owner_company_of', { p_uid: pbSession.user.id })).data as string | null) ?? pbSession.user.id)
+        : null,
     };
 
     const { data, error: insertError } = await supabase
@@ -460,7 +508,7 @@ function PostBoardContent() {
       type: 'new_booking',
       title: `New board listed in ${city}`,
       body: `${boardName.trim()} — ${FORMAT_OPTIONS.find(f => f.value === format)?.label} · ${formatNaira(parseFloat(askingRate))}/month asking rate`,
-      link: '/dashboard/agency/marketplace',
+      link: MVP_MODE ? `/boards/${data.id}` : '/dashboard/agency/marketplace',
     });
 
     setDone(data.id);
@@ -471,6 +519,44 @@ function PostBoardContent() {
   const benchmarks = RATE_BENCHMARKS[city] || DEFAULT_BENCHMARK;
 
   // ── Success screen ────────────────────────────────────────────────────────────
+
+  if (done && adminMode) {
+    const ownerLabel = adminOwner ? owners.find(o => o.id === adminOwner)?.label ?? 'the chosen owner' : 'unclaimed';
+    return (
+      <div data-admin-board-done style={{ maxWidth: 560, margin: '0 auto', textAlign: 'center', padding: '3rem 0' }}>
+        <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', fontSize: '2.5rem', color: '#059669' }}>
+          ✓
+        </div>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0F172A', margin: '0 0 8px', letterSpacing: '-0.025em' }}>
+          Board added
+        </h1>
+        <p style={{ fontSize: '0.9375rem', color: '#64748B', margin: '0 0 32px', lineHeight: 1.6 }}>
+          <strong style={{ color: '#0F172A' }}>{boardName}</strong> is live in the marketplace ({ownerLabel}
+          {adminVerification === 'verified' ? ', verified by our team' : ', pending verification'}).
+        </p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {done !== 'added' && (
+            <a href={`/boards/${done}`} target="_blank" rel="noopener noreferrer"
+              style={{ background: '#1B4F8A', color: '#fff', padding: '12px 28px', borderRadius: 10, fontSize: '0.9375rem', fontWeight: 600, textDecoration: 'none' }}>
+              View board page
+            </a>
+          )}
+          <button
+            onClick={() => {
+              setStep(1); setDone(null);
+              setCity(''); setState(''); setArea(''); setAddress(''); setLatitude(''); setLongitude('');
+              setFormat('billboard'); setWidth(''); setHeight(''); setFaceCount(1); setIlluminated(false); setPhotos([]);
+              setBoardName(''); setAskingRate(''); setNotes(''); setContactName(''); setContactPhone('');
+            }}
+            style={{ background: '#fff', color: '#1B4F8A', border: '1.5px solid #1B4F8A', padding: '12px 28px', borderRadius: 10, fontSize: '0.9375rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            + Add another board
+          </button>
+        </div>
+        <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '16px 0 0' }}>The owner, source and verification stay set for the next board.</p>
+      </div>
+    );
+  }
 
   if (done) {
     return (
@@ -523,7 +609,7 @@ function PostBoardContent() {
               setDone(null);
               setCity(''); setState(''); setAddress(''); setLatitude(''); setLongitude('');
               setFormat('billboard'); setWidth(''); setHeight(''); setFaceCount(1); setIlluminated(false); setPhotos([]);
-              setBoardName(''); setAskingRate(''); setNotes('');
+              setBoardName(''); setAskingRate(''); setNotes(''); setArea('');
             }}
             style={{ background: '#fff', color: '#7C3AED', border: '1.5px solid #7C3AED', padding: '12px 28px', borderRadius: 10, fontSize: '0.9375rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
           >
@@ -538,7 +624,7 @@ function PostBoardContent() {
             {[
               'Add photos — listings with photos get 3× more offers',
               'Set a competitive asking rate (agencies expect to negotiate down 10–20%)',
-              'Keep your WhatsApp or phone number in the description so agencies can call',
+              ...(MVP_MODE ? ['Reply to buyer requests quickly — fast answers win bookings'] : ['Keep your WhatsApp or phone number in the description so agencies can call']),
               'Update your board status to "Unavailable" when it\'s not available',
             ].map(tip => (
               <li key={tip} style={{ fontSize: '0.8125rem', color: '#6D28D9', lineHeight: 1.5 }}>{tip}</li>
@@ -563,24 +649,24 @@ function PostBoardContent() {
       <div style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
           <button
-            onClick={() => router.push('/dashboard/owner')}
+            onClick={() => router.push(adminMode ? '/dashboard/admin?tab=inventory' : '/dashboard/owner')}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: '2px 0', fontFamily: 'inherit', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: 4 }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6"/>
             </svg>
-            My Boards
+            {adminMode ? 'Inventory' : 'My Boards'}
           </button>
         </div>
         <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.025em', margin: '0 0 4px' }}>
-          Post a board for rent
+          {adminMode ? 'Add a board' : 'Post a board for rent'}
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>
-            List your OOH space and start receiving offers from agencies
+            {adminMode ? 'Add one board with photos and full details, for an owner or as unclaimed' : 'List your OOH space and start receiving offers from agencies'}
           </p>
           <button
-            onClick={() => router.push('/dashboard/owner/import-boards')}
+            onClick={() => router.push(adminMode ? '/dashboard/admin/import-boards' : '/dashboard/owner/import-boards')}
             style={{ padding: '5px 12px', borderRadius: 7, border: '1px solid #CBD5E1', background: '#F8FAFC', color: '#475569', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
@@ -591,6 +677,27 @@ function PostBoardContent() {
 
       {/* Card container */}
       <div style={{ maxWidth: 660, margin: '0 auto' }}>
+        {adminMode && (
+          <div data-admin-board style={{ background: '#F8FAFC', border: '1px solid #E8EDF2', borderRadius: 16, padding: '1.25rem 1.5rem', marginBottom: 20 }}>
+            <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', margin: '0 0 12px' }}>Adding as admin</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              <div>
+                <FieldLabel>Owner</FieldLabel>
+                <Select value={adminOwner} onChange={setAdminOwner} placeholder="No owner account yet (unclaimed)"
+                  options={owners.map(o => ({ value: o.id, label: o.label }))} />
+              </div>
+              <div>
+                <FieldLabel required>Source</FieldLabel>
+                <Input value={adminSource} onChange={v => { setAdminSource(v); setError(''); }} placeholder="e.g. Sule Outdoor deck, Nov 2026" />
+              </div>
+              <div>
+                <FieldLabel>Verification</FieldLabel>
+                <Select value={adminVerification} onChange={v => setAdminVerification(v as 'pending' | 'verified')}
+                  options={[{ value: 'pending', label: 'Not yet verified' }, { value: 'verified', label: 'Verified by our team' }]} />
+              </div>
+            </div>
+          </div>
+        )}
         <StepIndicator step={step} />
 
         <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16, padding: '2rem', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
@@ -624,6 +731,15 @@ function PostBoardContent() {
                     placeholder="Select state..."
                     options={NIGERIA_STATES.map(s => ({ value: s, label: s }))}
                   />
+                </div>
+
+                {/* Area / neighbourhood — buyers filter by this */}
+                <div>
+                  <FieldLabel>Area</FieldLabel>
+                  <Input value={area} onChange={setArea} placeholder="e.g. Lekki Phase 1, Ikeja GRA, Wuse II" />
+                  <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '4px 0 0' }}>
+                    Buyers filter the marketplace by area
+                  </p>
                 </div>
 
                 {/* Street address */}
@@ -927,7 +1043,8 @@ function PostBoardContent() {
 
                 {/* Monthly rate */}
                 <div>
-                  <FieldLabel required>Monthly asking rate (₦)</FieldLabel>
+                  <FieldLabel required={!adminMode}>Monthly asking rate (₦)</FieldLabel>
+                  {adminMode && <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '-2px 0 6px' }}>Leave blank if you don&apos;t have a rate — buyers will see &quot;Request quote&quot;.</p>}
                   <Input value={askingRate} onChange={setAskingRate} placeholder="e.g. 1500000" type="number" prefix="₦" />
 
                   {/* Rate benchmarks */}
@@ -979,7 +1096,7 @@ function PostBoardContent() {
                 </div>
 
                 {/* Summary card */}
-                {boardName && askingRate && (
+                {boardName && (askingRate || adminMode) && (
                   <div style={{ background: 'linear-gradient(135deg, #F5F3FF 0%, #EFF6FF 100%)', border: '1px solid #DDD6FE', borderRadius: 12, padding: '16px 18px' }}>
                     <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 10px' }}>Your listing preview</p>
                     <p style={{ fontSize: '1rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px' }}>{boardName}</p>
@@ -987,13 +1104,17 @@ function PostBoardContent() {
                       {FORMAT_OPTIONS.find(f => f.value === format)?.label} · {width}×{height}m · {faceCount} face{faceCount > 1 ? 's' : ''} · {illuminated ? 'Illuminated' : 'Not illuminated'}
                     </p>
                     <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '0 0 6px' }}>
-                      📍 {address}, {city}{state ? `, ${state}` : ''}
+                      📍 {[address, area, city, state].filter(Boolean).join(', ')}
                     </p>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                      <span style={{ fontSize: '1.375rem', fontWeight: 800, color: '#7C3AED', fontFamily: 'monospace' }}>
-                        {formatNaira(parseFloat(askingRate) || 0)}
-                      </span>
-                      <span style={{ fontSize: '0.8125rem', color: '#94A3B8' }}>/month asking</span>
+                      {askingRate ? (<>
+                        <span style={{ fontSize: '1.375rem', fontWeight: 800, color: '#7C3AED', fontFamily: 'monospace' }}>
+                          {formatNaira(parseFloat(askingRate) || 0)}
+                        </span>
+                        <span style={{ fontSize: '0.8125rem', color: '#94A3B8' }}>/month asking</span>
+                      </>) : (
+                        <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#64748B' }}>Request quote</span>
+                      )}
                     </div>
                     {photos.filter(p => p.url).length > 0 && (
                       <p style={{ fontSize: '0.6875rem', color: '#10B981', fontWeight: 600, margin: '6px 0 0' }}>
@@ -1058,7 +1179,7 @@ function PostBoardContent() {
                   </>
                 ) : (
                   <>
-                    List my board
+                    {adminMode ? 'Add board' : 'List my board'}
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="20 6 9 17 4 12"/>
                     </svg>
@@ -1080,7 +1201,7 @@ function PostBoardContent() {
 
 export default function PostBoardPage() {
   return (
-    <RoleGuard role="owner">
+    <RoleGuard role={['owner', 'admin']}>
       <PostBoardContent />
     </RoleGuard>
   );

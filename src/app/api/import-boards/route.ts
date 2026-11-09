@@ -21,7 +21,16 @@ type InsertRow = {
   latitude?: number | null;
   longitude?: number | null;
   notes?: string;
+  // Sent by the admin "Add a board" form (one board with photos).
+  photo_urls?: string[];
+  face_count?: number;
+  available_from?: string | null;
+  contact_name?: string | null;
+  contact_phone?: string | null;
 };
+
+// Only photos uploaded to our own board-photos bucket are accepted.
+const PHOTO_PREFIX = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/board-photos/`;
 
 /** Sent by our team when importing a deck or list on someone's behalf. */
 type AdminImport = {
@@ -111,8 +120,15 @@ function boardFields(r: InsertRow) {
     longitude: r.longitude ?? null,
     notes: String(r.notes ?? '').trim() || null,
     status: 'available',
-    face_count: 1,
+    face_count: Number.isInteger(r.face_count) && r.face_count! >= 1 && r.face_count! <= 10 ? r.face_count : 1,
     illuminated: typeof r.illuminated === 'boolean' ? r.illuminated : null,
+    photo_urls: (() => {
+      const ok = Array.isArray(r.photo_urls) ? r.photo_urls.filter(u => typeof u === 'string' && u.startsWith(PHOTO_PREFIX)).slice(0, 5) : [];
+      return ok.length ? ok : null;
+    })(),
+    available_from: typeof r.available_from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.available_from) ? r.available_from : null,
+    contact_name: String(r.contact_name ?? '').trim().slice(0, 120) || null,
+    contact_phone: String(r.contact_phone ?? '').trim().slice(0, 40) || null,
   };
 }
 
@@ -150,5 +166,5 @@ async function adminImport(uid: string, rows: InsertRow[], admin: AdminImport) {
     console.error('[import-boards admin]', error);
     return NextResponse.json({ inserted: 0, error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ inserted: data?.length ?? 0 });
+  return NextResponse.json({ inserted: data?.length ?? 0, ids: (data ?? []).map(d => d.id) });
 }

@@ -40,12 +40,12 @@ export async function GET() {
   wsInstr['!cols'] = [{ wch: 18 }, { wch: 72 }];
   XLSX.utils.book_append_sheet(wb, wsInstr, 'Instructions');
 
-  const headers = ['Name', 'Address', 'City', 'State', 'Format', 'Width (m)', 'Height (m)', 'Rate (₦)', 'Latitude', 'Longitude', 'Notes'];
+  const headers = ['Name', 'Address', 'Area', 'City', 'State', 'Format', 'Width (m)', 'Height (m)', 'Rate (₦)', 'Latitude', 'Longitude', 'Notes'];
   const examples = [
-    ['Lekki-Epe Expressway Unipole', 'Chevron Roundabout, Lekki Phase 1', 'Lagos', 'Lagos State', 'unipole', 4, 3, 850000, '', '', 'Illuminated, high traffic volume'],
-    ['Wuse II Billboard', 'Plot 12, Adetokunbo Ademola Crescent, Wuse II', 'Abuja', 'FCT', 'billboard', 6, 3, 1200000, '', '', ''],
-    ['Airport Road Gantry', 'Muritala Muhammed Airport Road, Ikeja', 'Lagos', 'Lagos State', 'gantry', 12, 3, 1800000, 6.5775, 3.3212, 'Both-sided face'],
-    ['Trans Amadi LED', 'Trans Amadi Industrial Layout, PH', 'Port Harcourt', 'Rivers State', 'led', 4, 3, 600000, '', '', 'Digital, 24h illuminated'],
+    ['Lekki-Epe Expressway Unipole', 'Chevron Roundabout, Lekki Phase 1', 'Lekki', 'Lagos', 'Lagos State', 'unipole', 4, 3, 850000, '', '', 'Illuminated, high traffic volume'],
+    ['Wuse II Billboard', 'Plot 12, Adetokunbo Ademola Crescent, Wuse II', 'Wuse II', 'Abuja', 'FCT', 'billboard', 6, 3, 1200000, '', '', ''],
+    ['Airport Road Gantry', 'Muritala Muhammed Airport Road, Ikeja', 'Ikeja', 'Lagos', 'Lagos State', 'gantry', 12, 3, 1800000, 6.5775, 3.3212, 'Both-sided face'],
+    ['Trans Amadi LED', 'Trans Amadi Industrial Layout, PH', 'Trans Amadi', 'Port Harcourt', 'Rivers State', 'led', 4, 3, 600000, '', '', 'Digital, 24h illuminated'],
   ];
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...examples]);
