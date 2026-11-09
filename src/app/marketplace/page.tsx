@@ -2,12 +2,25 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import { attachVisibleRates } from '@/lib/board-rates';
 import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
 import AccountNavButtons from '@/components/layout/AccountNavButtons';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
-import { VerificationBadge, dimensionsText, illuminationText, locationText, UNKNOWN } from '@/lib/board-verification';
+import { VerificationBadge, dimensionsText, illuminationText, locationText, verificationOf, UNKNOWN } from '@/lib/board-verification';
+import { FORMAT_GROUPS, formatGroup } from '@/lib/board-formats';
+import { MVP_MODE } from '@/lib/mvp';
+import type { MapBoard } from './MarketplaceMap';
+
+const MarketplaceMap = dynamic(() => import('./MarketplaceMap'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F1F5F9' }}>
+      <div style={{ width: 24, height: 24, border: '2px solid #E2E8F0', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+    </div>
+  ),
+});
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -27,6 +40,8 @@ type Board = {
   photo_urls: string[] | null;
   area: string | null;
   verification_status: string | null;
+  latitude: number | null;
+  longitude: number | null;
   activeListing?: { id: string; sell_price: number; badge: TrustBadge } | null;
 };
 
@@ -56,6 +71,16 @@ const FORMAT_LABELS: Record<string, string> = {
 const NIGERIAN_STATES = [
   'Lagos', 'Abuja', 'Rivers', 'Kano', 'Ogun', 'Oyo', 'Delta', 'Anambra',
   'Enugu', 'Kaduna', 'Kwara', 'Cross River',
+];
+
+const DIGITAL_FORMATS = ['digital', 'led'];
+
+const VERIFICATION_FILTERS = [
+  { value: 'all',              label: 'Any verification' },
+  { value: 'any_verified',     label: 'Verified or partner' },
+  { value: 'partner_verified', label: 'Partner verified' },
+  { value: 'verified',         label: 'Verified' },
+  { value: 'pending',          label: 'Pending verification' },
 ];
 
 const BUDGET_BANDS = [
@@ -317,20 +342,43 @@ function MarketplaceContent() {
   const [formatFilter, setFormatFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('available');
   const [priceMax, setPriceMax]     = useState(Infinity);
+  const [areaFilter, setAreaFilter] = useState('all');
+  const [kindFilter, setKindFilter] = useState<'all' | 'static' | 'digital'>('all');
+  const [verifyFilter, setVerifyFilter] = useState('all');
+  const [view, setView]             = useState<'grid' | 'map'>('grid');
   const [selected, setSelected]     = useState<Board | null>(null);
 
-  // Deep link from the public formats guide: /marketplace?format=unipole
+  // Deep links: /marketplace?format=unipole (formats guide), ?view=map
   useEffect(() => {
-    const f = new URLSearchParams(window.location.search).get('format');
+    const q = new URLSearchParams(window.location.search);
+    const f = q.get('format');
     if (f) setFormatFilter(f);
+    if (q.get('view') === 'map') setView('map');
   }, []);
+
+  function changeView(v: 'grid' | 'map') {
+    setView(v);
+    const url = new URL(window.location.href);
+    if (v === 'map') url.searchParams.set('view', 'map'); else url.searchParams.delete('view');
+    window.history.replaceState(null, '', url);
+  }
+
+  function changeState(st: string) {
+    setStateFilter(st);
+    setAreaFilter('all');
+  }
+
+  function clearFilters() {
+    setSearch(''); setStateFilter('all'); setAreaFilter('all'); setFormatFilter('all');
+    setKindFilter('all'); setVerifyFilter('all'); setStatusFilter('available'); setPriceMax(Infinity);
+  }
 
   useEffect(() => {
     async function load() {
       const [{ data }, { data: listingsData }] = await Promise.all([
         supabase
           .from('boards')
-          .select('id, name, address, city, state, area, format, asking_rate, width, height, illuminated, face_count, status, photo_urls, verification_status')
+          .select('id, name, address, city, state, area, format, asking_rate, width, height, illuminated, face_count, status, photo_urls, verification_status, latitude, longitude')
           .order('created_at', { ascending: false }),
         supabase.from('listings').select('id, board_id, sell_price, agent_id, board_authorizations(owner_verified)').eq('status', 'active'),
       ]);
@@ -355,19 +403,43 @@ function MarketplaceContent() {
     return boards.filter(b => {
       if (statusFilter !== 'all' && b.status !== statusFilter) return false;
       if (stateFilter !== 'all' && b.state !== stateFilter) return false;
-      if (formatFilter !== 'all' && b.format !== formatFilter) return false;
+      if (areaFilter !== 'all' && (b.area ?? '').trim() !== areaFilter) return false;
+      if (formatFilter !== 'all') {
+        const group = formatGroup(formatFilter);
+        if (group ? !(group.formats as readonly string[]).includes(b.format) : b.format !== formatFilter) return false;
+      }
+      if (kindFilter !== 'all' && DIGITAL_FORMATS.includes(b.format) !== (kindFilter === 'digital')) return false;
+      if (verifyFilter !== 'all') {
+        const v = verificationOf(b);
+        if (verifyFilter === 'any_verified' ? v === 'pending' : v !== verifyFilter) return false;
+      }
       if ((effectiveRate(b) ?? 0) > priceMax) return false;
       if (search) {
         const q = search.toLowerCase();
-        if (!b.name.toLowerCase().includes(q) && !b.address.toLowerCase().includes(q) && !b.city.toLowerCase().includes(q)) return false;
+        if (![b.name, b.address, b.city, b.area].some(t => (t ?? '').toLowerCase().includes(q))) return false;
       }
       return true;
     });
-  }, [boards, statusFilter, stateFilter, formatFilter, priceMax, search]);
+  }, [boards, statusFilter, stateFilter, areaFilter, formatFilter, kindFilter, verifyFilter, priceMax, search]);
+
+  // Areas come from the listings themselves, narrowed to the chosen state.
+  const areas = useMemo(() => Array.from(new Set(
+    boards.filter(b => stateFilter === 'all' || b.state === stateFilter).map(b => (b.area ?? '').trim()).filter(Boolean),
+  )).sort(), [boards, stateFilter]);
+
+  const mapBoards: MapBoard[] = useMemo(() => filtered
+    .filter(b => typeof b.latitude === 'number' && typeof b.longitude === 'number')
+    .map(b => ({
+      id: b.id, name: b.name, area: b.area, city: b.city, format: b.format, photo_urls: b.photo_urls,
+      verification_status: b.verification_status, latitude: b.latitude as number, longitude: b.longitude as number,
+      rate: rateText(b), perMonth: !!effectiveRate(b),
+    })), [filtered]);
+  const unmapped = filtered.length - mapBoards.length;
+
+  const filtersActive = !!search || stateFilter !== 'all' || areaFilter !== 'all' || formatFilter !== 'all'
+    || kindFilter !== 'all' || verifyFilter !== 'all' || statusFilter !== 'available' || priceMax !== Infinity;
 
   const availableCount = boards.filter(b => b.status === 'available').length;
-  const states = ['all', ...Array.from(new Set(boards.map(b => b.state))).sort()];
-  const formats = ['all', ...Array.from(new Set(boards.map(b => b.format))).sort()];
 
   // Booked boards can still be requested for future dates.
   function handleQuote() {
@@ -377,7 +449,7 @@ function MarketplaceContent() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F8FAFC', fontFamily: "'Inter', -apple-system, sans-serif" }}>
+    <div style={{ minHeight: '100vh', flexShrink: 0, background: '#F8FAFC', fontFamily: "'Inter', -apple-system, sans-serif" }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes modalIn { from { opacity:0; transform:translateY(12px) scale(0.97); } to { opacity:1; transform:none; } }
@@ -388,6 +460,27 @@ function MarketplaceContent() {
         .filter-pill:hover { opacity: 0.85; }
         .nav-link { color: #64748B; text-decoration: none; font-size: 0.875rem; font-weight: 500; transition: color 0.15s; }
         .nav-link:hover { color: #0F172A; }
+        .mk-select { padding: 7px 26px 7px 10px; border-radius: 8px; border: 1px solid #E2E8F0; font-size: 0.8125rem; color: #374151;
+          background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394A3B8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+          appearance: none; -webkit-appearance: none; font-family: inherit; cursor: pointer; outline: none; max-width: 100%; }
+        .mk-select:focus { border-color: #1B4F8A; box-shadow: 0 0 0 3px rgba(27,79,138,0.1); }
+        .mk-select.on { border-color: #1B4F8A; color: #1B4F8A; font-weight: 600; background-color: #EFF6FF; }
+        .mk-select:disabled { opacity: 0.5; cursor: not-allowed; }
+        .mk-seg { display: inline-flex; background: #fff; border: 1px solid #E2E8F0; border-radius: 10px; padding: 3px; gap: 2px; }
+        .mk-seg button { border: none; background: none; font-family: inherit; font-size: 0.8125rem; font-weight: 500; color: #64748B;
+          padding: 5px 12px; border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
+        .mk-seg button:hover { color: #0F172A; }
+        .mk-seg button.on { background: #1B4F8A; color: #fff; box-shadow: 0 1px 3px rgba(27,79,138,0.3); }
+        .mk-map { height: min(72vh, 680px); }
+        @media (max-width: 640px) {
+          nav { padding: 0 16px !important; }
+          .mk-nav-links { display: none !important; }
+          .mk-hero { padding: 36px 16px 28px !important; }
+          .mk-hero h1 { font-size: 1.875rem !important; }
+          .mk-body { padding: 24px 16px !important; }
+          .mk-filters .mk-select { flex: 1 1 calc(50% - 4px); }
+          .mk-map { height: 64vh; }
+        }
       `}</style>
 
       {/* ── Navbar ── */}
@@ -395,14 +488,14 @@ function MarketplaceContent() {
         position: 'sticky', top: 0, zIndex: 100,
         background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)',
         borderBottom: '1px solid #E8EDF2',
-        padding: '0 24px', height: 60,
+        padding: '0 24px', height: 60, gap: 12,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
+        <div className="mk-nav" style={{ display: 'flex', alignItems: 'center', gap: 32, minWidth: 0 }}>
           <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
             <Logo />
           </button>
-          <div style={{ display: 'flex', gap: 20 }}>
+          <div className="mk-nav-links" style={{ display: 'flex', gap: 20 }}>
             <a className="nav-link" href="#" style={{ color: '#1B4F8A', fontWeight: 600, fontSize: '0.875rem', textDecoration: 'none' }}>Marketplace</a>
             <a className="nav-link" href="#how" style={{ textDecoration: 'none' }}>How it works</a>
           </div>
@@ -414,7 +507,7 @@ function MarketplaceContent() {
       <div style={{
         background: 'linear-gradient(135deg, #0F172A 0%, #1B4F8A 100%)',
         padding: '52px 24px 40px',
-      }}>
+      }} className="mk-hero">
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -430,7 +523,7 @@ function MarketplaceContent() {
             Find the perfect billboard<br />for your campaign
           </h1>
           <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.55)', margin: '0 0 32px', maxWidth: 480, lineHeight: 1.6 }}>
-            Browse {boards.length}+ OOH locations across Nigeria. Filter by city, format, and budget — then request a quote in seconds.
+            Browse {boards.length}+ OOH locations across Nigeria. Filter by area, format and verification, see them on a map, then request a quote in seconds.
           </p>
 
           {/* Search bar */}
@@ -459,7 +552,7 @@ function MarketplaceContent() {
               <button
                 key={city}
                 className="filter-pill"
-                onClick={() => setStateFilter(city === 'Port Harcourt' ? 'Rivers' : city === 'Ibadan' ? 'Oyo' : city)}
+                onClick={() => changeState(city === 'Port Harcourt' ? 'Rivers' : city === 'Ibadan' ? 'Oyo' : city)}
                 style={{
                   padding: '6px 14px', borderRadius: 999, fontSize: '0.8125rem', fontWeight: 500,
                   background: (stateFilter === city || (city === 'Port Harcourt' && stateFilter === 'Rivers') || (city === 'Ibadan' && stateFilter === 'Oyo'))
@@ -476,10 +569,10 @@ function MarketplaceContent() {
       </div>
 
       {/* ── Body ── */}
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
+      <div className="mk-body" style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
 
-        {/* Campaign builder CTA */}
-        <div style={{
+        {/* Campaign builder CTA (not part of the MVP request flow) */}
+        {!MVP_MODE && <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
           background: 'linear-gradient(135deg, #1B4F8A 0%, #0EA5E9 100%)',
           borderRadius: 14, padding: '18px 24px', marginBottom: 24, flexWrap: 'wrap',
@@ -495,84 +588,78 @@ function MarketplaceContent() {
           }}>
             Plan a campaign →
           </a>
-        </div>
+        </div>}
 
         {/* Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+            <p data-result-count style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
               {loading ? 'Loading...' : `${filtered.length} board${filtered.length !== 1 ? 's' : ''}`}
             </p>
             {!loading && filtered.length !== boards.length && (
               <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>of {boards.length} total</span>
             )}
+            {filtersActive && (
+              <button onClick={clearFilters} style={{ background: 'none', border: 'none', padding: 0, color: '#1B4F8A', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Clear filters
+              </button>
+            )}
           </div>
 
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {/* Status quick filter */}
-            {['available', 'all'].map(s => (
-              <button
-                key={s}
-                className="filter-pill"
-                onClick={() => setStatusFilter(s)}
-                style={{
-                  padding: '6px 14px', borderRadius: 999, fontSize: '0.8125rem', fontWeight: 500,
-                  background: statusFilter === s ? '#1B4F8A' : '#fff',
-                  color: statusFilter === s ? '#fff' : '#64748B',
-                  border: `1px solid ${statusFilter === s ? '#1B4F8A' : '#E2E8F0'}`,
-                }}
-              >
-                {s === 'available' ? 'Available only' : 'All boards'}
+          <div className="mk-seg" role="tablist" aria-label="View">
+            <button role="tab" aria-selected={view === 'grid'} className={view === 'grid' ? 'on' : ''} onClick={() => changeView('grid')} data-view="grid">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+              Grid
+            </button>
+            <button role="tab" aria-selected={view === 'map'} className={view === 'map' ? 'on' : ''} onClick={() => changeView('map')} data-view="map">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+              Map
+            </button>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="mk-filters" style={{
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 20,
+          background: '#fff', border: '1px solid #E8EDF2', borderRadius: 14, padding: 10,
+          boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
+        }}>
+          <div className="mk-seg" aria-label="Availability">
+            {(['available', 'all'] as const).map(st => (
+              <button key={st} className={statusFilter === st ? 'on' : ''} onClick={() => setStatusFilter(st)}>
+                {st === 'available' ? 'Available' : 'All'}
               </button>
             ))}
-
-            {/* Format select */}
-            <select
-              value={formatFilter}
-              onChange={e => setFormatFilter(e.target.value)}
-              style={{
-                padding: '6px 10px', borderRadius: 8, border: '1px solid #E2E8F0',
-                fontSize: '0.8125rem', color: '#374151', background: '#fff',
-                fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
-              }}
-            >
-              <option value="all">All formats</option>
-              {formats.filter(f => f !== 'all').map(f => (
-                <option key={f} value={f}>{FORMAT_LABELS[f] ?? f}</option>
-              ))}
-            </select>
-
-            {/* State select */}
-            <select
-              value={stateFilter}
-              onChange={e => setStateFilter(e.target.value)}
-              style={{
-                padding: '6px 10px', borderRadius: 8, border: '1px solid #E2E8F0',
-                fontSize: '0.8125rem', color: '#374151', background: '#fff',
-                fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
-              }}
-            >
-              <option value="all">All states</option>
-              {NIGERIAN_STATES.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-
-            {/* Budget select */}
-            <select
-              value={priceMax === Infinity ? '' : priceMax}
-              onChange={e => setPriceMax(e.target.value ? Number(e.target.value) : Infinity)}
-              style={{
-                padding: '6px 10px', borderRadius: 8, border: '1px solid #E2E8F0',
-                fontSize: '0.8125rem', color: '#374151', background: '#fff',
-                fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
-              }}
-            >
-              {BUDGET_BANDS.map(b => (
-                <option key={b.label} value={b.value === Infinity ? '' : b.value}>{b.label}</option>
-              ))}
-            </select>
           </div>
+          <div className="mk-seg" aria-label="Static or digital" data-filter="kind">
+            {(['all', 'static', 'digital'] as const).map(k => (
+              <button key={k} className={kindFilter === k ? 'on' : ''} onClick={() => setKindFilter(k)}>
+                {k === 'all' ? 'All' : k === 'static' ? 'Static' : 'Digital'}
+              </button>
+            ))}
+          </div>
+
+          <select aria-label="State" className={`mk-select${stateFilter !== 'all' ? ' on' : ''}`} value={stateFilter} onChange={e => changeState(e.target.value)}>
+            <option value="all">All states</option>
+            {NIGERIAN_STATES.map(st => <option key={st} value={st}>{st}</option>)}
+          </select>
+          <select aria-label="Area" data-filter="area" className={`mk-select${areaFilter !== 'all' ? ' on' : ''}`} value={areaFilter} onChange={e => setAreaFilter(e.target.value)} disabled={areas.length === 0}>
+            <option value="all">{areas.length === 0 ? 'No areas listed' : 'All areas'}</option>
+            {areas.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <select aria-label="Format" className={`mk-select${formatFilter !== 'all' ? ' on' : ''}`} value={formatFilter} onChange={e => setFormatFilter(e.target.value)}>
+            <option value="all">All formats</option>
+            {FORMAT_GROUPS.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
+          </select>
+          <select aria-label="Verification" data-filter="verification" className={`mk-select${verifyFilter !== 'all' ? ' on' : ''}`} value={verifyFilter} onChange={e => setVerifyFilter(e.target.value)}>
+            {VERIFICATION_FILTERS.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+          </select>
+          {/* Most rates are private in MVP ("Request quote"), so a budget filter would mislead. */}
+          {!MVP_MODE && <select aria-label="Budget" className={`mk-select${priceMax !== Infinity ? ' on' : ''}`} value={priceMax === Infinity ? '' : priceMax} onChange={e => setPriceMax(e.target.value ? Number(e.target.value) : Infinity)}>
+            {BUDGET_BANDS.map(b => (
+              <option key={b.label} value={b.value === Infinity ? '' : b.value}>{b.label}</option>
+            ))}
+          </select>}
         </div>
 
         {/* Loading */}
@@ -610,7 +697,7 @@ function MarketplaceContent() {
                 <p style={{ fontSize: '1rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No boards match your filters</p>
                 <p style={{ fontSize: '0.875rem', color: '#64748B', margin: '0 0 20px' }}>Try adjusting your search or clearing filters</p>
                 <button
-                  onClick={() => { setSearch(''); setStateFilter('all'); setFormatFilter('all'); setStatusFilter('available'); setPriceMax(Infinity); }}
+                  onClick={clearFilters}
                   style={{ padding: '8px 18px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
                 >
                   Clear all filters
@@ -620,8 +707,25 @@ function MarketplaceContent() {
           </div>
         )}
 
+        {/* Map */}
+        {!loading && filtered.length > 0 && view === 'map' && (
+          <div data-marketplace-map>
+            <div className="mk-map" style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #E8EDF2', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', background: '#F1F5F9' }}>
+              <MarketplaceMap boards={mapBoards} onOpen={id => setSelected(filtered.find(b => b.id === id) ?? null)} />
+            </div>
+            {unmapped > 0 && (
+              <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '12px 2px 0' }}>
+                {unmapped} board{unmapped !== 1 ? 's' : ''} {unmapped !== 1 ? "don't" : "doesn't"} have a map location yet.{' '}
+                <button onClick={() => changeView('grid')} style={{ background: 'none', border: 'none', padding: 0, color: '#1B4F8A', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit' }}>
+                  See all in the grid →
+                </button>
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Grid */}
-        {!loading && filtered.length > 0 && (
+        {!loading && filtered.length > 0 && view === 'grid' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 16 }}>
             {filtered.map((board, i) => (
               <div
@@ -716,14 +820,18 @@ function MarketplaceContent() {
               Book outdoor advertising in 3 steps
             </h2>
             <p style={{ fontSize: '0.9375rem', color: 'rgba(255,255,255,0.45)', margin: '0 auto 36px', maxWidth: 440 }}>
-              No cold calls. No site visits. No spreadsheets.
+              {MVP_MODE ? 'No cold calls. No scattered WhatsApp chains.' : 'No cold calls. No site visits. No spreadsheets.'}
             </p>
             <div className="resp-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, maxWidth: 640, margin: '0 auto 36px', textAlign: 'left' }}>
-              {[
+              {(MVP_MODE ? [
+                { num: '01', title: 'Browse & filter', body: 'Find boards by area, format and verification — in a grid or on the map.' },
+                { num: '02', title: 'Request availability', body: 'Pick your dates. The media owner replies with availability and a price.' },
+                { num: '03', title: 'Agree and book', body: 'Negotiate in one thread. Once you accept, our team completes the booking with you.' },
+              ] : [
                 { num: '01', title: 'Browse & filter', body: 'Find boards by city, format, size, and budget on one page.' },
                 { num: '02', title: 'Request a quote', body: 'Submit your campaign dates and budget. Owner responds in 24h.' },
                 { num: '03', title: 'Go live', body: 'Sign digitally, upload creatives, and track compliance in real time.' },
-              ].map(({ num, title, body }) => (
+              ]).map(({ num, title, body }) => (
                 <div key={num} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: '16px' }}>
                   <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#F59E0B', margin: '0 0 8px', letterSpacing: '0.06em' }}>{num}</p>
                   <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#fff', margin: '0 0 6px' }}>{title}</p>
@@ -732,7 +840,7 @@ function MarketplaceContent() {
               ))}
             </div>
             <button
-              onClick={() => router.push('/signup')}
+              onClick={() => router.push(MVP_MODE ? '/signup?role=agency' : '/signup')}
               style={{
                 padding: '12px 28px', background: '#1B4F8A', color: '#fff',
                 border: 'none', borderRadius: 10, fontSize: '0.9375rem', fontWeight: 700,
