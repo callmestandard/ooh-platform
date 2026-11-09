@@ -10,6 +10,7 @@ import OwnerPicker, { type OwnerAccount, type OwnerChoice } from '@/components/a
 import { readDeck } from '@/lib/deck-import/read';
 import { extractBoard, deckCity, findContact, DECK_COLUMNS } from '@/lib/deck-import/extract';
 import SavedContacts from '@/components/admin/SavedContacts';
+import PhotoCropper from '@/components/admin/PhotoCropper';
 import { ownerContactKey } from '@/lib/owner-contacts';
 
 const PreviewMap = dynamic(() => import('./PreviewMap'), {
@@ -418,6 +419,28 @@ export default function ImportBoardsPage() {
   const [deckPhotos, setDeckPhotos] = useState<Record<string, { blob: Blob; url: string }>>({});
   const [deckSummary, setDeckSummary] = useState<{ file: string; slides: number; boards: number; skipped: number[] } | null>(null);
   const [deckProgress, setDeckProgress] = useState('');
+  // Photo being reframed: its key in deckPhotos (a row's own id when the slide had no photo).
+  const [cropping, setCropping] = useState<{ key: string; rowId?: string; title: string } | null>(null);
+  function savePhoto(key: string, blob: Blob, rowId?: string) {
+    const url = URL.createObjectURL(blob);
+    setDeckPhotos(prev => {
+      if (prev[key]) URL.revokeObjectURL(prev[key].url);
+      return { ...prev, [key]: { blob, url } };
+    });
+    if (rowId) setRows(prev => prev.map(r => r._id === rowId ? { ...r, photo_key: key } : r));
+    setCropping(null);
+  }
+
+  function removePhoto(key: string) {
+    setDeckPhotos(prev => {
+      if (!prev[key]) return prev;
+      URL.revokeObjectURL(prev[key].url);
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setCropping(null);
+  }
   // Sales contact for every board in this import (a sheet's own contact columns win).
   const [importContactName, setImportContactName] = useState('');
   const [importContactPhone, setImportContactPhone] = useState('');
@@ -819,6 +842,9 @@ export default function ImportBoardsPage() {
         @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
         .imp-row:hover { background: #F8FAFC !important; }
         .imp-cell-edit:hover { background: #EFF6FF; cursor: text; border-radius: 4px; }
+        .imp-photo-edit { position: absolute; inset: auto 0 0 0; background: rgba(15,23,42,0.68); color: #fff; font-size: 10px; font-weight: 600; line-height: 1.6; text-align: center; opacity: 0; transition: opacity .15s; }
+        .imp-photo-btn:hover .imp-photo-edit, .imp-photo-btn:focus-visible .imp-photo-edit { opacity: 1; }
+        @media (hover: none) { .imp-photo-edit { opacity: 1; } }
       `}</style>
 
       {/* Header */}
@@ -946,10 +972,18 @@ export default function ImportBoardsPage() {
               {Object.keys(deckPhotos).length > 0 && (
                 <div style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto' }}>
                   {rawRows.slice(0, 8).map(r => deckPhotos[String(r.__photo)] && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img key={String(r.__slide)} src={deckPhotos[String(r.__photo)].url} alt={`Slide ${String(r.__slide)}`} style={{ width: 84, height: 56, objectFit: 'cover', borderRadius: 6, border: '1px solid #E9D5FF', flexShrink: 0 }} />
+                    <button key={String(r.__slide)} type="button" className="imp-photo-btn" title="Frame this photo"
+                      onClick={() => setCropping({ key: String(r.__photo), title: `Slide ${String(r.__slide)} · ${String(r['Board Name'] ?? '').trim() || 'board'}` })}
+                      style={{ padding: 0, border: '1px solid #E9D5FF', borderRadius: 6, background: 'none', cursor: 'pointer', flexShrink: 0, position: 'relative', overflow: 'hidden', lineHeight: 0 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={deckPhotos[String(r.__photo)].url} alt={`Slide ${String(r.__slide)}`} style={{ width: 84, height: 56, objectFit: 'cover', display: 'block' }} />
+                      <span className="imp-photo-edit">Edit</span>
+                    </button>
                   ))}
                 </div>
+              )}
+              {Object.keys(deckPhotos).length > 0 && (
+                <p style={{ margin: '8px 0 0', fontSize: '0.6875rem', color: '#7C3AED' }}>Board not in frame? Tap a photo to crop, rotate or replace it. You can also do this in the next step.</p>
               )}
             </div>
           )}
@@ -1148,9 +1182,19 @@ export default function ImportBoardsPage() {
                         {deckMode && (
                           <td style={{ padding: '6px 8px' }}>
                             {row.photo_key && deckPhotos[row.photo_key] ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={deckPhotos[row.photo_key].url} alt={`Slide ${row.row_no}`} title={`Slide ${row.row_no}`} style={{ width: 56, height: 38, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
-                            ) : <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>Slide {row.row_no}</span>}
+                              <button type="button" data-row-photo className="imp-photo-btn" title={`Slide ${row.row_no}: frame this photo`}
+                                onClick={() => setCropping({ key: row.photo_key, title: `Slide ${row.row_no} · ${row.name || 'board'}` })}
+                                style={{ padding: 0, border: 'none', borderRadius: 4, background: 'none', cursor: 'pointer', position: 'relative', overflow: 'hidden', lineHeight: 0, display: 'block' }}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={deckPhotos[row.photo_key].url} alt={`Slide ${row.row_no}`} style={{ width: 56, height: 38, objectFit: 'cover', display: 'block' }} />
+                                <span className="imp-photo-edit">Edit</span>
+                              </button>
+                            ) : (
+                              <button type="button" data-row-photo onClick={() => setCropping({ key: row.photo_key || `row-${row._id}`, rowId: row._id, title: `Slide ${row.row_no} · ${row.name || 'board'}` })}
+                                style={{ width: 56, height: 38, border: '1px dashed #CBD5E1', borderRadius: 4, background: '#F8FAFC', color: '#64748B', fontSize: '0.6875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                + Photo
+                              </button>
+                            )}
                           </td>
                         )}
                         {/* Editable: name */}
@@ -1349,6 +1393,16 @@ export default function ImportBoardsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {cropping && (
+        <PhotoCropper
+          src={deckPhotos[cropping.key]?.url ?? null}
+          title={cropping.title}
+          onSave={blob => savePhoto(cropping.key, blob, cropping.rowId)}
+          onRemove={() => removePhoto(cropping.key)}
+          onClose={() => setCropping(null)}
+        />
       )}
 
       {/* Confirm dialog */}
