@@ -9,6 +9,7 @@ import { authedFetch } from '@/lib/api';
 import { MVP_MODE } from '@/lib/mvp';
 import { createNotification } from '@/lib/notifications';
 import LocationPinPickerLoader from './LocationPinPickerLoader';
+import LocationSearch from './LocationSearch';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -760,7 +761,7 @@ function PostBoardContent() {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                     <div>
                       <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#374151', margin: '0 0 2px' }}>Pin your board on the map</p>
-                      <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>Tap the map or use your GPS — agencies see this pin when browsing</p>
+                      <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>Search a place, paste GPS coordinates, tap the map or use your GPS</p>
                     </div>
                     <button
                       type="button"
@@ -777,6 +778,14 @@ function PostBoardContent() {
                       )}
                       {locating ? 'Locating...' : 'Use my GPS'}
                     </button>
+                  </div>
+                  <div style={{ marginBottom: 10 }}>
+                    <LocationSearch city={city} onPick={({ lat, lng, name }) => {
+                      setLatitude(lat.toFixed(6));
+                      setLongitude(lng.toFixed(6));
+                      if (name) setAddress(prev => prev.trim() ? prev : name);
+                      setError('');
+                    }} />
                   </div>
                   <LocationPinPickerLoader
                     lat={latitude ? parseFloat(latitude) : null}

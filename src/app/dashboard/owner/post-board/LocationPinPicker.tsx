@@ -59,16 +59,24 @@ export default function LocationPinPicker({ lat, lng, city, onChange, onClear }:
         </OOHMap>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, minHeight: 20 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '4px 12px', marginTop: 8, minHeight: 20 }}>
         {hasPin ? (
           <>
             <span style={{ fontSize: '0.75rem', color: '#10B981', fontWeight: 600 }}>
               ✓ Pin placed — drag to fine-tune
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 10px' }}>
               <span style={{ fontSize: '0.6875rem', color: '#94A3B8', fontFamily: 'monospace' }}>
                 {lat.toFixed(5)}, {lng.toFixed(5)}
               </span>
+              <a
+                href={`https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: '0.6875rem', color: '#1D4ED8', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}
+              >
+                Check on Google Maps ↗
+              </a>
               <button
                 type="button"
                 onClick={onClear}
