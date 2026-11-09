@@ -410,13 +410,7 @@ function AdminContent() {
           email: p.email || '—',
           is_suspended: !!p.is_suspended,
         }))
-      : [
-          { id: 'demo-1', name: 'Alex Okonkwo',  role: 'agency', company: 'MediaPro Lagos',    status: 'active',    count: campaigns.length, lastActive: '2h ago',  email: 'alex@mediapro.ng',    is_suspended: false },
-          { id: 'demo-2', name: 'MTN Nigeria',   role: 'client', company: 'MTN Nigeria',        status: 'active',    count: campaigns.filter(c => c.status === 'active').length, lastActive: '1d ago', email: 'marketing@mtn.ng', is_suspended: false },
-          { id: 'demo-3', name: 'Alhaji Sule',   role: 'owner',  company: 'Sule Outdoor',       status: 'active',    count: boards.length,    lastActive: '3h ago',  email: 'sule@outdoor.ng',     is_suspended: false },
-          { id: 'demo-4', name: 'Bola Adeyemi',  role: 'owner',  company: 'Adeyemi Signs',      status: 'active',    count: 0,                lastActive: '5d ago',  email: 'bola@adeyemi.ng',     is_suspended: false },
-          { id: 'demo-5', name: 'Kemi Ade',      role: 'agency', company: 'Ade Media',          status: 'suspended', count: 0,                lastActive: '12d ago', email: 'kemi@ademedia.ng',    is_suspended: true  },
-        ];
+      : [];
 
   const filteredUsers = userRoleFilter === 'all' ? displayUsers : displayUsers.filter(u => u.role === userRoleFilter);
 

@@ -116,6 +116,8 @@ const marketerNav: NavItem[] = [
 
 const adminNav: NavItem[] = [
   { id: "overview",   label: "Overview",        path: "/dashboard/admin",                      icon: <Icon path="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10" /> },
+  { id: "requests",   label: "Requests",         path: "/dashboard/admin/requests",             icon: <Icon path="M22 12h-6l-2 3h-4l-2-3H2 M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /> },
+  { id: "claims",     label: "Board Claims",     path: "/dashboard/admin/claims",               icon: <Icon path="M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /> },
   { id: "inventory",  label: "Board Inventory",  path: "/dashboard/admin?tab=inventory",        icon: <Icon path="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10" /> },
   { id: "bookings",   label: "All Bookings",     path: "/dashboard/admin?tab=bookings",         icon: <Icon path="M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01" /> },
   { id: "users",      label: "Users",            path: "/dashboard/admin?tab=users",            icon: <Icon path="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" /> },
