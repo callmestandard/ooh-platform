@@ -11,7 +11,8 @@ import { supabase } from '@/lib/supabase';
 // anonymous visitors yet. Controlled by NEXT_PUBLIC_GATE_PUBLIC_PAGES so
 // it's a one-line flip to reopen later.
 export default function RequirePlatformAuth({ children }: { children: React.ReactNode }) {
-  const gateEnabled = process.env.NEXT_PUBLIC_GATE_PUBLIC_PAGES !== 'false';
+  // Off unless explicitly turned on (NEXT_PUBLIC_GATE_PUBLIC_PAGES=true) — the MVP marketplace is public.
+  const gateEnabled = process.env.NEXT_PUBLIC_GATE_PUBLIC_PAGES === 'true';
   const router = useRouter();
   const pathname = usePathname();
   const [status, setStatus] = useState<'checking' | 'authed' | 'anon'>(gateEnabled ? 'checking' : 'authed');

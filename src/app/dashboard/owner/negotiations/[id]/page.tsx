@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { notifyRequest } from '@/lib/availability-requests';
 import { attachRatesToBookings } from '@/lib/board-rates';
 import { authedFetch } from '@/lib/api';
 import { createNotification } from '@/lib/notifications';
@@ -232,6 +233,7 @@ export default function OwnerNegotiationDetailPage() {
 
     const prevStatus = booking.status;
     await supabase.from('bookings').update(updateData).eq('id', booking.id);
+    notifyRequest({ bookingId: booking.id });
 
     const boardName = booking.boards?.name || 'a board';
     const actor = await getActivityActor();

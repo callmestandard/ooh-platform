@@ -10,6 +10,17 @@
 import { supabase } from './supabase';
 import { createNotification } from './notifications';
 import { attachVisibleRates, attachRatesToBookings } from './board-rates';
+import { authedFetch } from './api';
+
+/**
+ * Tell the server something happened on a board request, so it can send any
+ * emails that are now due (046). The server checks the request's real state;
+ * calling this when nothing changed is harmless. Never blocks the UI.
+ */
+export function notifyRequest(ref: { requestId?: string | null; bookingId?: string | null }): void {
+  if (!ref.requestId && !ref.bookingId) return;
+  authedFetch('/api/notify/request', { method: 'POST', body: JSON.stringify(ref), keepalive: true }).catch(() => {});
+}
 
 export type AvailabilityRequest = {
   id: string;
@@ -204,6 +215,7 @@ export async function sendBoardRequest(input: BoardRequestInput): Promise<{ id: 
     p_sites: input.sites,
     p_extra: input.extra,
   });
+  if (!error && data) notifyRequest({ requestId: data as string });
   return { id: (data as string) ?? null, error: err(error) };
 }
 
@@ -239,6 +251,7 @@ export async function cancelBoardRequest(requestId: string): Promise<{ error: st
  */
 export async function answerBoardQuote(requestId: string, accept: boolean): Promise<{ bookingId: string | null; error: string | null }> {
   const { data, error } = await supabase.rpc('answer_board_quote', { p_request_id: requestId, p_accept: accept });
+  if (!error) notifyRequest({ requestId });
   return { bookingId: (data as string) ?? null, error: err(error) };
 }
 
@@ -337,6 +350,7 @@ export async function submitOwnerResponses(
   if (error) return { error: error.message };
 
   if (request.board_id) {
+    notifyRequest({ requestId: request.id });
     const a = answers[0];
     await createNotification({
       recipientRole: 'agency',

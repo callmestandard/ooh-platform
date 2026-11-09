@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { notifyRequest } from '@/lib/availability-requests';
 import { attachRatesToBookings } from '@/lib/board-rates';
 import { authedFetch } from '@/lib/api';
 import { createNotification, getBoardOwnerAccount } from '@/lib/notifications';
@@ -216,6 +217,7 @@ export default function NegotiationDetailPage() {
     if (actionMode === 'counter' && rate) updateData.offered_rate = rate;
     const prevStatus = booking.status;
     await supabase.from('bookings').update(updateData).eq('id', booking.id);
+    notifyRequest({ bookingId: booking.id });
 
     const boardName = booking.boards?.name || 'a board';
     const actor = await getActivityActor();
@@ -325,6 +327,7 @@ export default function NegotiationDetailPage() {
 
     const prevStatus = booking.status;
     await supabase.from('bookings').update({ agreed_rate: finalRate, status: 'agreed' }).eq('id', booking.id);
+    notifyRequest({ bookingId: booking.id });
 
     const actor = await getActivityActor();
     const boardName = booking.boards?.name || 'a board';

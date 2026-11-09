@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useDashboardRole } from '@/components/layout/DashboardLayout';
 import { boardFormatLabel } from '@/lib/board-formats';
-import { STAGE_META, type RequestStage } from '@/lib/availability-requests';
+import { STAGE_META, notifyRequest, type RequestStage } from '@/lib/availability-requests';
 
 // Admin console for "Request this location" (043–045): see every board
 // request, who to call, and move deals through the manual hand-off.
@@ -261,7 +261,7 @@ function Manage({ r, note, onNoteSaved, onChanged }: { r: Req; note: string; onN
   const answer = () => run('answer', async () => supabase.rpc('admin_answer_board_request', {
     p_request_id: r.id, p_available: !!avail, p_rate: avail && Number(rate) > 0 ? Number(rate) : null,
     p_from: avail && from ? from : null, p_to: avail && to ? to : null, p_conditions: cond, p_note: replyNote,
-  }));
+  }).then(res => { if (!res.error) notifyRequest({ requestId: r.id }); return res; }));
   const setStage = (stage: RequestStage) => run(stage, async () => supabase.rpc('admin_set_request_stage', { p_request_id: r.id, p_stage: stage, p_message: stageMsg || null }));
   const saveNote = async () => {
     setBusy('note'); setErr(null);
@@ -378,6 +378,7 @@ function Thread({ bookingId, canReplyAsOwner, onChanged }: { bookingId: string; 
     if (update) {
       const u = await supabase.from('bookings').update(update).eq('id', bookingId);
       if (u.error) { setErr(u.error.message); setBusy(false); return; }
+      notifyRequest({ bookingId });
     }
     const { data: who } = await supabase.rpc('booking_buyer', { p_booking_id: bookingId });
     const buyerId = ((who as { buyer_id: string }[] | null) ?? [])[0]?.buyer_id;
