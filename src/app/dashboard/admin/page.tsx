@@ -10,6 +10,7 @@ import type { ActivityEvent } from '@/lib/activity-log';
 import { useToast } from '@/components/ui/Toast';
 import { computeTrustBadge, TrustBadgePill } from '@/lib/agent-listings';
 import { VERIFICATION_META, verificationOf, formatVerifiedDate, type VerificationStatus } from '@/lib/board-verification';
+import { MVP_MODE, mvpTabs } from '@/lib/mvp';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -214,6 +215,22 @@ function AdminContent() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [togglingUser, setTogglingUser] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  // MVP: request pipeline counts for the overview
+  const [reqStages, setReqStages] = useState<Record<string, number>>({});
+  const [pendingClaims, setPendingClaims] = useState(0);
+  useEffect(() => {
+    if (!MVP_MODE) return;
+    (async () => {
+      const [{ data }, { count }] = await Promise.all([
+        supabase.from('availability_requests').select('stage').not('board_id', 'is', null).limit(1000),
+        supabase.from('board_claims').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      ]);
+      const counts: Record<string, number> = {};
+      (data ?? []).forEach((r: { stage: string }) => { counts[r.stage] = (counts[r.stage] ?? 0) + 1; });
+      setReqStages(counts);
+      setPendingClaims(count ?? 0);
+    })();
+  }, []);
 
   // inventory filter
   const [invFilter, setInvFilter] = useState<'all' | 'available' | 'booked' | 'unavailable' | 'decommissioned'>('all');
@@ -564,11 +581,11 @@ function AdminContent() {
           </div>
         </div>
         <div className="welcome-stats" style={{ display: 'flex', alignItems: 'center', gap: 24, flexShrink: 0 }}>
-          <div style={{ textAlign: 'center' }}>
+          {!MVP_MODE && <><div style={{ textAlign: 'center' }}>
             <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#10B981', fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em' }}>{formatNaira(platformCommission)}</p>
             <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Platform revenue</p>
           </div>
-          <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
+          <div style={{ width: 1, height: 36, background: '#F1F5F9' }} /></>}
           <div style={{ textAlign: 'center' }}>
             <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1B4F8A', fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em' }}>{boards.length}</p>
             <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Boards listed</p>
@@ -578,7 +595,7 @@ function AdminContent() {
             <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#7C3AED', fontFamily: 'monospace', margin: '0 0 2px', letterSpacing: '-0.03em' }}>{displayUsers.length}</p>
             <p style={{ fontSize: '0.625rem', fontWeight: 600, color: '#94A3B8', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Platform users</p>
           </div>
-          {flaggedCompliance.length > 0 && (
+          {!MVP_MODE && flaggedCompliance.length > 0 && (
             <>
               <div style={{ width: 1, height: 36, background: '#F1F5F9' }} />
               <button onClick={() => setActiveTab('compliance')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', padding: '7px 14px', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -589,17 +606,38 @@ function AdminContent() {
         </div>
       </div>
 
+      {/* ── MVP: request pipeline ── */}
+      {MVP_MODE && (() => {
+        const n = (...st: string[]) => st.reduce((t, x) => t + (reqStages[x] ?? 0), 0);
+        const verified = boards.filter(b => b.verification_status === 'verified' || b.verification_status === 'partner_verified').length;
+        return (
+          <div data-mvp-kpis className="resp-grid-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: '1.75rem' }}>
+            <KPICard label="Boards listed"    value={String(boards.length)} bar="#7C3AED" sub={`${verified} verified`} icon="🏗️" />
+            <KPICard label="New requests"     value={String(n('requested', 'owner_responded'))} bar="#F59E0B" sub="waiting for the owner" icon="📨" />
+            <KPICard label="Quoted / talking" value={String(n('quote_received', 'negotiating'))} bar="#1B4F8A" sub="buyer deciding" icon="💬" />
+            <KPICard label="Deals to complete" value={String(n('accepted', 'booking_in_progress'))} bar="#10B981" sub="our team's job" icon="🤝" />
+            <KPICard label="Confirmed"        value={String(n('confirmed'))} bar="#065F46" sub={pendingClaims ? `${pendingClaims} board claim${pendingClaims > 1 ? 's' : ''} waiting` : 'bookings'} icon="✅" />
+          </div>
+        );
+      })()}
+      {MVP_MODE && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+          <a href="/dashboard/admin/requests" style={{ padding: '9px 16px', borderRadius: 9, background: '#1B4F8A', color: '#fff', fontSize: '0.8125rem', fontWeight: 700, textDecoration: 'none' }}>Open the Requests console →</a>
+          {pendingClaims > 0 && <a href="/dashboard/admin/claims" style={{ padding: '9px 16px', borderRadius: 9, border: '1px solid #CBD5E1', color: '#1B4F8A', fontSize: '0.8125rem', fontWeight: 700, textDecoration: 'none' }}>Review {pendingClaims} board claim{pendingClaims > 1 ? 's' : ''}</a>}
+        </div>
+      )}
+
       {/* ── KPI cards ── */}
-      <div className="resp-grid-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: '1.75rem' }}>
+      {!MVP_MODE && <div className="resp-grid-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: '1.75rem' }}>
         <KPICard label="Total Boards"      value={String(boards.length)}         bar="#7C3AED" sub={`${occupancy}% occupancy`}                              icon="🏗️" />
         <KPICard label="Campaigns"         value={String(campaigns.length)}       bar="#1B4F8A" sub={`${campaigns.filter(c => c.status === 'active').length} active`} icon="📋" />
         <KPICard label="All Bookings"      value={String(bookings.length)}        bar="#F59E0B" sub={`${liveBookings.length} live · ${pendingBookings.length} pending`} icon="📌" />
         <KPICard label="Total GMV"         value={formatNaira(totalGMV)}          bar="#10B981" sub="Gross merchandise value"                                icon="💰" />
         <KPICard label="Compliance Flags"  value={String(flaggedCompliance.length)} bar={flaggedCompliance.length > 0 ? '#EF4444' : '#10B981'} sub={`${compliance.filter(c => c.status === 'verified').length} verified`} icon="🚩" />
-      </div>
+      </div>}
 
       {/* ── Alerts ── */}
-      {(pendingBookings.length > 0 || flaggedCompliance.length > 0) && (
+      {!MVP_MODE && (pendingBookings.length > 0 || flaggedCompliance.length > 0) && (
         <div style={{ display: 'flex', gap: 10, marginBottom: '1.25rem', flexWrap: 'wrap' }}>
           {pendingBookings.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '10px 16px', flex: 1 }}>
@@ -630,7 +668,7 @@ function AdminContent() {
           { key: 'analytics',  label: 'Analytics' },
           { key: 'agent-conflicts', label: 'Agent Conflicts', badge: disputedAuths.length },
           { key: 'settings',   label: 'Settings' },
-        ] as { key: AdminTab; label: string; badge?: number }[]).map(tab => (
+        ] as { key: AdminTab; label: string; badge?: number }[]).filter(t => !mvpTabs('admin') || mvpTabs('admin')!.includes(t.key)).map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
@@ -754,7 +792,7 @@ function AdminContent() {
           </div>
 
           {/* Active campaigns */}
-          <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, overflow: 'hidden' }}>
+          {!MVP_MODE && <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, overflow: 'hidden' }}>
             <div style={{ padding: '14px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h2 style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>Active campaigns</h2>
@@ -787,7 +825,7 @@ function AdminContent() {
                 </div>
               )}
             </div>
-          </div>
+          </div>}
         </div>
       )}
 

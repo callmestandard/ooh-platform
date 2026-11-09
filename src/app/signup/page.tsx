@@ -5,13 +5,20 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { safeRedirect } from '@/lib/safe-redirect';
 import type { DemoRole } from '@/lib/constants';
+import { MVP_MODE } from '@/lib/mvp';
 
-const ROLES: { role: DemoRole; label: string; desc: string; color: string; bg: string }[] = [
+const ALL_ROLES: { role: DemoRole; label: string; desc: string; color: string; bg: string }[] = [
   { role: 'agency', label: 'Agency',      desc: 'Plan campaigns, book boards, manage clients', color: '#1B4F8A', bg: '#EFF6FF' },
   { role: 'owner',  label: 'Board Owner', desc: 'List your boards, manage bookings, earn revenue', color: '#7C3AED', bg: '#F5F3FF' },
   { role: 'client', label: 'Advertiser',  desc: 'Track campaigns and view compliance reports', color: '#059669', bg: '#ECFDF5' },
   { role: 'agent',  label: 'Agent',       desc: 'Broker boards on an owner’s behalf and set your own markup', color: '#D97706', bg: '#FFFBEB' },
 ];
+// MVP launch: two kinds of account. "agency" is the buyer role in the database.
+const MVP_ROLES: typeof ALL_ROLES = [
+  { role: 'agency', label: 'Buyer',       desc: 'Agency, brand or marketer — find locations and request quotes', color: '#1B4F8A', bg: '#EFF6FF' },
+  { role: 'owner',  label: 'Media owner', desc: 'List your locations and answer buyer requests', color: '#7C3AED', bg: '#F5F3FF' },
+];
+const ROLES = MVP_MODE ? MVP_ROLES : ALL_ROLES;
 
 function OOHLogo() {
   return (
@@ -73,8 +80,8 @@ export default function SignupPage() {
     e.preventDefault();
     if (!fullName.trim())          { setError('Full name is required.'); return; }
     if (!company.trim())           { setError('Company name is required.'); return; }
-    if (role === 'owner' && !cacNumber.trim()) { setError('CAC registration number is required for media partners.'); return; }
-    if (role === 'owner' && !tinNumber.trim()) { setError('TIN (Tax Identification Number) is required for media partners.'); return; }
+    if (!MVP_MODE && role === 'owner' && !cacNumber.trim()) { setError('CAC registration number is required for media partners.'); return; }
+    if (!MVP_MODE && role === 'owner' && !tinNumber.trim()) { setError('TIN (Tax Identification Number) is required for media partners.'); return; }
     if (role === 'agent' && !cacNumber.trim()) { setError('CAC registration number is required to register as an agent.'); return; }
     if (role === 'agent' && !tinNumber.trim()) { setError('TIN (Tax Identification Number) is required to register as an agent.'); return; }
     if (!email.trim())             { setError('Email is required.'); return; }
@@ -93,7 +100,7 @@ export default function SignupPage() {
           full_name:    fullName.trim(),
           company_name: company.trim(),
           role,
-          ...(role === 'owner' || role === 'agent' ? { cac_number: cacNumber.trim(), tin_number: tinNumber.trim() } : {}),
+          ...((role === 'owner' || role === 'agent') && (cacNumber.trim() || tinNumber.trim()) ? { cac_number: cacNumber.trim() || null, tin_number: tinNumber.trim() || null } : {}),
         },
       },
     });
@@ -148,17 +155,22 @@ export default function SignupPage() {
         </div>
         <div style={{ position: 'relative' }}>
           <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#F8FAFC', letterSpacing: '-0.04em', lineHeight: 1.15, margin: '0 0 16px' }}>
-            Join Nigeria&apos;s OOH operating system
+            {MVP_MODE ? <>Find and book billboards across Nigeria</> : <>Join Nigeria&apos;s OOH operating system</>}
           </h1>
           <p style={{ fontSize: '0.9375rem', color: 'rgba(255,255,255,0.45)', lineHeight: 1.6, margin: '0 0 32px', maxWidth: 300 }}>
-            Agencies plan smarter. Owners earn more. Brands see results.
+            {MVP_MODE ? 'Buyers find the right locations. Media owners get real requests.' : 'Agencies plan smarter. Owners earn more. Brands see results.'}
           </p>
-          {[
+          {(MVP_MODE ? [
+            { icon: '📍', text: 'Browse locations with photos, size and verification status' },
+            { icon: '📨', text: 'Request a location and get availability and a price from the owner' },
+            { icon: '🤝', text: 'Agree the terms in one conversation' },
+            { icon: '✅', text: 'Our team completes the booking with you' },
+          ] : [
             { icon: '📋', text: 'Plan campaigns with AI-powered board selection' },
             { icon: '🤝', text: 'Negotiate and book boards in real time' },
             { icon: '📸', text: 'Verify proof of posting with GPS-tagged photos' },
             { icon: '🧾', text: 'End-to-end billing from owner to client' },
-          ].map(f => (
+          ]).map(f => (
             <div key={f.text} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
               <span style={{ fontSize: '1rem', flexShrink: 0, marginTop: 1 }}>{f.icon}</span>
               <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.5 }}>{f.text}</p>
@@ -271,7 +283,7 @@ export default function SignupPage() {
               {role === 'owner' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: 5 }}>CAC registration number *</label>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: 5 }}>CAC registration number{MVP_MODE ? ' (optional)' : ' *'}</label>
                     <input
                       value={cacNumber} onChange={e => { setCacNumber(e.target.value); setError(''); }}
                       placeholder="RC1234567"
@@ -280,7 +292,7 @@ export default function SignupPage() {
                     />
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: 5 }}>TIN (Tax ID) *</label>
+                    <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: 5 }}>TIN (Tax ID){MVP_MODE ? ' (optional)' : ' *'}</label>
                     <input
                       value={tinNumber} onChange={e => { setTinNumber(e.target.value); setError(''); }}
                       placeholder="12345678-0001"
@@ -289,7 +301,7 @@ export default function SignupPage() {
                     />
                   </div>
                   <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '-2px 0 0', gridColumn: '1 / -1' }}>
-                    Required to verify your business as a registered media partner. Kept private — never shown to agencies.
+                    {MVP_MODE ? 'Helps us verify your business faster. You can add these later. Kept private — never shown to buyers.' : 'Required to verify your business as a registered media partner. Kept private — never shown to agencies.'}
                   </p>
                 </div>
               )}

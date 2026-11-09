@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signInWithEmail, getSession, getCurrentProfile, signOut, DEMO_CREDENTIALS } from '@/lib/auth';
 import { ROLE_STORAGE_KEY, type DemoRole } from '@/lib/constants';
+import { MVP_MODE, roleHome } from '@/lib/mvp';
 import { supabase } from '@/lib/supabase';
 import { safeRedirect } from '@/lib/safe-redirect';
 
@@ -47,7 +48,7 @@ function LoginContent() {
   function postLoginRedirect(role: string) {
     if (redirectParam) return redirectParam;
     if (fromParam === 'marketplace') return '/marketplace';
-    return `/dashboard/${role}`;
+    return roleHome(role);
   }
 
   const [email, setEmail]               = useState('');
@@ -375,11 +376,11 @@ function LoginContent() {
           </p>
 
           {/* Divider */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+          {!MVP_MODE && <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
             <div style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
             <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontWeight: 500, whiteSpace: 'nowrap' }}>Quick demo access</span>
             <div style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
-          </div>
+          </div>}
 
           {/* Browse marketplace link */}
           <div style={{ textAlign: 'center', marginBottom: '20px' }}>
@@ -387,12 +388,12 @@ function LoginContent() {
               href="/marketplace"
               style={{ fontSize: '0.8125rem', color: '#1B4F8A', fontWeight: 500, textDecoration: 'none' }}
             >
-              Browse available boards without signing in →
+              {MVP_MODE ? 'Browse locations without signing in →' : 'Browse available boards without signing in →'}
             </a>
           </div>
 
-          {/* Demo role buttons */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {/* Demo role buttons (hidden at launch) */}
+          {!MVP_MODE && <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {DEMO_ROLES.map(({ role, label, sub, color, bg }) => {
               const isThisLoading = demoLoading === role;
               return (
@@ -443,7 +444,7 @@ function LoginContent() {
                 </button>
               );
             })}
-          </div>
+          </div>}
         </div>
       </div>
 

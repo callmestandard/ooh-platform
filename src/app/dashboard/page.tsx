@@ -4,6 +4,7 @@ import { ROLE_STORAGE_KEY, type DemoRole } from "@/lib/constants";
 import { getSession, getCurrentProfile } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { roleHome } from "@/lib/mvp";
 
 export default function DashboardRedirectPage() {
   const router = useRouter();
@@ -15,7 +16,7 @@ export default function DashboardRedirectPage() {
       if (session) {
         const profile = await getCurrentProfile();
         if (profile) {
-          router.replace(`/dashboard/${profile.role}`);
+          router.replace(roleHome(profile.role));
           return;
         }
       }

@@ -7,6 +7,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { Suspense, createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
+import { MVP_MODE, mvpRedirect } from "@/lib/mvp";
 
 const DashboardRoleContext = createContext<DemoRole | null>(null);
 export function useDashboardRole() { return useContext(DashboardRoleContext); }
@@ -73,8 +74,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         // so the app still works during setup (don't sign the user out aggressively)
       }
 
-      // ── 2. Fallback: localStorage demo mode ────────────────────────────────
-      const raw = localStorage.getItem(ROLE_STORAGE_KEY);
+      // ── 2. Fallback: localStorage demo mode (never in MVP launch mode) ─────
+      const raw = MVP_MODE ? null : localStorage.getItem(ROLE_STORAGE_KEY);
       if (raw === "agency" || raw === "client" || raw === "owner" || raw === "admin") {
         if (!cancelled) {
           setRole(raw);
@@ -104,13 +105,21 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     };
   }, [router]);
 
+  // MVP mode: pages hidden for this role send the user to their home page.
+  const hiddenRedirect = role && typeof window !== "undefined"
+    ? mvpRedirect(role, pathname, new URLSearchParams(window.location.search).get("tab"))
+    : null;
+  useEffect(() => {
+    if (hiddenRedirect) router.replace(hiddenRedirect);
+  }, [hiddenRedirect, router]);
+
   async function handleLogout() {
     await signOut();
     localStorage.removeItem(ROLE_STORAGE_KEY);
     router.push("/auth/login");
   }
 
-  if (!mounted || !role) {
+  if (!mounted || !role || hiddenRedirect) {
     return (
       <div style={{ display: "flex", height: "100vh", background: "#F8FAFC" }}>
         <div style={{ width: 240, background: "#0F172A" }} />

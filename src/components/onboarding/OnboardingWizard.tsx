@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import type { DemoRole } from '@/lib/constants';
+import { MVP_MODE } from '@/lib/mvp';
 
 const DONE_KEY = (role: DemoRole) => `ooh_onboarding_${role}_done`;
 
@@ -16,15 +17,15 @@ type Step = {
 };
 
 const AGENCY_STEPS: Step[] = [
-  { id: 'welcome',  title: 'Welcome to OOH Platform',       subtitle: 'Your full-stack OOH command centre is ready.' },
-  { id: 'profile',  title: 'Tell us about your agency',     subtitle: 'This appears on media plans and MPOs you send to clients.' },
+  { id: 'welcome',  title: 'Welcome to OOH Platform',       subtitle: MVP_MODE ? 'Find billboards across Nigeria and request the ones you want.' : 'Your full-stack OOH command centre is ready.' },
+  { id: 'profile',  title: MVP_MODE ? 'Tell us about your company' : 'Tell us about your agency', subtitle: MVP_MODE ? 'Media owners see your company name when you request a location.' : 'This appears on media plans and MPOs you send to clients.' },
   { id: 'done',     title: 'You\'re all set, Alex.',        subtitle: 'Here\'s where to start.' },
 ];
 
 const OWNER_STEPS: Step[] = [
   { id: 'welcome',  title: 'Welcome to OOH Platform',       subtitle: 'Start listing your boards and receiving booking requests.' },
-  { id: 'contact',  title: 'Your contact details',          subtitle: 'Agencies will see this when they view your boards.' },
-  { id: 'done',     title: 'Ready to go.',                  subtitle: 'Post your first board and start earning.' },
+  { id: 'contact',  title: 'Your contact details',          subtitle: MVP_MODE ? 'Our team uses this to reach you about buyer requests.' : 'Agencies will see this when they view your boards.' },
+  { id: 'done',     title: 'Ready to go.',                  subtitle: MVP_MODE ? 'List your first location — buyers can then request it.' : 'Post your first board and start earning.' },
 ];
 
 const CLIENT_STEPS: Step[] = [
@@ -69,10 +70,20 @@ const AGENT_ACTIONS = [
   { icon: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10', label: 'My listings', sub: 'Set your sell price', href: '/dashboard/agent?tab=listings', color: '#1B4F8A' },
 ];
 
+// MVP launch: point new users at the marketplace loop only.
+const MVP_AGENCY_ACTIONS: typeof AGENCY_ACTIONS = [
+  { ...AGENCY_ACTIONS[0], label: 'Find locations', sub: 'Browse by city and area', href: '/marketplace' },
+  { icon: 'M22 2 11 13 M22 2l-7 20-4-9-9-4 20-7z', label: 'My requests', sub: 'Track replies and quotes', href: '/dashboard/agency/requests', color: '#1B4F8A' },
+];
+const MVP_OWNER_ACTIONS: typeof AGENCY_ACTIONS = [
+  OWNER_ACTIONS[0],
+  { icon: 'M22 2 11 13 M22 2l-7 20-4-9-9-4 20-7z', label: 'Buyer requests', sub: 'Reply with availability and a price', href: '/dashboard/owner/availability-requests', color: '#1B4F8A' },
+];
+
 const ACTIONS: Record<DemoRole, typeof AGENCY_ACTIONS> = {
   marketer: [],
-  agency: AGENCY_ACTIONS,
-  owner:  OWNER_ACTIONS,
+  agency: MVP_MODE ? MVP_AGENCY_ACTIONS : AGENCY_ACTIONS,
+  owner:  MVP_MODE ? MVP_OWNER_ACTIONS : OWNER_ACTIONS,
   client: CLIENT_ACTIONS,
   admin:  [],
   agent:  AGENT_ACTIONS,
@@ -245,11 +256,15 @@ export default function OnboardingWizard({ role, userName }: { role: DemoRole; u
 
                 {role === 'agency' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {[
+                    {(MVP_MODE ? [
+                      { icon: '📍', label: 'Find locations', desc: 'Browse billboards by city and area, with photos and verification status' },
+                      { icon: '📨', label: 'Request a location', desc: 'Pick your dates — the media owner replies with availability and a price' },
+                      { icon: '🤝', label: 'We complete the booking', desc: 'Accept a quote and our team contacts you to finalise it' },
+                    ] : [
                       { icon: '🗺️', label: 'Discover boards', desc: 'Search 143+ billboard locations across Nigeria' },
                       { icon: '📋', label: 'Plan campaigns', desc: 'Build media plans, negotiate rates, raise MPOs' },
                       { icon: '✅', label: 'Track compliance', desc: 'Proof of posting, performance reports, invoices' },
-                    ].map(({ icon, label, desc }) => (
+                    ]).map(({ icon, label, desc }) => (
                       <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#F8FAFC', borderRadius: 12, padding: '12px 16px', border: '1px solid #F1F5F9' }}>
                         <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>{icon}</span>
                         <div>
@@ -263,11 +278,15 @@ export default function OnboardingWizard({ role, userName }: { role: DemoRole; u
 
                 {role === 'owner' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {[
+                    {(MVP_MODE ? [
+                      { icon: '🏗️', label: 'List your locations', desc: 'Add photos, size and format — or import a spreadsheet' },
+                      { icon: '📨', label: 'Answer buyer requests', desc: 'Reply available with a price, or not available' },
+                      { icon: '🤝', label: 'We handle the booking', desc: 'When a deal is agreed, our team completes it with you and the buyer' },
+                    ] : [
                       { icon: '🏗️', label: 'List your inventory', desc: 'Upload photos, set rates, manage availability' },
                       { icon: '💬', label: 'Negotiate in-app', desc: 'Receive requests, counter-offer, accept deals' },
                       { icon: '💰', label: 'Track earnings', desc: 'Invoicing, payouts and performance analytics' },
-                    ].map(({ icon, label, desc }) => (
+                    ]).map(({ icon, label, desc }) => (
                       <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#F8FAFC', borderRadius: 12, padding: '12px 16px', border: '1px solid #F1F5F9' }}>
                         <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>{icon}</span>
                         <div>

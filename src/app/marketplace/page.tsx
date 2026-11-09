@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { attachVisibleRates } from '@/lib/board-rates';
 import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
+import AccountNavButtons from '@/components/layout/AccountNavButtons';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 import { VerificationBadge, dimensionsText, illuminationText, locationText, UNKNOWN } from '@/lib/board-verification';
 
@@ -406,20 +407,7 @@ function MarketplaceContent() {
             <a className="nav-link" href="#how" style={{ textDecoration: 'none' }}>How it works</a>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button
-            onClick={() => router.push('/auth/login')}
-            style={{ padding: '8px 16px', background: 'none', border: '1px solid #E2E8F0', borderRadius: 8, fontSize: '0.875rem', fontWeight: 500, color: '#0F172A', cursor: 'pointer', fontFamily: 'inherit' }}
-          >
-            Sign in
-          </button>
-          <button
-            onClick={() => router.push('/signup')}
-            style={{ padding: '8px 16px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-          >
-            Get started
-          </button>
-        </div>
+        <AccountNavButtons />
       </nav>
 
       {/* ── Hero ── */}
@@ -606,13 +594,13 @@ function MarketplaceContent() {
               <>
                 <p style={{ fontSize: '1rem', fontWeight: 600, color: '#0F172A', margin: '0 0 6px' }}>No boards listed yet</p>
                 <p style={{ fontSize: '0.875rem', color: '#64748B', margin: '0 0 24px', maxWidth: 360, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
-                  OOH Platform is Nigeria's billboard marketplace. Board owners list their inventory here; agencies browse and make offers.
+                  OOH Platform is Nigeria's billboard marketplace. Media owners list their locations here; buyers request them and get a quote.
                 </p>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <a href="/auth/login" style={{ padding: '10px 22px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>
-                    Sign in as agency →
+                  <a href="/signup?role=agency" style={{ padding: '10px 22px', background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>
+                    Create a buyer account →
                   </a>
-                  <a href="/auth/login?role=owner" style={{ padding: '10px 22px', background: '#fff', color: '#1B4F8A', border: '1.5px solid #1B4F8A', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>
+                  <a href="/signup?role=owner" style={{ padding: '10px 22px', background: '#fff', color: '#1B4F8A', border: '1.5px solid #1B4F8A', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none' }}>
                     List your board
                   </a>
                 </div>

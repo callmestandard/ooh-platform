@@ -58,6 +58,8 @@ const FILTERS = ['all', 'pending', 'negotiating', 'agreed', 'declined'];
 export default function OwnerNegotiationsPage() {
   const router = useRouter();
   const [bookings, setBookings] = useState<Booking[]>([]);
+  // Owners can't read the buyer's campaign (RLS); look buyers up via booking_buyer (044).
+  const [buyers, setBuyers] = useState<Record<string, { name: string | null; request: boolean }>>({});
   const [activeFilter, setActiveFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -77,7 +79,14 @@ export default function OwnerNegotiationsPage() {
         .not('status', 'eq', 'declined')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setBookings(await attachRatesToBookings((data as Booking[]) || []));
+      const rows = await attachRatesToBookings((data as Booking[]) || []);
+      setBookings(rows);
+      const looked = await Promise.all(rows.map(async b => {
+        const { data: who } = await supabase.rpc('booking_buyer', { p_booking_id: b.id });
+        const w = ((who as { buyer_name: string | null; request_id: string | null }[] | null) ?? [])[0];
+        return [b.id, { name: w?.buyer_name ?? null, request: !!w?.request_id }] as const;
+      }));
+      setBuyers(Object.fromEntries(looked));
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Failed to load negotiations');
     } finally {
@@ -240,10 +249,10 @@ export default function OwnerNegotiationsPage() {
                 {/* Agency / campaign */}
                 <div>
                   <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {booking.campaigns?.client_name || '—'}
+                    {buyers[booking.id]?.name || booking.campaigns?.client_name || '—'}
                   </p>
                   <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {booking.campaigns?.name || '—'}
+                    {buyers[booking.id]?.request ? 'Location request' : booking.campaigns?.name || '—'}
                   </p>
                 </div>
 

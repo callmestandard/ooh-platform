@@ -23,15 +23,26 @@ type InsertRow = {
   notes?: string;
 };
 
+/** Sent by our team when importing a deck or list on someone's behalf. */
+type AdminImport = {
+  /** The owner account the boards belong to, or null for "no account yet" (claimable). */
+  ownerId: string | null;
+  /** Where the records came from, e.g. "Sule Outdoor deck, Oct 2026". */
+  source: string;
+  verification: 'pending' | 'verified';
+};
+
 export async function POST(req: NextRequest) {
   const user = await requireAuth(req);
   if (!user) return unauthorized();
 
   try {
-    const { rows } = (await req.json()) as { rows: InsertRow[] };
+    const { rows, admin } = (await req.json()) as { rows: InsertRow[]; admin?: AdminImport };
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json({ error: 'No rows provided' }, { status: 400 });
     }
+
+    if (admin) return adminImport(user.id, rows, admin);
 
     // Stamp ownership from the auth session — never trust a client-sent owner_id.
     // A marketer or owner admin imports on behalf of their owner company
@@ -83,4 +94,61 @@ export async function POST(req: NextRequest) {
     console.error('[import-boards]', err);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
+}
+
+function boardFields(r: InsertRow) {
+  return {
+    name: String(r.name).trim(),
+    address: String(r.address ?? '').trim() || null,
+    city: String(r.city ?? '').trim() || null,
+    area: String(r.area ?? '').trim() || null,
+    state: String(r.state ?? '').trim() || null,
+    format: r.format,
+    width: r.width ?? null,
+    height: r.height ?? null,
+    asking_rate: Number(r.asking_rate) > 0 ? Number(r.asking_rate) : null,
+    latitude: r.latitude ?? null,
+    longitude: r.longitude ?? null,
+    notes: String(r.notes ?? '').trim() || null,
+    status: 'available',
+    face_count: 1,
+    illuminated: typeof r.illuminated === 'boolean' ? r.illuminated : null,
+  };
+}
+
+// Admin import: our team loads inventory from a deck or list. The caller's
+// role is checked here, not trusted from the client.
+async function adminImport(uid: string, rows: InsertRow[], admin: AdminImport) {
+  const { data: me } = await supabaseAdmin.from('profiles').select('role').eq('id', uid).maybeSingle();
+  if ((me as { role?: string } | null)?.role !== 'admin') {
+    return NextResponse.json({ error: 'Only admins can import on behalf of others' }, { status: 403 });
+  }
+  const source = String(admin.source ?? '').trim();
+  if (!source) return NextResponse.json({ error: 'Say where these boards came from' }, { status: 400 });
+  if (admin.verification !== 'pending' && admin.verification !== 'verified') {
+    return NextResponse.json({ error: 'Invalid verification status' }, { status: 400 });
+  }
+  let ownerId: string | null = null;
+  if (admin.ownerId) {
+    const { data: owner } = await supabaseAdmin.from('profiles').select('id, role').eq('id', admin.ownerId).maybeSingle();
+    if ((owner as { role?: string } | null)?.role !== 'owner') {
+      return NextResponse.json({ error: 'That account is not a media owner' }, { status: 400 });
+    }
+    ownerId = admin.ownerId;
+  }
+  const payload = rows.map(r => ({
+    ...boardFields(r),
+    owner_id: ownerId,
+    created_by: uid,
+    assigned_marketer_id: null,
+    source: source.slice(0, 200),
+    verification_status: admin.verification,
+    last_verified_at: admin.verification === 'verified' ? new Date().toISOString() : null,
+  }));
+  const { data, error } = await supabaseAdmin.from('boards').insert(payload).select('id');
+  if (error) {
+    console.error('[import-boards admin]', error);
+    return NextResponse.json({ inserted: 0, error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ inserted: data?.length ?? 0 });
 }

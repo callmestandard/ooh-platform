@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, MouseEvent as RMouseEvent } f
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getSession, getCurrentProfile } from '@/lib/auth';
+import { MVP_MODE, roleHome } from '@/lib/mvp';
 
 /* ═══════════════════════════════════════════════════════════
    DATA
@@ -44,6 +45,26 @@ const ROLES = {
       { ico: 'globe', n: '01', title: 'See your campaign on a live map', body: 'Watch every booked board light up across the country in real time — status, location and creative in one birds-eye view.', link: 'See the campaign map' },
       { ico: 'shield', n: '02', title: 'Verify proof-of-posting instantly', body: "Field teams upload geo-tagged photos. You see verification status the moment a board goes up — no waiting, no doubt.", link: 'See compliance' },
       { ico: 'activity', n: '03', title: 'Measure reach, spend & performance', body: 'Footfall-backed impression estimates and budget tracking turn outdoor spend into numbers you can report on.', link: 'See reporting' },
+    ],
+  },
+};
+
+// MVP launch: the marketplace loop only (see src/lib/mvp.ts).
+const MVP_ROLES = {
+  agencies: {
+    label: 'Buyers',
+    steps: [
+      { ico: 'search', n: '01', title: 'Find the right locations', body: 'Browse billboards by city and area, with photos, size, format and how recently each listing was verified.', link: 'Explore inventory', href: '/marketplace' },
+      { ico: 'msg', n: '02', title: 'Request availability and a price', body: 'Pick your dates and send a request. The media owner replies with availability and a quote — and you can negotiate in one conversation.', link: 'Create a buyer account', href: '/signup?role=agency' },
+      { ico: 'shield', n: '03', title: 'We complete the booking with you', body: 'Once you accept a quote, our team contacts you and the owner to finalise the booking. No scattered WhatsApp chains.', link: 'Get started', href: '/signup?role=agency' },
+    ],
+  },
+  owners: {
+    label: 'Media Owners',
+    steps: [
+      { ico: 'pin', n: '01', title: 'List your locations', body: 'Add your boards with location, size, photos and format — or import your whole inventory from a spreadsheet.', link: 'List your locations', href: '/signup?role=owner' },
+      { ico: 'msg', n: '02', title: 'Answer real buyer requests', body: 'Buyers request specific boards for specific dates. Reply available with a quote, or not available — in a click.', link: 'Create an owner account', href: '/signup?role=owner' },
+      { ico: 'trend', n: '03', title: 'Agree terms, we handle the rest', body: 'Negotiate in one thread. When a deal is agreed, our team works with you and the buyer to complete the booking.', link: 'Get started', href: '/signup?role=owner' },
     ],
   },
 };
@@ -317,7 +338,7 @@ function Nav({ scrolled }: { scrolled: boolean }) {
 
         {/* Center links (desktop) */}
         <div className="lp-nav-links">
-          {[['Marketplace','#marketplace'],['How it works','#how'],['Features','#features'],['Pricing','#pricing']].map(([l,h]) => (
+          {(MVP_MODE ? [['Explore inventory','/marketplace'],['How it works','#how']] : [['Marketplace','#marketplace'],['How it works','#how'],['Features','#features'],['Pricing','#pricing']]).map(([l,h]) => (
             <a key={l} href={h} style={{ fontSize: 14.5, fontWeight: 500, color: '#4a443b', padding: '8px 14px', borderRadius: 9, textDecoration: 'none', transition: 'color .15s, background .15s' }}
               onMouseEnter={e => { (e.target as HTMLElement).style.color='#1a1712'; (e.target as HTMLElement).style.background='rgba(26,22,15,.05)'; }}
               onMouseLeave={e => { (e.target as HTMLElement).style.color='#4a443b'; (e.target as HTMLElement).style.background='transparent'; }}>
@@ -354,7 +375,7 @@ function Nav({ scrolled }: { scrolled: boolean }) {
       {/* Mobile dropdown */}
       {menuOpen && (
         <div className="lp-mob-menu" style={{ display: 'flex', flexDirection: 'column', padding: '4px 20px 20px', borderTop: '1px solid rgba(26,22,15,.08)' }}>
-          {[['Marketplace','#marketplace'],['How it works','#how'],['Features','#features'],['Pricing','#pricing']].map(([l,h]) => (
+          {(MVP_MODE ? [['Explore inventory','/marketplace'],['How it works','#how']] : [['Marketplace','#marketplace'],['How it works','#how'],['Features','#features'],['Pricing','#pricing']]).map(([l,h]) => (
             <a key={l} href={h} onClick={() => setMenuOpen(false)} style={{ fontSize: 16, fontWeight: 500, color: '#1a1712', padding: '13px 0', borderBottom: '1px solid rgba(26,22,15,.06)', textDecoration: 'none' }}>{l}</a>
           ))}
           <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
@@ -429,7 +450,7 @@ function Hero() {
             marginBottom: 22,
           }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2f6bff', boxShadow: '0 0 0 4px rgba(47,107,255,.18)' }}/>
-            Nigeria&apos;s OOH Operating System
+            {MVP_MODE ? <>Nigeria&apos;s billboard marketplace</> : <>Nigeria&apos;s OOH Operating System</>}
           </div>
 
           {/* H1 with rotating word */}
@@ -443,7 +464,7 @@ function Hero() {
             margin: '0 0 0',
             textWrap: 'balance',
           }}>
-            The platform that runs{' '}
+            {MVP_MODE ? <>Find and book billboards <span style={{ color: '#2f6bff' }}>across Nigeria</span></> : <>The platform that runs{' '}
             <span style={{ display: 'inline-flex', position: 'relative', verticalAlign: 'bottom', overflow: 'hidden', height: '1.05em' }}>
               <span style={{
                 display: 'inline-flex', flexDirection: 'column',
@@ -454,15 +475,38 @@ function Hero() {
                   <span key={w} style={{ height: '1.05em', lineHeight: 1.05, whiteSpace: 'nowrap', color: '#2f6bff' }}>{w}</span>
                 ))}
               </span>
-            </span>
+            </span></>}
           </h1>
 
           {/* Subhead */}
           <p style={{ marginTop: 22, fontSize: 19, color: '#4a443b', maxWidth: 480, lineHeight: 1.55 }}>
-            Billboard owners list space. Agencies plan and book campaigns. Brands track results in real time. One platform — the whole transaction.
+            {MVP_MODE
+              ? 'Browse locations with photos and verification status, request availability for your dates, and get a price from the media owner. Our team helps you complete the booking.'
+              : 'Billboard owners list space. Agencies plan and book campaigns. Brands track results in real time. One platform — the whole transaction.'}
           </p>
 
           {/* CTAs */}
+          {MVP_MODE ? (
+            <div style={{ marginTop: 32, display: 'flex', gap: 13, flexWrap: 'wrap' }}>
+              <Link href="/marketplace" data-cta="explore" style={{
+                display: 'inline-flex', alignItems: 'center', gap: 9,
+                background: '#2f6bff', color: '#fff', borderRadius: 13,
+                padding: '16px 26px', fontSize: 16, fontWeight: 600, textDecoration: 'none',
+                boxShadow: '0 12px 30px -10px rgba(47,107,255,.6), inset 0 1px 0 rgba(255,255,255,.25)',
+              }}>
+                Explore OOH inventory
+                <Ico n="arrow" size={17} color="#fff" sw={2}/>
+              </Link>
+              <Link href="/signup?role=owner" style={{
+                display: 'inline-flex', alignItems: 'center', gap: 9,
+                background: '#fff', color: '#1a1712',
+                border: '1px solid rgba(26,22,15,.16)', borderRadius: 13,
+                padding: '16px 26px', fontSize: 16, fontWeight: 600, textDecoration: 'none',
+              }}>
+                List your locations
+              </Link>
+            </div>
+          ) : (
           <div style={{ marginTop: 32, display: 'flex', gap: 13, flexWrap: 'wrap' }}>
             <Link href="/signup" style={{
               display: 'inline-flex', alignItems: 'center', gap: 9,
@@ -492,9 +536,10 @@ function Hero() {
               ⊞ Browse boards
             </Link>
           </div>
+          )}
 
           {/* Meta */}
-          <div style={{ marginTop: 30, display: 'flex', alignItems: 'center', gap: 18, color: '#756e62', fontSize: 13.5 }}>
+          {!MVP_MODE && <div style={{ marginTop: 30, display: 'flex', alignItems: 'center', gap: 18, color: '#756e62', fontSize: 13.5 }}>
             <div style={{ display: 'flex' }}>
               {[['AD','#2f6bff'],['BO','#7b5cff'],['BR','#2fd27a']].map(([lbl,clr],i) => (
                 <span key={lbl} style={{
@@ -506,13 +551,13 @@ function Hero() {
               ))}
             </div>
             <span>Agencies, board owners &amp; brands already on the platform</span>
-          </div>
+          </div>}
         </div>
 
         {/* ── Right: map visual ── */}
         <div className="lp-hero-visual" style={{ position: 'relative', zIndex: 1, minHeight: 480 }}>
-          {/* Floating stat chips */}
-          <div style={{ position: 'absolute', left: -16, top: -14, zIndex: 6, display: 'flex', gap: 10 }} className="lp-float-a lp-hero-chips">
+          {/* Floating stat chips (made-up numbers — hidden at launch) */}
+          {!MVP_MODE && <div style={{ position: 'absolute', left: -16, top: -14, zIndex: 6, display: 'flex', gap: 10 }} className="lp-float-a lp-hero-chips">
             {[{ v: '143', l: 'boards live', tone: 'b' }, { v: '28', l: 'active deals', tone: 'g' }].map(({ v, l, tone }) => (
               <div key={l} style={{
                 background: '#fff', border: '1px solid rgba(26,22,15,.14)',
@@ -523,7 +568,7 @@ function Hero() {
                 <small style={{ fontSize: 10.5, color: '#756e62', marginTop: 5, display: 'block' }}>{l}</small>
               </div>
             ))}
-          </div>
+          </div>}
 
           {/* Map panel */}
           <div style={{
@@ -549,7 +594,7 @@ function Hero() {
               {BOARDS_DATA.map((b, i) => (
                 <MapPin key={b.name} x={b.x} y={b.y} price={b.rate} tone={b.tone} delay={i * 0.1} pulse={i === 0}/>
               ))}
-              <LiveTicker/>
+              {!MVP_MODE && <LiveTicker/>}
             </div>
           </div>
 
@@ -665,18 +710,21 @@ function TrustWall() {
 function HowItWorks() {
   const [tab, setTab] = useState<'agencies'|'owners'|'brands'>('agencies');
   const [ref, inView] = useInView();
-  const tabKeys = ['agencies','owners','brands'] as const;
-  const tabLabels: Record<typeof tabKeys[number], string> = { agencies: 'Agencies', owners: 'Board Owners', brands: 'Brands' };
-  const tabIcos: Record<typeof tabKeys[number], string> = { agencies: 'briefcase', owners: 'building', brands: 'sparkles' };
-  const role = ROLES[tab];
+  const tabKeys = (MVP_MODE ? ['agencies','owners'] : ['agencies','owners','brands']) as readonly ('agencies'|'owners'|'brands')[];
+  const tabLabels: Record<'agencies'|'owners'|'brands', string> = MVP_MODE
+    ? { agencies: 'Buyers', owners: 'Media Owners', brands: 'Brands' }
+    : { agencies: 'Agencies', owners: 'Board Owners', brands: 'Brands' };
+  const tabIcos: Record<'agencies'|'owners'|'brands', string> = { agencies: 'briefcase', owners: 'building', brands: 'sparkles' };
+  const role: { steps: { ico: string; n: string; title: string; body: string; link: string; href?: string }[] } =
+    MVP_MODE && tab !== 'brands' ? MVP_ROLES[tab] : ROLES[tab];
 
   return (
     <section id="how" style={{ padding: '92px 0', background: '#f6f4ef' }}>
       <div className="lp-wrap">
         <div ref={ref} className={`lp-section-head${inView ? ' lp-in' : ''}`}>
           <span className="lp-eyebrow">How it works</span>
-          <h2>Built for everyone in OOH</h2>
-          <p>Whether you own billboards, buy media space, or approve campaign spend — OOH has a workspace built for you.</p>
+          <h2>{MVP_MODE ? 'From search to booked, in one place' : 'Built for everyone in OOH'}</h2>
+          <p>{MVP_MODE ? 'Buyers find and request locations. Media owners reply with availability and a price. Our team completes the booking.' : 'Whether you own billboards, buy media space, or approve campaign spend — OOH has a workspace built for you.'}</p>
         </div>
 
         {/* Tabs */}
@@ -718,7 +766,7 @@ function HowItWorks() {
               </div>
               <h4 style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 700, fontSize: 19, letterSpacing: '-.01em', color: '#1a1712' }}>{s.title}</h4>
               <p style={{ color: '#756e62', fontSize: 14.5, marginTop: 9, lineHeight: 1.55 }}>{s.body}</p>
-              <a href="/signup" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 16, color: '#2f6bff', fontWeight: 600, fontSize: 13.5, textDecoration: 'none' }}>
+              <a href={s.href ?? '/signup'} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 16, color: '#2f6bff', fontWeight: 600, fontSize: 13.5, textDecoration: 'none' }}>
                 {s.link}
                 <Ico n="arrow" size={14} color="#2f6bff"/>
               </a>
@@ -1153,14 +1201,19 @@ function FinalCTA() {
             </div>
 
             <h2 style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 800, fontSize: 'clamp(30px,4vw,48px)', letterSpacing: '-.025em', lineHeight: 1.02, color: '#fff', marginBottom: 18 }}>
-              Start running outdoor advertising<br/>the modern way
+              {MVP_MODE ? <>Find your next billboard<br/>today</> : <>Start running outdoor advertising<br/>the modern way</>}
             </h2>
 
             <p style={{ color: 'rgba(255,255,255,.65)', fontSize: 18, maxWidth: 520, margin: '0 auto 32px', lineHeight: 1.55 }}>
-              Join the platform connecting Nigeria&apos;s billboard owners, agencies and brands — one transaction at a time.
+              {MVP_MODE ? <>Browse locations for free. Request the ones you want and get a price from the media owner.</> : <>Join the platform connecting Nigeria&apos;s billboard owners, agencies and brands — one transaction at a time.</>}
             </p>
 
-            {sent ? (
+            {MVP_MODE ? (
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <Link href="/marketplace" style={{ background: '#2f6bff', color: '#fff', borderRadius: 12, padding: '15px 22px', fontSize: 15, fontWeight: 600, textDecoration: 'none' }}>Explore OOH inventory →</Link>
+                <Link href="/signup?role=owner" style={{ background: 'rgba(255,255,255,.08)', color: '#fff', border: '1px solid rgba(255,255,255,.2)', borderRadius: 12, padding: '15px 22px', fontSize: 15, fontWeight: 600, textDecoration: 'none' }}>List your locations</Link>
+              </div>
+            ) : sent ? (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(47,210,122,.14)', border: '1px solid rgba(47,210,122,.3)', color: '#2fd27a', borderRadius: 12, padding: '14px 24px', fontSize: 15, fontWeight: 600 }}>
                 <Ico n="check" size={18} color="#2fd27a" sw={2.5}/>
                 You&apos;re on the list — we&apos;ll be in touch!
@@ -1181,7 +1234,7 @@ function FinalCTA() {
 
             <p style={{ marginTop: 16, fontSize: 13, color: 'rgba(255,255,255,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               <Ico n="lock" size={14} color="#2fd27a"/>
-              No card required · Free for agencies and brands
+              {MVP_MODE ? 'Free to browse · No card required' : 'No card required · Free for agencies and brands'}
             </p>
           </div>
         </div>
@@ -1283,7 +1336,7 @@ export default function LandingPage() {
     getSession().then(session => {
       if (!session) return;
       getCurrentProfile().then(profile => {
-        if (profile) router.replace(`/dashboard/${profile.role}`);
+        if (profile) router.replace(roleHome(profile.role));
       });
     });
   }, [router]);
@@ -1458,13 +1511,13 @@ export default function LandingPage() {
       <Hero/>
       {/* Sentinel: when this pixel leaves the top of the viewport, nav turns opaque */}
       <div id="lp-scroll-sentinel" style={{ height: 1, marginTop: -1, pointerEvents: 'none' }} aria-hidden="true"/>
-      <StatsBar/>
-      <TrustWall/>
+      {!MVP_MODE && <StatsBar/>}
+      {!MVP_MODE && <TrustWall/>}
       <HowItWorks/>
-      <Marketplace/>
-      <Ambition/>
-      <Features/>
-      <Pricing/>
+      {!MVP_MODE && <Marketplace/>}
+      {!MVP_MODE && <Ambition/>}
+      {!MVP_MODE && <Features/>}
+      {!MVP_MODE && <Pricing/>}
       <FinalCTA/>
       <Footer/>
     </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { DemoRole } from "@/lib/constants";
 import NotificationBell from "./NotificationBell";
+import { MVP_MODE } from "@/lib/mvp";
 
 type NavItem = {
   id: string;
@@ -119,6 +120,7 @@ const adminNav: NavItem[] = [
   { id: "requests",   label: "Requests",         path: "/dashboard/admin/requests",             icon: <Icon path="M22 12h-6l-2 3h-4l-2-3H2 M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /> },
   { id: "claims",     label: "Board Claims",     path: "/dashboard/admin/claims",               icon: <Icon path="M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /> },
   { id: "inventory",  label: "Board Inventory",  path: "/dashboard/admin?tab=inventory",        icon: <Icon path="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10" /> },
+  { id: "import",     label: "Import Boards",    path: "/dashboard/admin/import-boards",        icon: <Icon path="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12" /> },
   { id: "bookings",   label: "All Bookings",     path: "/dashboard/admin?tab=bookings",         icon: <Icon path="M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01" /> },
   { id: "users",      label: "Users",            path: "/dashboard/admin?tab=users",            icon: <Icon path="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" /> },
   { id: "compliance", label: "Compliance Flags", path: "/dashboard/admin?tab=compliance",       icon: <Icon path="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z M12 9v4 M12 17h.01" /> },
@@ -136,6 +138,19 @@ const navByRole: Record<DemoRole, NavItem[]> = {
   marketer: marketerNav,
 };
 
+// MVP launch mode: only the marketplace loop (see src/lib/mvp.ts).
+function pick(nav: NavItem[], ids: string[], overrides: Record<string, Partial<NavItem>> = {}): NavItem[] {
+  return ids.flatMap(id => {
+    const item = nav.find(i => i.id === id);
+    return item ? [{ ...item, ...overrides[id] }] : [];
+  });
+}
+const mvpNavByRole: Partial<Record<DemoRole, NavItem[]>> = {
+  agency: pick(agencyNav, ["marketplace", "requests", "negotiations", "settings"], { marketplace: { path: "/marketplace" } }),
+  owner:  pick(ownerNav, ["my-boards", "post-board", "availability-requests", "negotiations", "claim-boards", "settings"], { "availability-requests": { label: "Requests" } }),
+  admin:  pick(adminNav, ["overview", "requests", "claims", "inventory", "import", "users", "settings"]),
+};
+
 type Props = {
   role: DemoRole;
   userName: string;
@@ -148,7 +163,7 @@ type Props = {
 export function Sidebar({ role, userName, roleLabel, onLogout, isOpen, onClose }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const items = navByRole[role];
+  const items = (MVP_MODE && mvpNavByRole[role]) || navByRole[role];
 
   function isActive(item: NavItem) {
     const [itemPath, itemQuery] = item.path.split('?');

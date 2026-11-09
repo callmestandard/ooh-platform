@@ -14,6 +14,7 @@ import PrintStatusPanel from '@/components/print/PrintStatusPanel';
 import { attachVisibleRates } from '@/lib/board-rates';
 import { type PrintTask, PRINT_STATUS_LABELS, PRINT_STATUS_STYLE, fetchPrintTasksForBookings } from '@/lib/print-tasks';
 import { VerificationBadge } from '@/lib/board-verification';
+import { mvpTabs } from '@/lib/mvp';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -907,10 +908,10 @@ function OwnerContent() {
             {pendingBookings.length} booking{pendingBookings.length !== 1 ? 's' : ''} awaiting your response
           </p>
           <button
-            onClick={() => setActiveTab('bookings')}
+            onClick={() => (mvpTabs('owner') ? window.location.assign('/dashboard/owner/negotiations') : setActiveTab('bookings'))}
             style={{ marginLeft: 'auto', fontSize: '0.75rem', fontWeight: 600, color: '#D97706', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
           >
-            View bookings →
+            {mvpTabs('owner') ? 'Open negotiations →' : 'View bookings →'}
           </button>
         </div>
       )}
@@ -926,7 +927,7 @@ function OwnerContent() {
           { key: 'analytics',  label: 'Analytics',                            badge: 0 },
           { key: 'rate-card',  label: 'Rate Card',                            badge: 0 },
           { key: 'invoices',   label: `Invoices (${ownerInvoices.length})`,    badge: 0 },
-        ].map(tab => (
+        ].filter(t => !mvpTabs('owner') || mvpTabs('owner')!.includes(t.key)).map(tab => (
           <button
             key={tab.key}
             onClick={() => { setActiveTab(tab.key as typeof activeTab); if (tab.key === 'invoices' && !invoicesLoaded) fetchOwnerInvoices(); }}

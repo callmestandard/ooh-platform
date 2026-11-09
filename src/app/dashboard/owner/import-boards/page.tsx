@@ -374,12 +374,26 @@ export default function ImportBoardsPage() {
   const [savedMap, setSavedMap] = useState<Record<string, string>>({});
   const [usedSavedMap, setUsedSavedMap] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Admin mode: our team imports a deck or list for an owner, or as unclaimed boards.
+  const [adminMode, setAdminMode] = useState(false);
+  const [owners, setOwners] = useState<{ id: string; label: string }[]>([]);
+  const [adminOwner, setAdminOwner] = useState('');
+  const [adminSource, setAdminSource] = useState('');
+  const [adminVerification, setAdminVerification] = useState<'pending' | 'verified'>('pending');
 
   // Load owner's existing boards for dedup
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       const uid = session?.user?.id;
       if (!uid) return;
+      const { data: me } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle();
+      if ((me as { role?: string } | null)?.role === 'admin') {
+        setAdminMode(true);
+        const { data } = await supabase.from('profiles').select('id, full_name, company_name, email').eq('role', 'owner').order('company_name');
+        setOwners(((data as { id: string; full_name: string | null; company_name: string | null; email: string | null }[]) || [])
+          .map(o => ({ id: o.id, label: o.company_name || o.full_name || o.email || o.id })));
+        return;
+      }
       // A marketer or owner admin imports for their owner company (migration 035).
       supabase.rpc('owner_company_of', { p_uid: uid }).then(({ data: company }) => {
         const ownerId = (company as string | null) ?? uid;
@@ -393,6 +407,14 @@ export default function ImportBoardsPage() {
       });
     });
   }, []);
+
+  // Admin mode: check duplicates against the chosen owner's boards, or unclaimed ones.
+  useEffect(() => {
+    if (!adminMode) return;
+    const q = supabase.from('boards').select('id, name, latitude, longitude');
+    (adminOwner ? q.eq('owner_id', adminOwner) : q.is('owner_id', null))
+      .then(({ data }) => setExistingBoards((data as ExistingBoard[]) || []));
+  }, [adminMode, adminOwner]);
 
   // ── File upload & parse ─────────────────────────────────────────────────
 
@@ -602,7 +624,9 @@ export default function ImportBoardsPage() {
             'Content-Type': 'application/json',
             ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
           },
-          body: JSON.stringify({ rows: batch }),
+          body: JSON.stringify(adminMode
+            ? { rows: batch, admin: { ownerId: adminOwner || null, source: adminSource.trim(), verification: adminVerification } }
+            : { rows: batch }),
         });
         const data = await res.json();
         inserted += data.inserted ?? 0;
@@ -687,17 +711,48 @@ export default function ImportBoardsPage() {
 
       {/* Header */}
       <div style={{ marginBottom: '1.5rem' }}>
-        <button onClick={() => router.push('/dashboard/owner')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontFamily: 'inherit', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: 4, padding: '2px 0', marginBottom: 8 }}>
+        <button onClick={() => router.push(adminMode ? '/dashboard/admin?tab=inventory' : '/dashboard/owner')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontFamily: 'inherit', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: 4, padding: '2px 0', marginBottom: 8 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-          My Boards
+          {adminMode ? 'Inventory' : 'My Boards'}
         </button>
         <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.025em', margin: '0 0 4px' }}>
           Bulk Board Importer
         </h1>
         <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>
-          List hundreds of boards in minutes — upload your spreadsheet, map columns, review, and publish.
+          {adminMode
+            ? "Load a media owner's deck or list. Boards are saved under the owner you choose, or as unclaimed for the owner to claim later."
+            : 'List hundreds of boards in minutes — upload your spreadsheet, map columns, review, and publish.'}
         </p>
       </div>
+
+      {adminMode && (
+        <div data-admin-import style={{ ...cardStyle, marginBottom: 16, background: '#F8FAFC' }}>
+          <h2 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: '0 0 12px' }}>Importing as admin</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              Owner
+              <select value={adminOwner} onChange={e => setAdminOwner(e.target.value)} disabled={step > 1}
+                style={{ padding: '8px 10px', border: '1px solid #E2E8F0', borderRadius: 8, fontFamily: 'inherit', fontSize: '0.8125rem', background: '#fff' }}>
+                <option value="">No owner account yet (unclaimed)</option>
+                {owners.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </select>
+            </label>
+            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              Source (required)
+              <input value={adminSource} onChange={e => setAdminSource(e.target.value)} placeholder="e.g. Sule Outdoor deck, Oct 2026" maxLength={200}
+                style={{ padding: '8px 10px', border: '1px solid #E2E8F0', borderRadius: 8, fontFamily: 'inherit', fontSize: '0.8125rem' }} />
+            </label>
+            <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              Verification
+              <select value={adminVerification} onChange={e => setAdminVerification(e.target.value as 'pending' | 'verified')}
+                style={{ padding: '8px 10px', border: '1px solid #E2E8F0', borderRadius: 8, fontFamily: 'inherit', fontSize: '0.8125rem', background: '#fff' }}>
+                <option value="pending">Not yet verified</option>
+                <option value="verified">Verified by our team</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      )}
 
       <Stepper step={step} />
 
@@ -789,7 +844,10 @@ export default function ImportBoardsPage() {
             <button
               style={{ ...btnPrimary, opacity: rawRows.length === 0 ? 0.4 : 1 }}
               disabled={rawRows.length === 0}
-              onClick={() => setStep(2)}
+              onClick={() => {
+                if (adminMode && !adminSource.trim()) { toastError('Add a source — where these boards came from'); return; }
+                setStep(2);
+              }}
             >
               Map columns →
             </button>
@@ -1139,7 +1197,9 @@ export default function ImportBoardsPage() {
       <ConfirmDialog
         open={showConfirm}
         title={`Publish ${selectedCount} boards?`}
-        description={`This will add ${selectedCount} boards to your inventory with status "available". Agencies can see them immediately. ${skipCount > 0 ? `${skipCount} invalid rows will be skipped.` : ''}`}
+        description={adminMode
+          ? `This will add ${selectedCount} boards ${adminOwner ? `for ${owners.find(o => o.id === adminOwner)?.label ?? 'the chosen owner'}` : 'as unclaimed'} (source: ${adminSource.trim()}). Buyers can see them immediately. ${skipCount > 0 ? `${skipCount} invalid rows will be skipped.` : ''}`
+          : `This will add ${selectedCount} boards to your inventory with status "available". Agencies can see them immediately. ${skipCount > 0 ? `${skipCount} invalid rows will be skipped.` : ''}`}
         confirmLabel={`Publish ${selectedCount} boards`}
         loading={publishing}
         onConfirm={() => { setShowConfirm(false); publish(); }}
