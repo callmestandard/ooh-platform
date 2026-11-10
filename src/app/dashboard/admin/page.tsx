@@ -14,6 +14,7 @@ import { MVP_MODE, mvpTabs } from '@/lib/mvp';
 import BoardPhotosEditor from '@/components/admin/BoardPhotosEditor';
 import BoardPinEditor from '@/components/admin/BoardPinEditor';
 import BoardDetailsEditor from '@/components/admin/BoardDetailsEditor';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -257,6 +258,27 @@ function AdminContent() {
   const [pinBoard, setPinBoard] = useState<Board | null>(null);
   // Board whose details (name, description, location, size, rate…) are being edited.
   const [detailsBoard, setDetailsBoard] = useState<Board | null>(null);
+  // Board waiting for the delete confirmation.
+  const [deleteBoard, setDeleteBoard] = useState<Board | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  async function confirmDeleteBoard() {
+    const target = deleteBoard;
+    if (!target) return;
+    setDeleting(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/admin/delete-board', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token ?? ''}` },
+      body: JSON.stringify({ boardId: target.id }),
+    }).catch(() => null);
+    const body = res ? await res.json().catch(() => ({})) : {};
+    setDeleting(false);
+    setDeleteBoard(null);
+    if (!res || !res.ok) { showToast(body.error || 'Could not delete the board', 'error'); return; }
+    setBoards(prev => prev.filter(b => b.id !== target.id));
+    showToast(`Deleted “${target.name}”`, 'success');
+  }
   // platform settings
   const [settings, setSettings] = useState<AdminSettings>(DEFAULT_SETTINGS);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -1000,6 +1022,15 @@ function AdminContent() {
                         >
                           {board.latitude != null ? 'Move pin' : 'Add pin'}
                         </button>
+                        <button
+                          type="button"
+                          data-delete-board
+                          onClick={() => setDeleteBoard(board)}
+                          aria-label={`Delete ${board.name}`}
+                          style={{ background: '#FEF2F2', color: '#B91C1C', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                        >
+                          Delete
+                        </button>
                         {(board.status === 'available' || board.status === 'unavailable') && (
                           <button
                             onClick={() => toggleBoardStatus(board)}
@@ -1702,6 +1733,17 @@ function AdminContent() {
           onClose={() => setPhotoBoard(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteBoard}
+        variant="danger"
+        title="Delete this board?"
+        description={deleteBoard ? `“${deleteBoard.name}” will be removed from the platform for good, with its photos, rate and notes. This can't be undone. Boards with bookings or buyer requests can't be deleted; mark those Unavailable instead.` : ''}
+        confirmLabel="Delete board"
+        loading={deleting}
+        onConfirm={confirmDeleteBoard}
+        onCancel={() => setDeleteBoard(null)}
+      />
 
       {detailsBoard && (
         <BoardDetailsEditor
