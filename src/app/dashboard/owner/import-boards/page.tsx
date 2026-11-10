@@ -11,6 +11,7 @@ import { readDeck } from '@/lib/deck-import/read';
 import { extractBoard, deckCity, findContact, DECK_COLUMNS } from '@/lib/deck-import/extract';
 import SavedContacts from '@/components/admin/SavedContacts';
 import PhotoCropper from '@/components/admin/PhotoCropper';
+import PhotoReview, { type ReviewItem } from '@/components/admin/PhotoReview';
 import { ownerContactKey } from '@/lib/owner-contacts';
 import { geocodeBoard } from '@/lib/geocode-board';
 
@@ -430,6 +431,9 @@ export default function ImportBoardsPage() {
   const [deckProgress, setDeckProgress] = useState('');
   // Photo being reframed: its key in deckPhotos (a row's own id when the slide had no photo).
   const [cropping, setCropping] = useState<{ key: string; rowId?: string; title: string } | null>(null);
+  // Photo-by-photo check before publishing: open at an index, and which rows are approved.
+  const [reviewAt, setReviewAt] = useState<number | null>(null);
+  const [approvedPhotos, setApprovedPhotos] = useState<Set<string>>(new Set());
   function savePhoto(key: string, blob: Blob, rowId?: string) {
     const url = URL.createObjectURL(blob);
     setDeckPhotos(prev => {
@@ -532,6 +536,7 @@ export default function ImportBoardsPage() {
       setDeckPhotos(photos);
       setDeckMode(true);
       setDeckSummary({ file: file.name, slides: slides.length, boards: out.length, skipped });
+      setApprovedPhotos(new Set());
       setRawHeaders([...DECK_COLUMNS]);
       setRawRows(out);
       setTruncated(false);
@@ -791,6 +796,22 @@ export default function ImportBoardsPage() {
 
   const readyCount   = rows.filter(r => r.status === 'ready'   && r.selected).length;
   const warningCount = rows.filter(r => r.status === 'warning' && r.selected).length;
+  // Every board that can be published, with its photo, for the photo check.
+  const reviewItems: ReviewItem[] = deckMode ? rows.filter(r => r.status !== 'skip').map(r => ({
+    id: r._id,
+    url: r.photo_key && deckPhotos[r.photo_key] ? deckPhotos[r.photo_key].url : null,
+    title: r.name,
+    subtitle: [`Slide ${r.row_no}`, r.address && r.address !== r.name ? r.address : '', [r.area && r.area.length <= 40 ? r.area : '', r.city].filter(Boolean).join(', ')].filter(Boolean).join(' · '),
+    details: [
+      r.format ? r.format.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()) : '',
+      r.width && r.height ? `${r.width} × ${r.height} m` : '',
+      r.asking_rate ? `₦${r.asking_rate.toLocaleString()}/month` : '',
+      r.face_count && r.face_count > 1 ? `${r.face_count} faces` : '',
+    ].filter(Boolean),
+    included: r.selected,
+  })) : [];
+  const uncheckedPhotos = reviewItems.filter(it => it.included && !approvedPhotos.has(it.id)).length;
+  const includedPhotos = reviewItems.filter(it => it.included).length;
   const skipCount    = rows.filter(r => r.status === 'skip').length;
   const selectedCount = rows.filter(r => r.selected && r.status !== 'skip').length;
   const geocodingCount = rows.filter(r => r.geocoding).length;
@@ -1109,6 +1130,29 @@ export default function ImportBoardsPage() {
             )}
           </div>
 
+          {deckMode && reviewItems.length > 0 && (
+            <div data-photo-check style={{ ...cardStyle, marginBottom: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', borderColor: uncheckedPhotos ? '#DDD6FE' : '#A7F3D0', background: uncheckedPhotos ? '#FAF5FF' : '#F0FDF4' }}>
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                {reviewItems.filter(it => it.url).slice(0, 3).map(it => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={it.id} src={it.url!} alt="" style={{ width: 46, height: 32, objectFit: 'cover', borderRadius: 4, border: '1px solid #E9D5FF' }} />
+                ))}
+              </div>
+              <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: uncheckedPhotos ? '#4C1D95' : '#065F46' }}>
+                  {uncheckedPhotos ? 'Check the photos before publishing' : '✓ All photos checked'}
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: uncheckedPhotos ? '#6D28D9' : '#047857' }}>
+                  {`${includedPhotos - uncheckedPhotos} of ${includedPhotos} checked. Go through them one by one: crop, rotate or replace any that don’t show the board well.`}
+                </p>
+              </div>
+              <button type="button" data-open-review style={{ ...btnPrimary, background: uncheckedPhotos ? '#7C3AED' : '#fff', color: uncheckedPhotos ? '#fff' : '#065F46', border: uncheckedPhotos ? 'none' : '1px solid #A7F3D0' }}
+                onClick={() => { const first = reviewItems.findIndex(it => it.included && !approvedPhotos.has(it.id)); setReviewAt(first >= 0 ? first : 0); }}>
+                {uncheckedPhotos === includedPhotos ? 'Check photos one by one →' : uncheckedPhotos ? 'Continue checking →' : 'Look again'}
+              </button>
+            </div>
+          )}
+
           {/* Every row that is not clean, with its reason — nothing is dropped without saying why */}
           {rows.some(r => r.issues.length > 0) && (
             <details data-attention style={{ ...cardStyle, marginBottom: 16, padding: '12px 16px' }} open={skipCount > 0}>
@@ -1276,6 +1320,15 @@ export default function ImportBoardsPage() {
             Click any cell to edit inline. Amber rows need attention but will still be imported.
           </p>
 
+          {deckMode && uncheckedPhotos > 0 && (
+            <p data-unchecked-note style={{ fontSize: '0.75rem', color: '#6D28D9', margin: '12px 0 0', textAlign: 'right' }}>
+              {uncheckedPhotos} photo{uncheckedPhotos === 1 ? '' : 's'} not checked yet.{' '}
+              <button type="button" onClick={() => { const first = reviewItems.findIndex(it => it.included && !approvedPhotos.has(it.id)); setReviewAt(Math.max(0, first)); }}
+                style={{ background: 'none', border: 'none', padding: 0, color: '#6D28D9', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit' }}>
+                Check them
+              </button>
+            </p>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
             <button style={btnSecondary} onClick={() => { geocodeAbort.current = true; setStep(2); }}>← Back</button>
             <button style={{ ...btnPrimary, opacity: selectedCount === 0 ? 0.4 : 1 }} disabled={selectedCount === 0} onClick={() => setStep(4)}>
@@ -1386,6 +1439,24 @@ export default function ImportBoardsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {reviewAt !== null && reviewItems.length > 0 && (
+        <PhotoReview
+          items={reviewItems}
+          approved={approvedPhotos}
+          startAt={reviewAt}
+          paused={cropping !== null}
+          onApprove={id => setApprovedPhotos(prev => new Set(prev).add(id))}
+          onEdit={it => {
+            const row = rows.find(r => r._id === it.id);
+            if (!row) return;
+            const key = row.photo_key && deckPhotos[row.photo_key] ? row.photo_key : (row.photo_key || `row-${row._id}`);
+            setCropping({ key, rowId: row.photo_key ? undefined : row._id, title: `Slide ${row.row_no} · ${row.name || 'board'}` });
+          }}
+          onToggleInclude={(id, include) => setRows(prev => prev.map(r => r._id === id ? { ...r, selected: include } : r))}
+          onClose={() => setReviewAt(null)}
+        />
       )}
 
       {cropping && (
