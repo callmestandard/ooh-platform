@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { boardIdFromParam, boardPath } from '@/lib/public-links';
+import { displayName } from '@/lib/display-name';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://ooh-platform-xi.vercel.app';
 
@@ -23,7 +24,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
   const format = FORMAT_LABELS[b.format] ?? 'Billboard';
   const place = [b.area, b.city, b.state && b.state !== b.city ? b.state : null].filter(Boolean).join(', ');
-  const title = `${b.name}${b.city && !b.name.toLowerCase().includes(b.city.toLowerCase()) ? `, ${b.city}` : ''}`;
+  const nice = displayName(b.name);
+  const title = `${nice}${b.city && !nice.toLowerCase().includes(b.city.toLowerCase()) ? `, ${b.city}` : ''}`;
   const description = `${format} for advertising${place ? ` in ${place}` : ''}${b.address ? ` (${b.address})` : ''}. See photos and the location, then request a price and availability from the media owner.`;
   const url = `${BASE_URL}${boardPath(b)}`;
   const photo = (b.photo_urls as string[] | null)?.find(Boolean);

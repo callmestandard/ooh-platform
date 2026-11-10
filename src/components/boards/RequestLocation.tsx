@@ -36,7 +36,7 @@ const primary: React.CSSProperties = {
   boxShadow: '0 4px 16px rgba(27,79,138,0.25)',
 };
 
-export default function RequestLocation({ board }: { board: { id: string; name: string; status: string } }) {
+export default function RequestLocation({ board, compact }: { board: { id: string; name: string; status: string }; compact?: boolean }) {
   const [viewer, setViewer] = useState<Viewer>({ kind: 'loading' });
   const [open, setOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -97,8 +97,10 @@ export default function RequestLocation({ board }: { board: { id: string; name: 
   const isBooked = board.status === 'booked';
 
   return (
-    <div id="request" ref={sectionRef} style={{ background: '#fff', borderTop: '1px solid #F1F5F9', borderBottom: '1px solid #F1F5F9', padding: 16, margin: '8px 0', scrollMarginTop: 72 }}>
-      <p style={{ fontSize: '0.625rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px' }}>Request this location</p>
+    <div id="request" ref={sectionRef} style={compact
+      ? { scrollMarginTop: 84 }
+      : { background: '#fff', borderTop: '1px solid #F1F5F9', borderBottom: '1px solid #F1F5F9', padding: 16, margin: '8px 0', scrollMarginTop: 72 }}>
+      {!compact && <p style={{ fontSize: '0.625rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', margin: '0 0 6px' }}>Request this location</p>}
 
       {sentId ? (
         <div data-request-sent style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 12, padding: 16 }}>

@@ -7,6 +7,7 @@ import CityMap from './CityMapLoader';
 import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
 import { VerificationBadge } from '@/lib/board-verification';
 import { boardPath, citySlug as toSlug } from '@/lib/public-links';
+import { displayName } from '@/lib/display-name';
 import PricingFaqList, { pricingFaqs, faqJsonLd } from '@/components/PricingFaq';
 import WhatsAppButton from '@/components/WhatsAppButton';
 
@@ -560,7 +561,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                     {/* Card body */}
                     <div style={{ padding: '14px 16px' }}>
                       <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                        {board.name}
+                        {displayName(board.name)}
                       </h3>
                       <p style={{ color: '#64748B', fontSize: '0.75rem', margin: '0 0 12px', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                         {[board.address, board.area].filter(Boolean).join(', ') || 'Information unavailable'}

@@ -12,6 +12,7 @@ import { VerificationBadge, dimensionsText, illuminationText, locationText, veri
 import { FORMAT_GROUPS, formatGroup } from '@/lib/board-formats';
 import { MVP_MODE } from '@/lib/mvp';
 import { boardPath } from '@/lib/public-links';
+import { displayName } from '@/lib/display-name';
 import WhatsAppButton from '@/components/WhatsAppButton';
 import type { MapBoard } from './MarketplaceMap';
 
@@ -263,7 +264,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
             <div>
               <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
-                {board.name}
+                {displayName(board.name)}
               </h2>
               <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0 }}>{locationText(board)}</p>
             </div>
@@ -767,7 +768,7 @@ function MarketplaceContent() {
                 <div style={{ padding: '14px 16px' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
                     <div>
-                      <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: '0 0 3px', lineHeight: 1.3 }}>{board.name}</p>
+                      <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: '0 0 3px', lineHeight: 1.3 }}>{displayName(board.name)}</p>
                       <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>{[board.area, board.city].filter(Boolean).join(', ') || UNKNOWN}</p>
                     </div>
                     <StatusBadge status={board.status} />
@@ -793,7 +794,7 @@ function MarketplaceContent() {
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
-                      <p style={{ fontSize: '1.125rem', fontWeight: 800, color: '#1B4F8A', fontFamily: 'monospace', margin: 0, letterSpacing: '-0.02em' }}>
+                      <p style={{ fontSize: '1.125rem', fontWeight: 800, color: '#1B4F8A', margin: 0, letterSpacing: '-0.02em' }}>
                         {rateText(board)}
                       </p>
                       {effectiveRate(board) ? <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>per month</p> : null}
