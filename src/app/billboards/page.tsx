@@ -1,28 +1,28 @@
 import type { Metadata } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
+import { citySlug } from '@/lib/public-links';
+import WhatsAppButton from '@/components/WhatsAppButton';
 
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'Billboard & OOH Advertising Locations in Nigeria | OOH Platform',
-  description: 'Browse billboard and outdoor advertising locations across every major Nigerian city. Compare rates, formats, and availability. Book your campaign online.',
+  title: { absolute: 'Billboard Advertising Locations in Nigeria, by City | OOH Platform' },
+  description: 'Billboards for advertising across Nigerian cities, listed by their media owners. See photos and locations, then request a price and availability from the owner.',
   keywords: ['billboard advertising Nigeria', 'OOH advertising Nigeria', 'outdoor advertising Nigeria', 'billboard locations Nigeria', 'buy billboard space Nigeria'],
   alternates: {
     canonical: `${process.env.NEXT_PUBLIC_APP_URL || 'https://ooh-platform-xi.vercel.app'}/billboards`,
   },
   openGraph: {
     title: 'Billboard Advertising Locations in Nigeria — OOH Platform',
-    description: 'Browse OOH advertising inventory across every major Nigerian city. Compare rates and book online.',
+    description: 'Billboards across Nigerian cities, listed by their media owners.',
     type: 'website',
   },
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function toSlug(city: string) {
-  return city.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-}
+const toSlug = citySlug;
 
 function fmtRate(n: number) {
 
@@ -41,6 +41,7 @@ const FORMAT_LABELS: Record<string, string> = {
 
 type CityRow = {
   city:     string;
+  state:    string;
   count:    number;
   minRate:  number;
   maxRate:  number;
@@ -54,24 +55,26 @@ async function fetchCities(): Promise<CityRow[]> {
   );
   const { data } = await db
     .from('boards')
-    .select('city, asking_rate, format')
+    .select('city, state, asking_rate, format')
     .eq('status', 'available')
     .not('city', 'is', null);
 
   if (!data?.length) return [];
 
-  const map: Record<string, { rates: number[]; formats: Set<string> }> = {};
-  for (const row of data as { city: string; asking_rate: number; format: string }[]) {
+  const map: Record<string, { state: string; count: number; rates: number[]; formats: Set<string> }> = {};
+  for (const row of data as { city: string; state: string | null; asking_rate: number; format: string }[]) {
     if (!row.city) continue;
-    if (!map[row.city]) map[row.city] = { rates: [], formats: new Set() };
+    if (!map[row.city]) map[row.city] = { state: row.state ?? '', count: 0, rates: [], formats: new Set() };
+    map[row.city].count++; // every board counts; most rates are private
     if (row.asking_rate) map[row.city].rates.push(row.asking_rate);
     if (row.format)      map[row.city].formats.add(row.format);
   }
 
   return Object.entries(map)
-    .map(([city, { rates, formats }]) => ({
+    .map(([city, { state, count, rates, formats }]) => ({
       city,
-      count:   rates.length,
+      state:   state === 'FCT' ? 'Abuja (FCT)' : state,
+      count,
       minRate: rates.length ? Math.min(...rates) : 0,
       maxRate: rates.length ? Math.max(...rates) : 0,
       formats: [...formats],
@@ -100,6 +103,7 @@ export default async function BillboardsIndexPage() {
         @media (max-width: 560px) {
           .idx-city-grid { grid-template-columns: 1fr !important; }
           .idx-hero-h1   { font-size: 1.75rem !important; }
+          .idx-nav-owner { display: none !important; }
         }
       `}</style>
 
@@ -121,14 +125,14 @@ export default async function BillboardsIndexPage() {
           <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.9375rem', letterSpacing: '-0.02em' }}>OOH Platform</span>
         </Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <Link href="/marketplace" className="idx-nav-link" style={{ color: '#94A3B8', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}>
-            Marketplace
+          <Link href="/signup?role=owner" className="idx-nav-link idx-nav-owner" style={{ color: '#94A3B8', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}>
+            List your boards
           </Link>
-          <Link href="/campaign-builder" style={{
+          <Link href="/marketplace" style={{
             background: '#F59E0B', color: '#fff', textDecoration: 'none',
-            padding: '7px 16px', borderRadius: 8, fontSize: '0.8125rem', fontWeight: 600,
+            padding: '7px 16px', borderRadius: 8, fontSize: '0.8125rem', fontWeight: 600, whiteSpace: 'nowrap',
           }}>
-            Plan a campaign
+            Find a board
           </Link>
         </div>
       </nav>
@@ -144,7 +148,7 @@ export default async function BillboardsIndexPage() {
             background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)',
             color: '#F59E0B', fontSize: '0.8125rem', fontWeight: 600, marginBottom: 20,
           }}>
-            {totalBoards} locations across {totalCities} cities
+            {totalBoards} board{totalBoards !== 1 ? 's' : ''} in {totalCities} cit{totalCities !== 1 ? 'ies' : 'y'}
           </div>
           <h1 className="idx-hero-h1" style={{
             color: '#fff', fontSize: '2.5rem', fontWeight: 800,
@@ -156,22 +160,22 @@ export default async function BillboardsIndexPage() {
             color: '#94A3B8', fontSize: '1.0625rem', lineHeight: 1.65,
             margin: '0 0 32px', maxWidth: 560, marginLeft: 'auto', marginRight: 'auto',
           }}>
-            Nigeria&apos;s largest outdoor advertising marketplace. Browse inventory in every major city, compare rates, and book your campaign online.
+            Billboards listed by the media owners who own them. Pick a city, see each board&apos;s photos and location, and request a price from the owner.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link href="/campaign-builder" style={{
+            <Link href="/marketplace" style={{
               background: '#F59E0B', color: '#fff', textDecoration: 'none',
               padding: '13px 28px', borderRadius: 10, fontSize: '0.9375rem', fontWeight: 700,
               boxShadow: '0 10px 24px -6px rgba(245,158,11,0.45)',
             }}>
-              Plan a campaign →
+              Browse all boards →
             </Link>
-            <Link href="/marketplace" style={{
+            <Link href="/marketplace?view=map" style={{
               background: 'rgba(255,255,255,0.08)', color: '#CBD5E1', textDecoration: 'none',
               padding: '13px 28px', borderRadius: 10, fontSize: '0.9375rem', fontWeight: 600,
               border: '1px solid rgba(255,255,255,0.12)',
             }}>
-              Browse marketplace
+              See them on a map
             </Link>
           </div>
         </div>
@@ -194,7 +198,7 @@ export default async function BillboardsIndexPage() {
                     Browse by City
                   </h2>
                   <p style={{ color: '#64748B', fontSize: '0.875rem', margin: 0 }}>
-                    {totalCities} cities · {totalBoards} total locations
+                    {totalCities} cit{totalCities !== 1 ? 'ies' : 'y'} · {totalBoards} board{totalBoards !== 1 ? 's' : ''}
                   </p>
                 </div>
               </div>
@@ -236,7 +240,7 @@ export default async function BillboardsIndexPage() {
                             {c.city}
                           </h3>
                           <span style={{ color: '#64748B', fontSize: '0.8125rem' }}>
-                            {c.count} location{c.count !== 1 ? 's' : ''}
+                            {c.count} board{c.count !== 1 ? 's' : ''}{c.state && c.state !== c.city ? ` · ${c.state}` : ''}
                           </span>
                         </div>
                         <span style={{
@@ -256,7 +260,7 @@ export default async function BillboardsIndexPage() {
                             <span style={{ color: '#94A3B8', fontSize: '0.8125rem' }}>to {fmtRate(c.maxRate)}/mo</span>
                           </>
                         ) : (
-                          <span style={{ color: '#475569', fontSize: '0.8125rem' }}>Rates on request</span>
+                          <span style={{ color: '#475569', fontSize: '0.8125rem' }}>Prices set by owners, on request</span>
                         )}
                       </div>
 
@@ -303,13 +307,14 @@ export default async function BillboardsIndexPage() {
             <span style={{ color: '#94A3B8', fontWeight: 600, fontSize: '0.875rem' }}>OOH Platform</span>
           </Link>
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-            {[['Marketplace', '/marketplace'], ['Campaign Builder', '/campaign-builder'], ['Sign in', '/auth/login']].map(([label, href]) => (
+            {[['Find a board', '/marketplace'], ['Prices explained', '/#prices'], ['List your boards', '/signup?role=owner'], ['Sign in', '/auth/login']].map(([label, href]) => (
               <Link key={href} href={href} style={{ color: '#64748B', textDecoration: 'none', fontSize: '0.8125rem' }}>{label}</Link>
             ))}
           </div>
           <span style={{ color: '#475569', fontSize: '0.8125rem' }}>© 2026 OOH Platform</span>
         </div>
       </footer>
+      <WhatsAppButton message="Hi, I'm looking for billboards in Nigeria. Can you help?" />
     </>
   );
 }

@@ -11,6 +11,8 @@ import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-
 import { VerificationBadge, dimensionsText, illuminationText, locationText, verificationOf, UNKNOWN } from '@/lib/board-verification';
 import { FORMAT_GROUPS, formatGroup } from '@/lib/board-formats';
 import { MVP_MODE } from '@/lib/mvp';
+import { boardPath } from '@/lib/public-links';
+import WhatsAppButton from '@/components/WhatsAppButton';
 import type { MapBoard } from './MarketplaceMap';
 
 const MarketplaceMap = dynamic(() => import('./MarketplaceMap'), {
@@ -68,10 +70,9 @@ const FORMAT_LABELS: Record<string, string> = {
   led:          'LED Screen',
 };
 
-const NIGERIAN_STATES = [
-  'Lagos', 'Abuja', 'Rivers', 'Kano', 'Ogun', 'Oyo', 'Delta', 'Anambra',
-  'Enugu', 'Kaduna', 'Kwara', 'Cross River',
-];
+// Abuja's boards are saved under the state "FCT".
+const stateLabel = (st: string) => (st === 'FCT' ? 'Abuja (FCT)' : st);
+const QUICK_CITY_STATE: Record<string, string> = { Abuja: 'FCT', 'Port Harcourt': 'Rivers', Ibadan: 'Oyo' };
 
 const DIGITAL_FORMATS = ['digital', 'led'];
 
@@ -297,7 +298,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
 
           {board.status === 'available' ? (
             <a
-              href={`/boards/${board.id}`}
+              href={boardPath(board)}
               style={{
                 display: 'block', width: '100%', padding: '12px', background: '#1B4F8A', color: '#fff',
                 border: 'none', borderRadius: 10, fontSize: '0.9375rem', fontWeight: 600,
@@ -348,11 +349,16 @@ function MarketplaceContent() {
   const [view, setView]             = useState<'grid' | 'map'>('grid');
   const [selected, setSelected]     = useState<Board | null>(null);
 
-  // Deep links: /marketplace?format=unipole (formats guide), ?view=map
+  // Deep links: /marketplace?format=unipole (formats guide), ?state=Oyo and
+  // ?q=Ibadan (homepage and city pages), ?view=map
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const f = q.get('format');
     if (f) setFormatFilter(f);
+    const st = q.get('state');
+    if (st) setStateFilter(st);
+    const text = q.get('q');
+    if (text) setSearch(text);
     if (q.get('view') === 'map') setView('map');
   }, []);
 
@@ -422,6 +428,14 @@ function MarketplaceContent() {
     });
   }, [boards, statusFilter, stateFilter, areaFilter, formatFilter, kindFilter, verifyFilter, priceMax, search]);
 
+  // States come from the listings themselves, busiest first.
+  const stateOptions = useMemo(() => {
+    const n = new Map<string, number>();
+    boards.forEach(b => { const st = (b.state ?? '').trim(); if (st) n.set(st, (n.get(st) ?? 0) + 1); });
+    if (stateFilter !== 'all' && !n.has(stateFilter)) n.set(stateFilter, 0); // keep a deep-linked state selectable
+    return [...n.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([st]) => st);
+  }, [boards, stateFilter]);
+
   // Areas come from the listings themselves, narrowed to the chosen state.
   const areas = useMemo(() => Array.from(new Set(
     boards.filter(b => stateFilter === 'all' || b.state === stateFilter).map(b => (b.area ?? '').trim()).filter(Boolean),
@@ -443,9 +457,9 @@ function MarketplaceContent() {
 
   // Booked boards can still be requested for future dates.
   function handleQuote() {
-    const id = selected?.id;
+    const b = selected;
     setSelected(null);
-    if (id) router.push(`/boards/${id}?request=1`);
+    if (b) router.push(`${boardPath(b)}?request=1`);
   }
 
   return (
@@ -552,12 +566,12 @@ function MarketplaceContent() {
               <button
                 key={city}
                 className="filter-pill"
-                onClick={() => changeState(city === 'Port Harcourt' ? 'Rivers' : city === 'Ibadan' ? 'Oyo' : city)}
+                onClick={() => changeState(QUICK_CITY_STATE[city] ?? city)}
                 style={{
                   padding: '6px 14px', borderRadius: 999, fontSize: '0.8125rem', fontWeight: 500,
-                  background: (stateFilter === city || (city === 'Port Harcourt' && stateFilter === 'Rivers') || (city === 'Ibadan' && stateFilter === 'Oyo'))
+                  background: (stateFilter === (QUICK_CITY_STATE[city] ?? city))
                     ? '#fff' : 'rgba(255,255,255,0.12)',
-                  color: (stateFilter === city || (city === 'Port Harcourt' && stateFilter === 'Rivers') || (city === 'Ibadan' && stateFilter === 'Oyo'))
+                  color: (stateFilter === (QUICK_CITY_STATE[city] ?? city))
                     ? '#1B4F8A' : 'rgba(255,255,255,0.7)',
                 }}
               >
@@ -641,7 +655,7 @@ function MarketplaceContent() {
 
           <select aria-label="State" className={`mk-select${stateFilter !== 'all' ? ' on' : ''}`} value={stateFilter} onChange={e => changeState(e.target.value)}>
             <option value="all">All states</option>
-            {NIGERIAN_STATES.map(st => <option key={st} value={st}>{st}</option>)}
+            {stateOptions.map(st => <option key={st} value={st}>{stateLabel(st)}</option>)}
           </select>
           <select aria-label="Area" data-filter="area" className={`mk-select${areaFilter !== 'all' ? ' on' : ''}`} value={areaFilter} onChange={e => setAreaFilter(e.target.value)} disabled={areas.length === 0}>
             <option value="all">{areas.length === 0 ? 'No areas listed' : 'All areas'}</option>
@@ -857,6 +871,7 @@ function MarketplaceContent() {
       {selected && (
         <BoardModal board={selected} onClose={() => setSelected(null)} onRequestQuote={handleQuote} />
       )}
+      {!selected && <WhatsAppButton message="Hi, I'm looking at billboards on OOH Platform and I'd like some help choosing." />}
     </div>
   );
 }

@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getSession, getCurrentProfile } from '@/lib/auth';
 import { MVP_MODE, roleHome } from '@/lib/mvp';
+import { supabase } from '@/lib/supabase';
+import { citySlug } from '@/lib/public-links';
+import PricingFaqList, { pricingFaqs } from '@/components/PricingFaq';
+import WhatsAppButton from '@/components/WhatsAppButton';
 
 /* ═══════════════════════════════════════════════════════════
    DATA
@@ -338,7 +342,7 @@ function Nav({ scrolled }: { scrolled: boolean }) {
 
         {/* Center links (desktop) */}
         <div className="lp-nav-links">
-          {(MVP_MODE ? [['Explore inventory','/marketplace'],['How it works','#how']] : [['Marketplace','#marketplace'],['How it works','#how'],['Features','#features'],['Pricing','#pricing']]).map(([l,h]) => (
+          {(MVP_MODE ? [['Explore inventory','/marketplace'],['Locations','#states'],['Prices','#prices'],['How it works','#how']] : [['Marketplace','#marketplace'],['How it works','#how'],['Features','#features'],['Pricing','#pricing']]).map(([l,h]) => (
             <a key={l} href={h} style={{ fontSize: 14.5, fontWeight: 500, color: '#4a443b', padding: '8px 14px', borderRadius: 9, textDecoration: 'none', transition: 'color .15s, background .15s' }}
               onMouseEnter={e => { (e.target as HTMLElement).style.color='#1a1712'; (e.target as HTMLElement).style.background='rgba(26,22,15,.05)'; }}
               onMouseLeave={e => { (e.target as HTMLElement).style.color='#4a443b'; (e.target as HTMLElement).style.background='transparent'; }}>
@@ -375,7 +379,7 @@ function Nav({ scrolled }: { scrolled: boolean }) {
       {/* Mobile dropdown */}
       {menuOpen && (
         <div className="lp-mob-menu" style={{ display: 'flex', flexDirection: 'column', padding: '4px 20px 20px', borderTop: '1px solid rgba(26,22,15,.08)' }}>
-          {(MVP_MODE ? [['Explore inventory','/marketplace'],['How it works','#how']] : [['Marketplace','#marketplace'],['How it works','#how'],['Features','#features'],['Pricing','#pricing']]).map(([l,h]) => (
+          {(MVP_MODE ? [['Explore inventory','/marketplace'],['Locations','#states'],['Prices','#prices'],['How it works','#how']] : [['Marketplace','#marketplace'],['How it works','#how'],['Features','#features'],['Pricing','#pricing']]).map(([l,h]) => (
             <a key={l} href={h} onClick={() => setMenuOpen(false)} style={{ fontSize: 16, fontWeight: 500, color: '#1a1712', padding: '13px 0', borderBottom: '1px solid rgba(26,22,15,.06)', textDecoration: 'none' }}>{l}</a>
           ))}
           <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
@@ -1169,6 +1173,106 @@ function Pricing() {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   BOARDS BY STATE (live counts)
+═══════════════════════════════════════════════════════════ */
+
+type StateRow = { state: string; count: number; cities: { city: string; count: number }[] };
+
+function BoardsByState() {
+  const [rows, setRows] = useState<StateRow[] | null>(null);
+  const [ref, inView] = useInView();
+
+  useEffect(() => {
+    supabase.from('boards').select('state, city').eq('status', 'available').then(({ data }) => {
+      const byState = new Map<string, Map<string, number>>();
+      for (const b of (data ?? []) as { state: string | null; city: string | null }[]) {
+        const st = (b.state ?? '').trim() || (b.city ?? '').trim();
+        if (!st) continue;
+        const cities = byState.get(st) ?? new Map<string, number>();
+        const c = (b.city ?? '').trim();
+        if (c) cities.set(c, (cities.get(c) ?? 0) + 1);
+        byState.set(st, cities);
+      }
+      setRows([...byState.entries()].map(([state, cities]) => ({
+        state,
+        count: [...cities.values()].reduce((s, n) => s + n, 0),
+        cities: [...cities.entries()].map(([city, count]) => ({ city, count })).sort((a, b) => b.count - a.count),
+      })).filter(r => r.count > 0).sort((a, b) => b.count - a.count || a.state.localeCompare(b.state)));
+    }, () => setRows([]));
+  }, []);
+
+  if (rows && rows.length === 0) return null;
+  const total = rows?.reduce((s, r) => s + r.count, 0) ?? 0;
+  const cityCount = rows?.reduce((s, r) => s + r.cities.length, 0) ?? 0;
+  const stateLabel = (s: string) => (s === 'FCT' ? 'Abuja (FCT)' : s);
+
+  return (
+    <section id="states" data-boards-by-state style={{ padding: '92px 0', background: '#fff' }}>
+      <div className="lp-wrap">
+        <div ref={ref} className={`lp-section-head${inView ? ' lp-in' : ''}`}>
+          <span className="lp-eyebrow">Locations</span>
+          <h2>Billboards across Nigeria</h2>
+          <p>{rows ? `${total} board${total === 1 ? '' : 's'} listed by their media owners in ${cityCount} cit${cityCount === 1 ? 'y' : 'ies'}, and growing.` : 'Boards listed by their media owners, state by state.'}</p>
+        </div>
+
+        <div className="lp-state-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
+          {(rows ?? Array.from({ length: 8 }, () => null)).map((r, i) => r ? (
+            <div key={r.state} data-state-card style={{ border: '1px solid rgba(26,22,15,.10)', borderRadius: 16, padding: '18px 18px 16px', background: '#fbfaf7', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                <h3 style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 700, fontSize: 18, letterSpacing: '-.01em', color: '#1a1712', margin: 0 }}>{stateLabel(r.state)}</h3>
+                <b style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 800, fontSize: 26, letterSpacing: '-.02em', color: '#2f6bff', lineHeight: 1 }}>{r.count}</b>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {r.cities.map(c => (
+                  <Link key={c.city} href={`/billboards/${citySlug(c.city)}`} className="lp-city-pill"
+                    style={{ fontSize: 13, fontWeight: 600, color: '#4a443b', background: '#fff', border: '1px solid rgba(26,22,15,.12)', borderRadius: 999, padding: '4px 10px', textDecoration: 'none' }}>
+                    {c.city} <span style={{ color: '#a59d8f', fontWeight: 500 }}>{c.count}</span>
+                  </Link>
+                ))}
+              </div>
+              <Link href={`/marketplace?state=${encodeURIComponent(r.state)}`} style={{ marginTop: 'auto', paddingTop: 4, color: '#2f6bff', fontWeight: 600, fontSize: 13.5, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                See {r.count === 1 ? 'the board' : `all ${r.count} boards`} <Ico n="arrow" size={14} color="#2f6bff"/>
+              </Link>
+            </div>
+          ) : (
+            <div key={i} style={{ height: 122, borderRadius: 16, background: '#f3f1ec' }} />
+          ))}
+        </div>
+
+        <p style={{ textAlign: 'center', marginTop: 28, color: '#756e62', fontSize: 14.5 }}>
+          Own billboards in a city we don&apos;t cover yet?{' '}
+          <Link href="/signup?role=owner" style={{ color: '#1a1712', fontWeight: 600, borderBottom: '1px solid rgba(26,22,15,.25)', textDecoration: 'none' }}>List your locations →</Link>
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PRICING FAQ
+═══════════════════════════════════════════════════════════ */
+
+function PricingFaqSection() {
+  const [ref, inView] = useInView();
+  return (
+    <section id="prices" style={{ padding: '92px 0', background: '#f6f4ef' }}>
+      <div className="lp-wrap" style={{ maxWidth: 880 }}>
+        <div ref={ref} className={`lp-section-head${inView ? ' lp-in' : ''}`}>
+          <span className="lp-eyebrow">Prices</span>
+          <h2>What does a billboard cost?</h2>
+          <p>Media owners set their own prices. Here&apos;s what to expect, and what else to budget for.</p>
+        </div>
+        <PricingFaqList faqs={pricingFaqs()} ink="#1a1712" muted="#756e62" line="rgba(26,22,15,.12)" accent="#2f6bff" />
+        <p style={{ textAlign: 'center', marginTop: 28, color: '#756e62', fontSize: 14.5 }}>
+          Ready for an exact price?{' '}
+          <Link href="/marketplace" style={{ color: '#1a1712', fontWeight: 600, borderBottom: '1px solid rgba(26,22,15,.25)', textDecoration: 'none' }}>Find a board and request a quote →</Link>
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
    FINAL CTA
 ═══════════════════════════════════════════════════════════ */
 
@@ -1290,10 +1394,10 @@ function Footer() {
           {/* Resources */}
           <div>
             <h6 style={{ fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#756e62', marginBottom: 16, fontWeight: 600 }}>Resources</h6>
-            {[['Formats guide', '/formats'], ['Glossary', '/glossary']].map(([l, href]) => (
+            {[['Billboards by city', '/billboards'], ['Prices explained', '/#prices'], ['Formats guide', '/formats'], ['Glossary', '/glossary']].map(([l, href]) => (
               <Link key={href} href={href} style={{ display: 'block', color: '#4a443b', fontSize: 14, marginBottom: 11, textDecoration: 'none' }}>{l}</Link>
             ))}
-            {['OOH rate guide','City profiles','Help center','API docs'].map(l => (
+            {[...(MVP_MODE ? [] : ['OOH rate guide','City profiles','Help center','API docs'])].map(l => (
               <a key={l} href="/signup" style={{ display: 'block', color: '#4a443b', fontSize: 14, marginBottom: 11, textDecoration: 'none', transition: 'color .15s' }}
                 onMouseEnter={e => (e.target as HTMLElement).style.color='#1a1712'}
                 onMouseLeave={e => (e.target as HTMLElement).style.color='#4a443b'}>{l}</a>
@@ -1396,6 +1500,17 @@ export default function LandingPage() {
 
         /* ── Pricing grid ── */
         .lp-price-grid { grid-template-columns:repeat(3,1fr)!important; }
+
+        /* ── States grid ── */
+        .lp-city-pill:hover { border-color:#2f6bff!important; color:#2f6bff!important; }
+        @media(max-width:980px){ .lp-state-grid{grid-template-columns:repeat(2,1fr)!important} }
+        @media(max-width:520px){
+          .lp-state-grid{gap:10px!important}
+          .lp-state-grid > div{padding:14px 13px 13px!important}
+          .lp-state-grid h3{font-size:15.5px!important}
+          .lp-state-grid b{font-size:22px!important}
+        }
+        @media(max-width:340px){ .lp-state-grid{grid-template-columns:1fr!important} }
 
         /* ── Footer grid ── */
         .lp-foot-grid { grid-template-columns:1.6fr 1fr 1fr 1fr!important; }
@@ -1518,8 +1633,11 @@ export default function LandingPage() {
       {!MVP_MODE && <Ambition/>}
       {!MVP_MODE && <Features/>}
       {!MVP_MODE && <Pricing/>}
+      {MVP_MODE && <BoardsByState/>}
+      {MVP_MODE && <PricingFaqSection/>}
       <FinalCTA/>
       <Footer/>
+      <WhatsAppButton/>
     </div>
   );
 }

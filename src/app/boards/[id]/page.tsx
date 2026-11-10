@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { attachVisibleRates } from '@/lib/board-rates';
 import RequestLocation, { OPEN_REQUEST_EVENT } from '@/components/boards/RequestLocation';
+import { boardIdFromParam, boardPath, citySlug } from '@/lib/public-links';
+import WhatsAppButton from '@/components/WhatsAppButton';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 import { VerificationBadge, VERIFICATION_META, verificationOf, formatVerifiedDate, dimensionsText, illuminationText, locationText, UNKNOWN } from '@/lib/board-verification';
 
@@ -49,7 +51,8 @@ function formatNaira(n: number) {
 }
 
 export default function PublicBoardPage() {
-  const { id } = useParams();
+  // Accepts "/boards/<id>" and the readable "/boards/<name>-<city>-<id>".
+  const id = boardIdFromParam(useParams().id);
   const [board, setBoard] = useState<Board | null>(null);
   const [activeListing, setActiveListing] = useState<ActiveListing>(null);
   const [loading, setLoading] = useState(true);
@@ -57,12 +60,17 @@ export default function PublicBoardPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) return; // no id: the page shows "Board not found"
     Promise.all([
       supabase.from('boards').select('*').eq('id', id).single(),
       supabase.from('listings').select('sell_price, agent_id, board_authorizations(owner_verified)').eq('board_id', id).eq('status', 'active').maybeSingle(),
     ]).then(async ([{ data }, { data: listing }]) => {
       setBoard(data ? (await attachVisibleRates([data as Board]))[0] : (data as Board));
+      // Show the readable link in the address bar, so shared links read well.
+      if (data) {
+        const readable = boardPath(data as Board);
+        if (window.location.pathname !== readable) window.history.replaceState(window.history.state, '', readable + window.location.search + window.location.hash);
+      }
       if (listing) {
         const badge = computeTrustBadge({ agent_id: listing.agent_id }, listing.board_authorizations as any);
         setActiveListing({ sell_price: listing.sell_price, badge });
@@ -87,7 +95,7 @@ export default function PublicBoardPage() {
     }
   }
 
-  if (loading) {
+  if (loading && id) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC' }}>
         <div style={{ width: 32, height: 32, border: '2.5px solid #E2E8F0', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
@@ -362,6 +370,12 @@ export default function PublicBoardPage() {
 
           {/* ── Footer ── */}
           <div style={{ padding: '24px 16px 8px', textAlign: 'center' }}>
+            {board.city && (
+              <a href={`/billboards/${citySlug(board.city)}`} data-city-link
+                style={{ display: 'inline-block', marginBottom: 10, fontSize: '0.8125rem', fontWeight: 600, color: '#1B4F8A', textDecoration: 'none' }}>
+                More billboards in {board.city} →
+              </a>
+            )}
             <p style={{ fontSize: '0.75rem', color: '#CBD5E1', lineHeight: 1.6 }}>
               Listed on{' '}
               <a href="/" style={{ color: '#1B4F8A', fontWeight: 600, textDecoration: 'none' }}>OOH Platform</a>
@@ -371,6 +385,7 @@ export default function PublicBoardPage() {
 
         </div>
       </div>
+      <WhatsAppButton message={`Hi, I'm interested in this board on OOH Platform: "${board.name}"${board.city ? ` (${board.city})` : ''}. ${typeof window !== 'undefined' ? window.location.origin + boardPath(board) : ''}`} />
     </>
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import OOHMap, { Popup, type MapRef } from '@/components/map/OOHMap';
 import ClusteredPoints from '@/components/map/ClusteredPoints';
+import { boardPath } from '@/lib/public-links';
 
 export type CityMapBoard = {
   id: string;
@@ -73,10 +74,10 @@ export default function CityMap({ boards, city }: Props) {
             <div style={{ fontFamily: "'Inter', sans-serif", minWidth: 150 }}>
               <strong style={{ fontSize: '0.8125rem', display: 'block', marginBottom: 2 }}>{b.name}</strong>
               <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{b.format}</span><br />
-              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{fmtRate(b.asking_rate)}/mo</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{b.asking_rate ? `${fmtRate(b.asking_rate)}/mo` : 'Price on request'}</span>
               <br />
               <a
-                href={`/campaign-builder?city=${encodeURIComponent(city)}`}
+                href={boardPath({ id: b.id, name: b.name, city })}
                 style={{
                   display: 'inline-block', marginTop: 8,
                   padding: '4px 10px', borderRadius: 6,
@@ -84,7 +85,7 @@ export default function CityMap({ boards, city }: Props) {
                   fontSize: '0.6875rem', fontWeight: 600, textDecoration: 'none',
                 }}
               >
-                Plan a campaign →
+                View board →
               </a>
             </div>
           </Popup>

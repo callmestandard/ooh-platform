@@ -6,14 +6,13 @@ import type { CityMapBoard } from './CityMap';
 import CityMap from './CityMapLoader';
 import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
 import { VerificationBadge } from '@/lib/board-verification';
+import { boardPath, citySlug as toSlug } from '@/lib/public-links';
+import PricingFaqList, { pricingFaqs, faqJsonLd } from '@/components/PricingFaq';
+import WhatsAppButton from '@/components/WhatsAppButton';
 
 export const revalidate = 3600;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-
-function toSlug(city: string) {
-  return city.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-}
 
 function fromSlug(slug: string) {
   return slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -24,14 +23,6 @@ function fmtRate(n: number) {
   if (!n) return 'on request'; // rates are private unless the owner opens them (migration 035)
   if (n >= 1_000_000) return '₦' + (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000)     return '₦' + Math.round(n / 1_000) + 'K';
-  return '₦' + n.toLocaleString('en-NG');
-}
-
-function fmtRateLong(n: number) {
-
-  if (!n) return 'on request'; // rates are private unless the owner opens them (migration 035)
-  if (n >= 1_000_000) return '₦' + (n / 1_000_000).toFixed(2).replace(/\.?0+$/, '') + ' million';
-  if (n >= 1_000)     return '₦' + Math.round(n / 1_000) + ',000';
   return '₦' + n.toLocaleString('en-NG');
 }
 
@@ -69,6 +60,7 @@ type DBBoard = {
   height: number | null;
   illuminated: boolean | null;
   area: string | null;
+  state: string | null;
   verification_status: string | null;
   photo_urls: string[] | null;
   latitude: number | null;
@@ -82,20 +74,21 @@ function getDB() {
   );
 }
 
-async function fetchCityData(cityName: string) {
+async function fetchCityData(slug: string) {
   const db = getDB();
-  const [boardsRes, allCitiesRes] = await Promise.all([
-    db.from('boards')
-      .select('id, name, address, area, format, asking_rate, width, height, illuminated, photo_urls, latitude, longitude, verification_status')
-      .eq('status', 'available')
-      .eq('city', cityName)
-      .order('asking_rate', { ascending: false })
-      .limit(200),
-    db.from('boards')
-      .select('city, asking_rate')
-      .eq('status', 'available')
-      .not('city', 'is', null),
-  ]);
+  const allCitiesRes = await db.from('boards')
+    .select('city, asking_rate')
+    .eq('status', 'available')
+    .not('city', 'is', null);
+  // Find the city by its slug, so "benin-city" finds "Benin City".
+  const cityName = (allCitiesRes.data || []).map(r => r.city as string).find(c => c && toSlug(c) === slug) ?? fromSlug(slug);
+  const boardsRes = await db.from('boards')
+    .select('id, name, address, area, state, format, asking_rate, width, height, illuminated, photo_urls, latitude, longitude, verification_status')
+    .eq('status', 'available')
+    .eq('city', cityName)
+    .order('verification_status', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(200);
 
   const boards: DBBoard[] = boardsRes.data || [];
   const allBoardRows: { city: string; asking_rate: number }[] = allCitiesRes.data || [];
@@ -114,7 +107,7 @@ async function fetchCityData(cityName: string) {
     .map(([city, stats]) => ({ city, count: stats.count, minRate: stats.minRate === Infinity ? 0 : stats.minRate }))
     .sort((a, b) => b.count - a.count);
 
-  return { boards, allCities };
+  return { cityName, boards, allCities };
 }
 
 function computeStats(boards: DBBoard[]) {
@@ -155,19 +148,18 @@ export async function generateStaticParams() {
 
 export async function generateMetadata({ params }: { params: Promise<{ city: string }> }): Promise<Metadata> {
   const { city: slug } = await params;
-  const cityName = fromSlug(slug);
-  const { boards } = await fetchCityData(cityName);
+  const { cityName, boards } = await fetchCityData(slug);
 
   if (!boards.length) {
     return { title: 'Billboard Advertising in Nigeria — OOH Platform' };
   }
 
   const { count, minRate, maxRate, formats } = computeStats(boards);
-  const desc = `Browse ${count} OOH advertising locations in ${cityName}. ${minRate ? `Rates from ${fmtRate(minRate)} to ${fmtRate(maxRate)}/mo.` : 'Rates quoted on request.'} ${formats.map(f => FORMAT_LABELS[f] || f).join(', ')}. Book online in minutes.`;
+  const desc = `${count} billboard${count === 1 ? '' : 's'} for advertising in ${cityName}, listed by their media owners: ${formats.map(f => FORMAT_LABELS[f] || f).join(', ')}. ${minRate ? `Rates from ${fmtRate(minRate)} to ${fmtRate(maxRate)}/mo.` : 'See photos and locations, then request a price from the owner.'}`;
   const url  = `${BASE_URL}/billboards/${slug}`;
 
   return {
-    title: `Billboard Advertising in ${cityName} — Prices & Locations | OOH Platform`,
+    title: { absolute: `Billboard Advertising in ${cityName}: Prices & Locations | OOH Platform` },
     description: desc,
     keywords: [
       `billboard advertising ${cityName}`,
@@ -193,43 +185,31 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
 
 export default async function CityPage({ params }: { params: Promise<{ city: string }> }) {
   const { city: slug } = await params;
-  const cityName = fromSlug(slug);
-  const { boards, allCities } = await fetchCityData(cityName);
+  const { cityName, boards, allCities } = await fetchCityData(slug);
 
   if (!boards.length) notFound();
 
-  const { count, minRate, maxRate, formatStats, formats } = computeStats(boards);
-  const featured = boards.slice(0, 6);
+  const { count, minRate, formatStats, formats } = computeStats(boards);
+  const anyRates = formatStats.some(f => f.avg > 0);
+  const areaCount = new Set(boards.map(b => (b.area ?? '').trim()).filter(Boolean)).size;
+  const verifiedCount = boards.filter(b => b.verification_status && b.verification_status !== 'pending').length;
   const mapBoards: CityMapBoard[] = boards
     .filter(b => b.latitude && b.longitude)
     .map(b => ({ id: b.id, name: b.name, format: b.format, asking_rate: b.asking_rate, lat: b.latitude!, lng: b.longitude! }));
 
   const otherCities = allCities.filter(c => toSlug(c.city) !== slug).slice(0, 20);
-  const campaignUrl = `/campaign-builder?city=${encodeURIComponent(cityName)}`;
+  const campaignUrl = `/marketplace?q=${encodeURIComponent(cityName)}`;
 
   const faqs = [
     {
-      q: `How much does a billboard cost in ${cityName}?`,
-      a: (minRate
-        ? `Billboard advertising in ${cityName} ranges from ${fmtRateLong(minRate)} to ${fmtRateLong(maxRate)} per month, depending on the format, size, location, and illumination. The average rate is around ${fmtRate(Math.round((minRate + maxRate) / 2))} per month. `
-        : `Billboard rates in ${cityName} are quoted on request and depend on the format, size, location, and illumination. `) + `Use our self-service campaign builder to get an instant quote.`,
-    },
-    {
       q: `How many billboards are available in ${cityName}?`,
-      a: `There are currently ${count} available OOH advertising locations in ${cityName} on our platform, spanning ${formats.length} format${formats.length !== 1 ? 's' : ''}: ${formats.map(f => FORMAT_LABELS[f] || f).join(', ')}. Inventory updates in real time as locations are booked or released.`,
-    },
-    {
-      q: `What OOH formats are available in ${cityName}?`,
-      a: `${cityName} has ${formats.length} OOH format${formats.length !== 1 ? 's' : ''} available: ${formatStats.map(s => `${FORMAT_LABELS[s.format] || s.format} (${s.count} location${s.count !== 1 ? 's' : ''}${s.min ? `, from ${fmtRate(s.min)}/mo` : ''})`).join('; ')}. Each format suits different campaign objectives — large billboards for mass reach, unipoles for highway visibility, gantries for traffic convergence points, and LED screens for dynamic digital content.`,
+      a: `There are ${count} billboard${count !== 1 ? 's' : ''} available in ${cityName} right now, listed by their media owners: ${formatStats.map(f => `${f.count} ${(FORMAT_LABELS[f.format] || f.format).toLowerCase()}${f.count !== 1 ? 's' : ''}`).join(', ')}. New boards are added as more owners list with us.`,
     },
     {
       q: `How do I book a billboard in ${cityName}?`,
-      a: `Booking is fully online: use our campaign builder to select your target cities and budget, browse available locations on an interactive map, choose your boards, and submit your plan. Our team reviews and confirms within 24 hours. No agency fees — just a transparent 5% platform discount on all rates.`,
+      a: `Choose a board on this page and press Request this location. Add your dates, and the media owner replies with availability and a price. You can accept the quote or make an offer. Once you agree, our team contacts you and the owner to complete the booking.`,
     },
-    {
-      q: `How long does it take to launch an OOH campaign in ${cityName}?`,
-      a: `Most campaigns are live within 5–10 business days of booking confirmation. This covers creative production or upload, site preparation (if required), and installation. Digital screens in ${cityName} can go live in as little as 48 hours once artwork is approved.`,
-    },
+    ...pricingFaqs(cityName),
   ];
 
   const jsonLd = {
@@ -240,7 +220,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
         '@id': `${BASE_URL}/billboards/${slug}`,
         name: `Billboard Advertising in ${cityName} — OOH Platform`,
         url:  `${BASE_URL}/billboards/${slug}`,
-        description: `Browse ${count} OOH locations in ${cityName}. ${minRate ? `Rates from ${fmtRate(minRate)}/mo.` : 'Rates on request.'}`,
+        description: `${count} billboards in ${cityName}, listed by their media owners.`,
         breadcrumb: {
           '@type': 'BreadcrumbList',
           itemListElement: [
@@ -250,14 +230,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           ],
         },
       },
-      {
-        '@type': 'FAQPage',
-        mainEntity: faqs.map(f => ({
-          '@type': 'Question',
-          name: f.q,
-          acceptedAnswer: { '@type': 'Answer', text: f.a },
-        })),
-      },
+      faqJsonLd(faqs),
     ],
   };
 
@@ -271,9 +244,6 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
       <style>{`
         .city-board-card { transition: box-shadow 0.18s, transform 0.18s; }
         .city-board-card:hover { box-shadow: 0 16px 40px -12px rgba(27,79,138,0.18) !important; transform: translateY(-2px); }
-        .city-faq-item summary { cursor: pointer; user-select: none; list-style: none; }
-        .city-faq-item summary::-webkit-details-marker { display: none; }
-        .city-faq-item[open] summary { color: #1B4F8A; }
         .city-cta-btn { transition: background 0.15s, box-shadow 0.15s; }
         .city-cta-btn:hover { background: #D97706 !important; box-shadow: 0 8px 24px -6px rgba(245,158,11,0.5) !important; }
         .city-nav-link { transition: color 0.12s; }
@@ -281,6 +251,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
         .city-link-pill:hover { background: #1B4F8A !important; color: #fff !important; }
         @media (max-width: 768px) {
           .city-hero-h1  { font-size: 1.75rem !important; }
+          .city-nav-cities { display: none !important; }
           .city-map-grid { grid-template-columns: 1fr !important; }
           .city-map-wrap { height: 280px !important; }
           .city-board-grid { grid-template-columns: 1fr !important; }
@@ -313,21 +284,21 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
             OOH Platform
           </span>
         </Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <Link href="/marketplace" className="city-nav-link" style={{ color: '#94A3B8', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}>
-            Marketplace
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <Link href="/billboards" className="city-nav-link city-nav-cities" style={{ color: '#94A3B8', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}>
+            All cities
           </Link>
-          <Link href="/billboards" className="city-nav-link" style={{ color: '#94A3B8', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}>
-            Billboards
+          <Link href="/signup?role=owner" className="city-nav-link city-nav-cities" style={{ color: '#94A3B8', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}>
+            List your boards
           </Link>
           <Link
             href={campaignUrl}
             style={{
               background: '#F59E0B', color: '#fff', textDecoration: 'none',
-              padding: '7px 16px', borderRadius: 8, fontSize: '0.8125rem', fontWeight: 600,
+              padding: '7px 16px', borderRadius: 8, fontSize: '0.8125rem', fontWeight: 600, whiteSpace: 'nowrap',
             }}
           >
-            Plan a campaign
+            Find a board
           </Link>
         </div>
       </nav>
@@ -360,7 +331,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
             color: '#94A3B8', fontSize: '1.0625rem', lineHeight: 1.65,
             margin: '0 0 36px', maxWidth: 560,
           }}>
-            Browse {count} available OOH locations across {cityName}. Compare rates, check availability, and plan your campaign — all in one place.
+            {count} billboard{count !== 1 ? 's' : ''} in {cityName}, listed by the media owners who own them. See each board&apos;s photos and location, then request a price and availability from the owner.
           </p>
 
           {/* Stats strip */}
@@ -371,11 +342,12 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
             overflow: 'hidden',
           }}>
             {[
-              { label: 'Locations',    value: String(count) },
-              ...(minRate
-                ? [{ label: 'From/month', value: fmtRate(minRate) }, { label: 'Up to/month', value: fmtRate(maxRate) }]
-                : [{ label: 'Rates', value: 'On request' }]),
+              { label: 'Boards',       value: String(count) },
               { label: 'Formats',      value: String(formats.length) },
+              ...(minRate
+                ? [{ label: 'From/month', value: fmtRate(minRate) }]
+                : areaCount ? [{ label: 'Areas', value: String(areaCount) }] : []),
+              ...(verifiedCount ? [{ label: 'Verified', value: String(verifiedCount) }] : []),
             ].map((stat, i) => (
               <div
                 key={stat.label}
@@ -429,15 +401,15 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 Advertise in {cityName}
               </h2>
               <p style={{ color: '#64748B', fontSize: '0.875rem', lineHeight: 1.6, margin: '0 0 20px' }}>
-                {count} locations available right now. Reach your target audience across {cityName}&apos;s key corridors, highways, and commercial hubs.
+                {count} board{count !== 1 ? 's' : ''}{' '}available now. Each price is set by the board&apos;s owner: request a board and they reply with a quote.
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
                 {[
-                  { icon: '📍', label: `${count} available locations` },
-                  { icon: '💰', label: minRate ? `Rates from ${fmtRate(minRate)}/mo` : 'Rates quoted on request' },
+                  { icon: '📍', label: `${count} board${count !== 1 ? 's' : ''} with photos and locations` },
                   { icon: '📐', label: `${formats.length} format${formats.length !== 1 ? 's' : ''}: ${formats.slice(0, 3).map(f => FORMAT_LABELS[f] || f).join(', ')}${formats.length > 3 ? ` +${formats.length - 3} more` : ''}` },
-                  { icon: '⚡', label: 'Book online, live in 5–10 days' },
+                  { icon: '💬', label: minRate ? `Rates from ${fmtRate(minRate)}/mo, set by owners` : 'Prices set by owners, quoted on request' },
+                  { icon: '🤝', label: 'Our team completes the booking with you' },
                 ].map(item => (
                   <div key={item.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                     <span style={{ fontSize: '0.9rem', flexShrink: 0, marginTop: 1 }}>{item.icon}</span>
@@ -457,13 +429,13 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                   marginBottom: 10,
                 }}
               >
-                Plan a campaign in {cityName} →
+                Browse boards in {cityName} →
               </Link>
               <Link href="/marketplace" style={{
                 display: 'block', textAlign: 'center', textDecoration: 'none',
                 color: '#475569', fontSize: '0.8125rem', padding: '8px',
               }}>
-                Browse all boards →
+                Search all of Nigeria →
               </Link>
             </div>
           </div>
@@ -475,13 +447,13 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 Advertising Formats Available in {cityName}
               </h2>
               <p style={{ color: '#64748B', fontSize: '0.875rem', margin: '0 0 24px', lineHeight: 1.6 }}>
-                Compare formats, counts, and rate ranges to find the right inventory for your campaign.
+                {anyRates ? 'Compare formats, counts and rate ranges.' : 'How many of each kind of board you can book here.'}
               </p>
               <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', border: '1px solid #E2E8F0', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                 <table className="city-format-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                      {['Format', 'Locations', 'Avg Rate/mo', 'Min Rate', 'Max Rate'].map(h => (
+                      {(anyRates ? ['Format', 'Boards', 'Avg Rate/mo', 'Min Rate', 'Max Rate'] : ['Format', 'Boards']).map(h => (
                         <th key={h} style={{ textAlign: 'left', padding: '14px 20px', fontWeight: 600, color: '#475569', fontSize: '0.8125rem', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
                           {h}
                         </th>
@@ -502,9 +474,11 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                             </span>
                           </td>
                           <td style={{ padding: '14px 20px', color: '#0F172A', fontWeight: 600 }}>{row.count}</td>
-                          <td style={{ padding: '14px 20px', color: '#0F172A' }}>{fmtRate(row.avg)}</td>
-                          <td style={{ padding: '14px 20px', color: '#475569' }}>{fmtRate(row.min)}</td>
-                          <td style={{ padding: '14px 20px', color: '#475569' }}>{fmtRate(row.max)}</td>
+                          {anyRates && <>
+                            <td style={{ padding: '14px 20px', color: '#0F172A' }}>{fmtRate(row.avg)}</td>
+                            <td style={{ padding: '14px 20px', color: '#475569' }}>{fmtRate(row.min)}</td>
+                            <td style={{ padding: '14px 20px', color: '#475569' }}>{fmtRate(row.max)}</td>
+                          </>}
                         </tr>
                       );
                     })}
@@ -518,14 +492,14 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           <section style={{ marginBottom: 72 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 12 }}>
               <h2 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.03em' }}>
-                Featured OOH Locations in {cityName}
+                {count > 1 ? `All ${count} billboards` : 'Billboard'} in {cityName}
               </h2>
-              <Link href={campaignUrl} style={{ color: '#1B4F8A', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 600 }}>
-                View all {count} boards →
+              <Link href={`${campaignUrl}&view=map`} style={{ color: '#1B4F8A', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 600 }}>
+                Filter on the map →
               </Link>
             </div>
             <p style={{ color: '#64748B', fontSize: '0.875rem', margin: '0 0 24px', lineHeight: 1.6 }}>
-              Top-rated locations by premium rate — high-visibility sites across {cityName}.
+              Open a board to see its photos, size and exact location, and to request it for your dates.
             </p>
 
             <div className="city-board-grid" style={{
@@ -533,7 +507,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
               gridTemplateColumns: 'repeat(3, 1fr)',
               gap: 20,
             }}>
-              {featured.map(board => {
+              {boards.map(board => {
                 const fc = FORMAT_COLORS[board.format] || { bg: '#F1F5F9', text: '#475569' };
                 const photo = board.photo_urls?.[0];
                 return (
@@ -596,12 +570,12 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <div>
                           <div style={{ color: '#0F172A', fontWeight: 700, fontSize: '0.9375rem', lineHeight: 1 }}>
-                            {board.asking_rate ? fmtRate(board.asking_rate) : 'Request quote'}
+                            {board.asking_rate ? fmtRate(board.asking_rate) : 'Price on request'}
                           </div>
                           {!!board.asking_rate && <div style={{ color: '#94A3B8', fontSize: '0.6875rem', marginTop: 2 }}>per month</div>}
                         </div>
                         <Link
-                          href={`/boards/${board.id}`}
+                          href={boardPath({ id: board.id, name: board.name, city: cityName })}
                           style={{
                             background: '#EFF6FF', color: '#1D4ED8', textDecoration: 'none',
                             padding: '6px 12px', borderRadius: 7, fontSize: '0.75rem', fontWeight: 600,
@@ -628,8 +602,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 Ready to advertise in {cityName}?
               </h2>
               <p style={{ color: '#94A3B8', fontSize: '1rem', margin: '0 0 28px', lineHeight: 1.6 }}>
-                Select your locations, set your budget, and submit your plan in under 5 minutes.
-                Our team confirms within 24 hours.
+                Pick a board and send your dates. The media owner replies with a price, and our team completes the booking with you.
               </p>
               <Link
                 href={campaignUrl}
@@ -642,7 +615,24 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                   boxShadow: '0 12px 28px -8px rgba(245,158,11,0.5)',
                 }}
               >
-                Plan a campaign in {cityName} →
+                Browse boards in {cityName} →
+              </Link>
+            </div>
+          </section>
+
+          {/* ── For media owners ── */}
+          <section data-owner-invite style={{ marginBottom: 72 }}>
+            <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 16, padding: '24px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
+              <div style={{ maxWidth: 620 }}>
+                <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0F172A', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+                  Own billboards in {cityName}?
+                </h2>
+                <p style={{ color: '#64748B', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>
+                  List them for free. Buyers request your boards for their dates, you reply with your price, and our team helps close the booking. You stay in control of your rates.
+                </p>
+              </div>
+              <Link href="/signup?role=owner" style={{ background: '#0F172A', color: '#fff', textDecoration: 'none', padding: '11px 18px', borderRadius: 10, fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                List your boards →
               </Link>
             </div>
           </section>
@@ -653,36 +643,9 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
               Billboard Advertising in {cityName} — FAQs
             </h2>
             <p style={{ color: '#64748B', fontSize: '0.875rem', margin: '0 0 28px', lineHeight: 1.6 }}>
-              Common questions about OOH advertising in {cityName}.
+              Prices, extra costs and how booking works in {cityName}.
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {faqs.map((faq, i) => (
-                <details
-                  key={i}
-                  className="city-faq-item"
-                  style={{
-                    borderTop: '1px solid #E2E8F0',
-                    paddingTop: 0,
-                  }}
-                  open={i === 0}
-                >
-                  <summary style={{
-                    padding: '18px 0', fontWeight: 600, fontSize: '0.9375rem',
-                    color: '#0F172A', lineHeight: 1.4,
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
-                  }}>
-                    {faq.q}
-                    <span style={{ color: '#94A3B8', fontSize: '1.25rem', flexShrink: 0 }}>+</span>
-                  </summary>
-                  <div style={{ paddingBottom: 18 }}>
-                    <p style={{ color: '#475569', fontSize: '0.875rem', lineHeight: 1.75, margin: 0 }}>
-                      {faq.a}
-                    </p>
-                  </div>
-                </details>
-              ))}
-              <div style={{ borderTop: '1px solid #E2E8F0' }} />
-            </div>
+            <PricingFaqList faqs={faqs} />
           </section>
 
           {/* ── Other Cities ── */}
@@ -692,7 +655,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 OOH Advertising in Other Nigerian Cities
               </h2>
               <p style={{ color: '#64748B', fontSize: '0.875rem', margin: '0 0 20px' }}>
-                Expand your reach beyond {cityName} — browse billboard inventory nationwide.
+                Billboards listed by media owners in other cities.
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {otherCities.map(c => (
@@ -733,13 +696,13 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.9375rem' }}>OOH Platform</span>
               </Link>
               <p style={{ color: '#64748B', fontSize: '0.8125rem', lineHeight: 1.6, maxWidth: 280, margin: 0 }}>
-                Nigeria&apos;s largest outdoor advertising marketplace. Connect brands with premium OOH locations nationwide.
+                Billboards across Nigeria, listed by the media owners who own them.
               </p>
             </div>
             <div style={{ display: 'flex', gap: 48, flexWrap: 'wrap' }}>
               <div>
                 <div style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>Platform</div>
-                {[['Marketplace', '/marketplace'], ['Billboard Locations', '/billboards'], ['Campaign Builder', '/campaign-builder']].map(([label, href]) => (
+                {[['Find a board', '/marketplace'], ['Billboards by city', '/billboards'], ['List your boards', '/signup?role=owner']].map(([label, href]) => (
                   <div key={href} style={{ marginBottom: 10 }}>
                     <Link href={href} style={{ color: '#64748B', textDecoration: 'none', fontSize: '0.875rem' }}>{label}</Link>
                   </div>
@@ -758,11 +721,12 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <span style={{ color: '#475569', fontSize: '0.8125rem' }}>© 2026 OOH Platform. All rights reserved.</span>
             <span style={{ color: '#475569', fontSize: '0.8125rem' }}>
-              Billboard advertising in {cityName} — {count} locations{minRate ? ` from ${fmtRate(minRate)}/mo` : ''}
+              Billboard advertising in {cityName}: {count} board{count !== 1 ? 's' : ''}{minRate ? ` from ${fmtRate(minRate)}/mo` : ''}
             </span>
           </div>
         </div>
       </footer>
+      <WhatsAppButton message={`Hi, I'm looking for billboards in ${cityName}. Can you help?`} />
     </RequirePlatformAuth>
   );
 }
