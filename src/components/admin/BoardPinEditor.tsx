@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import LocationPinPickerLoader from '@/app/dashboard/owner/post-board/LocationPinPickerLoader';
@@ -37,7 +38,8 @@ export default function BoardPinEditor({ board, onSaved, onClose }: {
 
   const btn: React.CSSProperties = { padding: '8px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: '#334155', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' };
 
-  return (
+  // Rendered on <body> so the dashboard's layers (e.g. the mobile top bar) can't cover it.
+  return createPortal((
     <div data-pin-editor role="dialog" aria-modal="true" aria-label={`Move pin: ${board.name}`} onClick={onClose}
       style={{ position: 'fixed', inset: 0, zIndex: 900, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={e => e.stopPropagation()}
@@ -80,5 +82,5 @@ export default function BoardPinEditor({ board, onSaved, onClose }: {
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 }

@@ -13,6 +13,7 @@ import { VERIFICATION_META, verificationOf, formatVerifiedDate, type Verificatio
 import { MVP_MODE, mvpTabs } from '@/lib/mvp';
 import BoardPhotosEditor from '@/components/admin/BoardPhotosEditor';
 import BoardPinEditor from '@/components/admin/BoardPinEditor';
+import BoardDetailsEditor from '@/components/admin/BoardDetailsEditor';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -138,6 +139,7 @@ function timeAgo(d: string) {
 const FORMAT_LABELS: Record<string, string> = {
   billboard: 'Billboard', unipole: 'Unipole', gantry: 'Gantry',
   bridge_panel: 'Bridge Panel', wall_drape: 'Wall Drape',
+  led: 'LED / Digital', digital: 'LED / Digital',
 };
 
 const BOOKING_STATUS_CONFIG: Record<string, { bg: string; color: string; dot: string }> = {
@@ -253,6 +255,8 @@ function AdminContent() {
   const [photoBoard, setPhotoBoard] = useState<Board | null>(null);
   // Board whose map pin is being moved.
   const [pinBoard, setPinBoard] = useState<Board | null>(null);
+  // Board whose details (name, description, location, size, rate…) are being edited.
+  const [detailsBoard, setDetailsBoard] = useState<Board | null>(null);
   // platform settings
   const [settings, setSettings] = useState<AdminSettings>(DEFAULT_SETTINGS);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -974,6 +978,14 @@ function AdminContent() {
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <button
                           type="button"
+                          data-edit-details
+                          onClick={() => setDetailsBoard(board)}
+                          style={{ background: '#F1F5F9', color: '#0F172A', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                        >
+                          Edit details
+                        </button>
+                        <button
+                          type="button"
                           data-edit-photos
                           onClick={() => setPhotoBoard(board)}
                           style={{ background: '#F5F3FF', color: '#6D28D9', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
@@ -1688,6 +1700,19 @@ function AdminContent() {
           photos={photoBoard.photo_urls ?? []}
           onChange={next => setBoards(prev => prev.map(b => b.id === photoBoard.id ? { ...b, photo_urls: next } : b))}
           onClose={() => setPhotoBoard(null)}
+        />
+      )}
+
+      {detailsBoard && (
+        <BoardDetailsEditor
+          boardId={detailsBoard.id}
+          currentRate={detailsBoard.asking_rate ?? null}
+          onSaved={saved => {
+            setBoards(prev => prev.map(b => b.id === detailsBoard.id ? { ...b, ...saved, city: saved.city ?? b.city } as Board : b));
+            setDetailsBoard(null);
+            showToast('Board details saved', 'success');
+          }}
+          onClose={() => setDetailsBoard(null)}
         />
       )}
 

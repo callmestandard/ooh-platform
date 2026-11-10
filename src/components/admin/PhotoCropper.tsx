@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { useEffect, useRef, useState } from 'react';
 
 type Box = { x: number; y: number; w: number; h: number }; // fractions of the image, 0–1
@@ -151,7 +152,8 @@ export default function PhotoCropper({ src, title, onSave, onRemove, onClose }: 
   const btn: React.CSSProperties = { padding: '8px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: '#334155', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' };
   const cropped = box.x > 0.001 || box.y > 0.001 || box.w < 0.999 || box.h < 0.999;
 
-  return (
+  // Rendered on <body> so the dashboard's layers (e.g. the mobile top bar) can't cover it.
+  return createPortal((
     <div data-photo-cropper role="dialog" aria-modal="true" aria-label={`Edit photo: ${title}`}
       onClick={onClose}
       style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(15,23,42,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -209,5 +211,5 @@ export default function PhotoCropper({ src, title, onSave, onRemove, onClose }: 
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 }

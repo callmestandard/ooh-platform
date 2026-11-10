@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import PhotoCropper from './PhotoCropper';
@@ -61,7 +62,8 @@ export default function BoardPhotosEditor({ boardId, boardName, photos, onChange
 
   const btn: React.CSSProperties = { padding: '5px 10px', borderRadius: 6, border: '1px solid #E2E8F0', background: '#fff', color: '#334155', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' };
 
-  return (
+  // Rendered on <body> so the dashboard's layers (e.g. the mobile top bar) can't cover it.
+  return createPortal((
     <>
       <div data-board-photos role="dialog" aria-modal="true" aria-label={`Photos: ${boardName}`} onClick={onClose}
         style={{ position: 'fixed', inset: 0, zIndex: 900, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -122,5 +124,5 @@ export default function BoardPhotosEditor({ boardId, boardName, photos, onChange
         />
       )}
     </>
-  );
+  ), document.body);
 }

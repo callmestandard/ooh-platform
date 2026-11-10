@@ -1,5 +1,6 @@
 'use client';
 
+import { createPortal } from 'react-dom';
 import { useEffect, useRef, useState } from 'react';
 
 export type ReviewItem = {
@@ -64,7 +65,8 @@ export default function PhotoReview({ items, approved, startAt = 0, paused, onAp
   const isApproved = approved.has(item.id);
   const btn: React.CSSProperties = { padding: '9px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: '#334155', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' };
 
-  return (
+  // Rendered on <body> so the dashboard's layers (e.g. the mobile top bar) can't cover it.
+  return createPortal((
     <div data-photo-review role="dialog" aria-modal="true" aria-label="Check the photos"
       style={{ position: 'fixed', inset: 0, zIndex: 950, background: 'rgba(15,23,42,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
       <div style={{ background: '#fff', borderRadius: 16, width: 'min(1040px, 100%)', maxHeight: 'calc(100vh - 24px)', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.35)', fontFamily: "'Inter', sans-serif" }}>
@@ -151,5 +153,5 @@ export default function PhotoReview({ items, approved, startAt = 0, paused, onAp
         </p>
       </div>
     </div>
-  );
+  ), document.body);
 }
