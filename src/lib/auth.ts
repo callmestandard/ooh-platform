@@ -67,15 +67,6 @@ export type UserProfile = {
   avatar_url?: string | null;
 };
 
-/** Credentials for the seeded demo accounts. */
-export const DEMO_CREDENTIALS: Record<Exclude<DemoRole, 'marketer'>, { email: string; password: string }> = {
-  agency: { email: 'agency@demo.oohplatform.com', password: 'oohplatform2026' },
-  client: { email: 'client@demo.oohplatform.com', password: 'oohplatform2026' },
-  owner:  { email: 'owner@demo.oohplatform.com',  password: 'oohplatform2026' },
-  admin:  { email: 'admin@demo.oohplatform.com',  password: 'oohplatform2026' },
-  agent:  { email: 'agent@demo.oohplatform.com',  password: 'oohplatform2026' },
-};
-
 export async function signInWithEmail(email: string, password: string) {
   return supabase.auth.signInWithPassword({ email, password });
 }
