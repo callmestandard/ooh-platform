@@ -34,7 +34,7 @@ const RULES: Record<string, RoleRules> = {
   },
   admin: {
     home: '/dashboard/admin/requests',
-    allow: ['/dashboard/admin', '/dashboard/admin/requests', '/dashboard/admin/claims', '/dashboard/admin/import-boards', '/dashboard/admin/post-board'],
+    allow: ['/dashboard/admin', '/dashboard/admin/requests', '/dashboard/admin/needs-checking', '/dashboard/admin/claims', '/dashboard/admin/import-boards', '/dashboard/admin/post-board'],
     tabs: ['overview', 'inventory', 'users'],
   },
 };
