@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import { attachVisibleRates } from '@/lib/board-rates';
+import { attachGuidePrices, guideText, GUIDE_NOTE, type GuidePrice } from '@/lib/guide-prices';
 import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
 import AccountNavButtons from '@/components/layout/AccountNavButtons';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
@@ -46,6 +47,7 @@ type Board = {
   latitude: number | null;
   longitude: number | null;
   activeListing?: { id: string; sell_price: number; badge: TrustBadge } | null;
+  guide?: GuidePrice | null;
 };
 
 /** The price an agency actually pays: the agent's sell price when the
@@ -54,10 +56,21 @@ function effectiveRate(board: Board): number | null {
   return board.activeListing ? board.activeListing.sell_price : (board.asking_rate || null);
 }
 
-/** The rate as shown to buyers; a board without a visible rate is quoted on request. */
+/** The rate as shown to buyers: exact when they may see it, else the guide range, else on request. */
 function rateText(board: Board): string {
   const r = effectiveRate(board);
-  return r ? formatNaira(r) : 'Request quote';
+  if (r) return formatNaira(r);
+  return board.guide ? guideText(board.guide) : 'Request quote';
+}
+
+/** True when a monthly figure (exact or guide) is shown. */
+function hasPrice(board: Board): boolean {
+  return !!effectiveRate(board) || !!board.guide;
+}
+
+/** "per month" or "per month · guide". */
+function priceSub(board: Board): string {
+  return effectiveRate(board) ? 'per month' : 'per month · guide price';
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -282,7 +295,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
               { label: 'Area',         value: board.area || UNKNOWN },
               { label: 'City',         value: board.city || UNKNOWN },
               { label: 'Illumination', value: illuminationText(board.illuminated) },
-              { label: 'Monthly rate', value: rateText(board) },
+              { label: effectiveRate(board) || !board.guide ? 'Monthly rate' : 'Guide price / month', value: rateText(board) },
             ].map(({ label, value }) => (
               <div key={label} style={{ background: '#F8FAFC', borderRadius: 10, padding: '10px 14px' }}>
                 <p style={{ fontSize: '0.6875rem', color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 3px' }}>{label}</p>
@@ -307,7 +320,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
                 boxSizing: 'border-box',
               }}
             >
-              View &amp; request this location{effectiveRate(board) ? ` — ${rateText(board)}/mo` : ''}
+              View &amp; request this location{hasPrice(board) ? ` — ${rateText(board)}/mo` : ''}
             </a>
           ) : board.status === 'booked' ? (
             <button
@@ -400,7 +413,7 @@ function MarketplaceContent() {
         return { ...b, activeListing: { id: l.id, sell_price: l.sell_price, badge } };
       });
 
-      setBoards(await attachVisibleRates(withBadges));
+      setBoards(await attachGuidePrices(await attachVisibleRates(withBadges)));
       setLoading(false);
     }
     load();
@@ -447,7 +460,7 @@ function MarketplaceContent() {
     .map(b => ({
       id: b.id, name: b.name, area: b.area, city: b.city, format: b.format, photo_urls: b.photo_urls,
       verification_status: b.verification_status, latitude: b.latitude as number, longitude: b.longitude as number,
-      rate: rateText(b), perMonth: !!effectiveRate(b),
+      rate: rateText(b), perMonth: hasPrice(b), guide: !effectiveRate(b) && !!b.guide,
     })), [filtered]);
   const unmapped = filtered.length - mapBoards.length;
 
@@ -797,7 +810,7 @@ function MarketplaceContent() {
                       <p style={{ fontSize: '1.125rem', fontWeight: 800, color: '#1B4F8A', margin: 0, letterSpacing: '-0.02em' }}>
                         {rateText(board)}
                       </p>
-                      {effectiveRate(board) ? <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }}>per month</p> : null}
+                      {hasPrice(board) ? <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }} title={effectiveRate(board) ? undefined : GUIDE_NOTE}>{priceSub(board)}</p> : null}
                     </div>
                     {board.status === 'available' && (
                       <button

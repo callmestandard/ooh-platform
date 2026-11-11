@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { fetchGuidePrices } from '@/lib/guide-prices';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { citySlug } from '@/lib/public-links';
@@ -55,28 +56,31 @@ async function fetchCities(): Promise<CityRow[]> {
   );
   const { data } = await db
     .from('boards')
-    .select('city, state, asking_rate, format')
+    .select('id, city, state, format')
     .eq('status', 'available')
     .not('city', 'is', null);
 
   if (!data?.length) return [];
+  // Exact rates are private; ranges come from the public guide prices (migration 051).
+  const guides = await fetchGuidePrices((data as { id: string }[]).map(r => r.id), db);
 
-  const map: Record<string, { state: string; count: number; rates: number[]; formats: Set<string> }> = {};
-  for (const row of data as { city: string; state: string | null; asking_rate: number; format: string }[]) {
+  const map: Record<string, { state: string; count: number; lows: number[]; highs: number[]; formats: Set<string> }> = {};
+  for (const row of data as { id: string; city: string; state: string | null; format: string }[]) {
     if (!row.city) continue;
-    if (!map[row.city]) map[row.city] = { state: row.state ?? '', count: 0, rates: [], formats: new Set() };
-    map[row.city].count++; // every board counts; most rates are private
-    if (row.asking_rate) map[row.city].rates.push(row.asking_rate);
+    if (!map[row.city]) map[row.city] = { state: row.state ?? '', count: 0, lows: [], highs: [], formats: new Set() };
+    map[row.city].count++; // every board counts, priced or not
+    const g = guides[row.id];
+    if (g) { map[row.city].lows.push(g.low); map[row.city].highs.push(g.high); }
     if (row.format)      map[row.city].formats.add(row.format);
   }
 
   return Object.entries(map)
-    .map(([city, { state, count, rates, formats }]) => ({
+    .map(([city, { state, count, lows, highs, formats }]) => ({
       city,
       state:   state === 'FCT' ? 'Abuja (FCT)' : state,
       count,
-      minRate: rates.length ? Math.min(...rates) : 0,
-      maxRate: rates.length ? Math.max(...rates) : 0,
+      minRate: lows.length ? Math.min(...lows) : 0,
+      maxRate: highs.length ? Math.max(...highs) : 0,
       formats: [...formats],
     }))
     .sort((a, b) => b.count - a.count);
@@ -257,7 +261,7 @@ export default async function BillboardsIndexPage() {
                           <>
                             <span style={{ color: '#475569', fontSize: '0.8125rem' }}>From</span>
                             <span style={{ color: '#0F172A', fontWeight: 700, fontSize: '0.9375rem' }}>{fmtRate(c.minRate)}</span>
-                            <span style={{ color: '#94A3B8', fontSize: '0.8125rem' }}>to {fmtRate(c.maxRate)}/mo</span>
+                            <span style={{ color: '#94A3B8', fontSize: '0.8125rem' }}>to {fmtRate(c.maxRate)}/mo · guide</span>
                           </>
                         ) : (
                           <span style={{ color: '#475569', fontSize: '0.8125rem' }}>Prices set by owners, on request</span>

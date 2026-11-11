@@ -57,6 +57,9 @@ type Props = {
   onEditPhotos: (b: InvBoard) => void;
   onMovePin: (b: InvBoard) => void;
   onDelete: (b: InvBoard) => void;
+  /** What buyers see as the price: a guide range, hidden by us, or nothing to show. */
+  guideOf?: (b: InvBoard) => { text: string | null; hidden: boolean };
+  onGuideHidden?: (boards: InvBoard[], hide: boolean) => Promise<void> | void;
 };
 
 // ── Options ────────────────────────────────────────────────────────────────
@@ -317,7 +320,7 @@ function Thumb({ b, size = 'sm', onAdd }: { b: InvBoard; size?: 'sm' | 'card'; o
 // ── Main ───────────────────────────────────────────────────────────────────
 
 export default function InventoryDatabase(props: Props) {
-  const { boards, ownerOf, brandOf, onStatus, onVerification, onEditDetails, onEditPhotos, onMovePin, onDelete } = props;
+  const { boards, ownerOf, brandOf, onStatus, onVerification, onEditDetails, onEditPhotos, onMovePin, onDelete, guideOf, onGuideHidden } = props;
 
   const [prefs] = useState(readPrefs);
   const [view, setView] = useState<View>(prefs.view);
@@ -423,6 +426,14 @@ export default function InventoryDatabase(props: Props) {
       if (action.status && b.status !== 'booked' && b.status !== action.status) await onStatus(b, action.status);
       if (action.verification && verificationOf(b) !== action.verification) await onVerification(b, action.verification);
     }
+    setBulkBusy(false);
+    setSelected(new Set());
+  }
+
+  async function bulkGuide(hide: boolean) {
+    if (!onGuideHidden) return;
+    setBulkBusy(true);
+    await onGuideHidden(boards.filter(b => selectedShown.has(b.id)), hide);
     setBulkBusy(false);
     setSelected(new Set());
   }
@@ -788,6 +799,11 @@ export default function InventoryDatabase(props: Props) {
           <button type="button" disabled={bulkBusy} onClick={() => bulk({ verification: 'pending' })}>Mark pending</button>
           <button type="button" disabled={bulkBusy} onClick={() => bulk({ status: 'available' })}>Available</button>
           <button type="button" disabled={bulkBusy} onClick={() => bulk({ status: 'unavailable' })}>Unavailable</button>
+          {onGuideHidden && <>
+            <span className="invdb-bulk-sep" />
+            <button type="button" disabled={bulkBusy} onClick={() => bulkGuide(true)}>Hide prices</button>
+            <button type="button" disabled={bulkBusy} onClick={() => bulkGuide(false)}>Show prices</button>
+          </>}
           <button type="button" className="invdb-bulk-x" onClick={() => setSelected(new Set())} aria-label="Clear selection"><Ico d={I.close} size={14} stroke={2.2} /></button>
         </div>
       )}
@@ -805,6 +821,8 @@ export default function InventoryDatabase(props: Props) {
           verCell={verCell(peek)}
           owner={ownerText(peek)}
           brand={brandOf(peek)}
+          guide={guideOf?.(peek)}
+          onGuideHidden={onGuideHidden ? hide => onGuideHidden([peek], hide) : undefined}
           onEditDetails={() => onEditDetails(peek)}
           onEditPhotos={() => onEditPhotos(peek)}
           onMovePin={() => onMovePin(peek)}
@@ -826,10 +844,12 @@ function Row({ icon, label, children }: { icon: string; label: string; children:
   );
 }
 
-function Peek({ b, index, total, onPrev, onNext, onClose, statusCell, verCell, owner, brand, onEditDetails, onEditPhotos, onMovePin, onDelete }: {
+function Peek({ b, index, total, onPrev, onNext, onClose, statusCell, verCell, owner, brand, guide, onGuideHidden, onEditDetails, onEditPhotos, onMovePin, onDelete }: {
   b: InvBoard; index: number; total: number; onPrev?: () => void; onNext?: () => void; onClose: () => void;
   statusCell: React.ReactNode; verCell: React.ReactNode; owner: React.ReactNode;
   brand: { brand: string | null; ends_on: string | null } | undefined;
+  guide?: { text: string | null; hidden: boolean };
+  onGuideHidden?: (hide: boolean) => void;
   onEditDetails: () => void; onEditPhotos: () => void; onMovePin: () => void; onDelete: () => void;
 }) {
   const [photoAt, setPhotoAt] = useState<{ id: string; i: number }>({ id: b.id, i: 0 });
@@ -911,6 +931,16 @@ function Peek({ b, index, total, onPrev, onNext, onClose, statusCell, verCell, o
               <Row icon={I.format} label="Format">{boardFormatLabel(b.format)}</Row>
               <Row icon={I.size} label="Size">{size ?? <span className="invdb-muted">Not listed</span>}</Row>
               <Row icon={I.money} label="Rate">{b.asking_rate ? <span className="invdb-rate">{formatNaira(b.asking_rate)}<small>/mo</small></span> : <span className="invdb-muted">Not set · buyers see “Request quote”</span>}</Row>
+              {guide && (
+                <Row icon={I.money} label="Buyers see">
+                  {guide.hidden ? <span className="invdb-muted">Request quote · guide hidden</span>
+                    : guide.text ? <span>{guide.text}<span className="invdb-muted"> /mo guide</span></span>
+                    : <span className="invdb-muted">Request quote</span>}
+                  {onGuideHidden && (guide.hidden || guide.text) && (
+                    <button type="button" className="invdb-link" onClick={() => onGuideHidden(!guide.hidden)}>{guide.hidden ? 'Show' : 'Hide'}</button>
+                  )}
+                </Row>
+              )}
               <Row icon={I.person} label="Owner">{owner}</Row>
               {brand && <Row icon={I.megaphone} label="Now showing">{brand.brand || 'A campaign'}{ends ? <span className="invdb-muted"> · {over ? 'ended' : 'ends'} {ends}</span> : null}</Row>}
               <Row icon={I.source} label="Source"><span className="invdb-wrap">{b.source ? displayName(b.source) : 'Added by hand'}</span></Row>

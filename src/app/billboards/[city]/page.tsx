@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
+import { fetchGuidePrices, guideText, type GuidePrice } from '@/lib/guide-prices';
 import Link from 'next/link';
 import type { CityMapBoard } from './CityMap';
 import CityMap from './CityMapLoader';
@@ -66,6 +67,7 @@ type DBBoard = {
   photo_urls: string[] | null;
   latitude: number | null;
   longitude: number | null;
+  guide?: GuidePrice | null;
 };
 
 function getDB() {
@@ -78,9 +80,11 @@ function getDB() {
 async function fetchCityData(slug: string) {
   const db = getDB();
   const allCitiesRes = await db.from('boards')
-    .select('city, asking_rate')
+    .select('id, city')
     .eq('status', 'available')
     .not('city', 'is', null);
+  // Exact rates are private; buyers see rounded guide ranges (migration 051).
+  const guides = await fetchGuidePrices((allCitiesRes.data || []).map(r => r.id as string), db);
   // Find the city by its slug, so "benin-city" finds "Benin City".
   const cityName = (allCitiesRes.data || []).map(r => r.city as string).find(c => c && toSlug(c) === slug) ?? fromSlug(slug);
   const boardsRes = await db.from('boards')
@@ -91,8 +95,8 @@ async function fetchCityData(slug: string) {
     .order('created_at', { ascending: false })
     .limit(200);
 
-  const boards: DBBoard[] = boardsRes.data || [];
-  const allBoardRows: { city: string; asking_rate: number }[] = allCitiesRes.data || [];
+  const boards: DBBoard[] = (boardsRes.data || []).map(b => ({ ...b, guide: guides[b.id] ?? null }));
+  const allBoardRows: { id: string; city: string }[] = allCitiesRes.data || [];
 
   // aggregate all cities
   const cityMap: Record<string, { count: number; minRate: number }> = {};
@@ -100,9 +104,8 @@ async function fetchCityData(slug: string) {
     if (!row.city) continue;
     if (!cityMap[row.city]) cityMap[row.city] = { count: 0, minRate: Infinity };
     cityMap[row.city].count++;
-    if (row.asking_rate && row.asking_rate < cityMap[row.city].minRate) {
-      cityMap[row.city].minRate = row.asking_rate;
-    }
+    const low = guides[row.id]?.low;
+    if (low && low < cityMap[row.city].minRate) cityMap[row.city].minRate = low;
   }
   const allCities = Object.entries(cityMap)
     .map(([city, stats]) => ({ city, count: stats.count, minRate: stats.minRate === Infinity ? 0 : stats.minRate }))
@@ -112,25 +115,31 @@ async function fetchCityData(slug: string) {
 }
 
 function computeStats(boards: DBBoard[]) {
-  const rates = boards.map(b => b.asking_rate).filter(Boolean);
+  const lows  = (list: DBBoard[]) => list.map(b => b.guide?.low ?? 0).filter(Boolean);
+  const highs = (list: DBBoard[]) => list.map(b => b.guide?.high ?? 0).filter(Boolean);
+  const typical = (list: DBBoard[]) => {
+    const mids = list.filter(b => b.guide).map(b => (b.guide!.low + b.guide!.high) / 2);
+    return mids.length ? Math.round(mids.reduce((t, m) => t + m, 0) / mids.length / 50_000) * 50_000 : 0;
+  };
+  const rates = lows(boards);
   const formats = [...new Set(boards.map(b => b.format).filter(Boolean))];
   const formatStats = formats.map(fmt => {
     const fmtBoards = boards.filter(b => b.format === fmt);
-    const fmtRates  = fmtBoards.map(b => b.asking_rate).filter(Boolean);
+    const fl = lows(fmtBoards), fh = highs(fmtBoards);
     return {
       format: fmt,
       count:  fmtBoards.length,
-      avg:    fmtRates.length ? Math.round(fmtRates.reduce((s, r) => s + r, 0) / fmtRates.length) : 0,
-      min:    fmtRates.length ? Math.min(...fmtRates) : 0,
-      max:    fmtRates.length ? Math.max(...fmtRates) : 0,
+      avg:    typical(fmtBoards),
+      min:    fl.length ? Math.min(...fl) : 0,
+      max:    fh.length ? Math.max(...fh) : 0,
     };
   }).sort((a, b) => b.count - a.count);
 
   return {
     count:       boards.length,
     minRate:     rates.length ? Math.min(...rates) : 0,
-    maxRate:     rates.length ? Math.max(...rates) : 0,
-    avgRate:     rates.length ? Math.round(rates.reduce((s, r) => s + r, 0) / rates.length) : 0,
+    maxRate:     highs(boards).length ? Math.max(...highs(boards)) : 0,
+    avgRate:     typical(boards),
     formats,
     formatStats,
   };
@@ -156,7 +165,7 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
   }
 
   const { count, minRate, maxRate, formats } = computeStats(boards);
-  const desc = `${count} billboard${count === 1 ? '' : 's'} for advertising in ${cityName}, listed by their media owners: ${formats.map(f => FORMAT_LABELS[f] || f).join(', ')}. ${minRate ? `Rates from ${fmtRate(minRate)} to ${fmtRate(maxRate)}/mo.` : 'See photos and locations, then request a price from the owner.'}`;
+  const desc = `${count} billboard${count === 1 ? '' : 's'} for advertising in ${cityName}, listed by their media owners: ${formats.map(f => FORMAT_LABELS[f] || f).join(', ')}. ${minRate ? `Guide prices from ${fmtRate(minRate)} to ${fmtRate(maxRate)}/mo.` : 'See photos and locations, then request a price from the owner.'}`;
   const url  = `${BASE_URL}/billboards/${slug}`;
 
   return {
@@ -196,7 +205,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
   const verifiedCount = boards.filter(b => b.verification_status && b.verification_status !== 'pending').length;
   const mapBoards: CityMapBoard[] = boards
     .filter(b => b.latitude && b.longitude)
-    .map(b => ({ id: b.id, name: b.name, format: b.format, asking_rate: b.asking_rate, lat: b.latitude!, lng: b.longitude! }));
+    .map(b => ({ id: b.id, name: b.name, format: b.format, price: b.guide ? `${guideText(b.guide)}/mo guide` : null, lat: b.latitude!, lng: b.longitude! }));
 
   const otherCities = allCities.filter(c => toSlug(c.city) !== slug).slice(0, 20);
   const campaignUrl = `/marketplace?q=${encodeURIComponent(cityName)}`;
@@ -346,7 +355,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
               { label: 'Boards',       value: String(count) },
               { label: 'Formats',      value: String(formats.length) },
               ...(minRate
-                ? [{ label: 'From/month', value: fmtRate(minRate) }]
+                ? [{ label: 'Guide from/month', value: fmtRate(minRate) }]
                 : areaCount ? [{ label: 'Areas', value: String(areaCount) }] : []),
               ...(verifiedCount ? [{ label: 'Verified', value: String(verifiedCount) }] : []),
             ].map((stat, i) => (
@@ -409,7 +418,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 {[
                   { icon: '📍', label: `${count} board${count !== 1 ? 's' : ''} with photos and locations` },
                   { icon: '📐', label: `${formats.length} format${formats.length !== 1 ? 's' : ''}: ${formats.slice(0, 3).map(f => FORMAT_LABELS[f] || f).join(', ')}${formats.length > 3 ? ` +${formats.length - 3} more` : ''}` },
-                  { icon: '💬', label: minRate ? `Rates from ${fmtRate(minRate)}/mo, set by owners` : 'Prices set by owners, quoted on request' },
+                  { icon: '💬', label: minRate ? `Guide prices from ${fmtRate(minRate)}/mo; owners confirm the final price` : 'Prices set by owners, quoted on request' },
                   { icon: '🤝', label: 'Our team completes the booking with you' },
                 ].map(item => (
                   <div key={item.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -454,7 +463,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 <table className="city-format-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                      {(anyRates ? ['Format', 'Boards', 'Avg Rate/mo', 'Min Rate', 'Max Rate'] : ['Format', 'Boards']).map(h => (
+                      {(anyRates ? ['Format', 'Boards', 'Typical guide/mo', 'Guide low', 'Guide high'] : ['Format', 'Boards']).map(h => (
                         <th key={h} style={{ textAlign: 'left', padding: '14px 20px', fontWeight: 600, color: '#475569', fontSize: '0.8125rem', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
                           {h}
                         </th>
@@ -571,9 +580,9 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <div>
                           <div style={{ color: '#0F172A', fontWeight: 700, fontSize: '0.9375rem', lineHeight: 1 }}>
-                            {board.asking_rate ? fmtRate(board.asking_rate) : 'Price on request'}
+                            {board.guide ? guideText(board.guide) : 'Price on request'}
                           </div>
-                          {!!board.asking_rate && <div style={{ color: '#94A3B8', fontSize: '0.6875rem', marginTop: 2 }}>per month</div>}
+                          {!!board.guide && <div style={{ color: '#94A3B8', fontSize: '0.6875rem', marginTop: 2 }}>per month · guide</div>}
                         </div>
                         <Link
                           href={boardPath({ id: board.id, name: board.name, city: cityName })}
@@ -722,7 +731,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
             <span style={{ color: '#475569', fontSize: '0.8125rem' }}>© 2026 OOH Platform. All rights reserved.</span>
             <span style={{ color: '#475569', fontSize: '0.8125rem' }}>
-              Billboard advertising in {cityName}: {count} board{count !== 1 ? 's' : ''}{minRate ? ` from ${fmtRate(minRate)}/mo` : ''}
+              Billboard advertising in {cityName}: {count} board{count !== 1 ? 's' : ''}{minRate ? ` from ${fmtRate(minRate)}/mo (guide)` : ''}
             </span>
           </div>
         </div>

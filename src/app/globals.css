@@ -72,6 +72,11 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* body is a full-height flex column (layout.tsx). Its sections must not
+   shrink, or a section with a min-height (e.g. 50vh) gets squeezed and its
+   content spills past the footer. */
+body > * { flex-shrink: 0; }
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 14px;

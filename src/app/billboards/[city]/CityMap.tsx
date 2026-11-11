@@ -9,7 +9,8 @@ export type CityMapBoard = {
   id: string;
   name: string;
   format: string;
-  asking_rate: number;
+  /** Guide range text, or null when the price is on request. */
+  price: string | null;
   lat: number;
   lng: number;
 };
@@ -24,13 +25,6 @@ const FORMAT_PIN_COLORS: Record<string, string> = {
   led:          '#15803D',
 };
 
-function fmtRate(n: number) {
-
-  if (!n) return 'on request'; // rates are private unless the owner opens them (migration 035)
-  if (n >= 1_000_000) return '₦' + (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 1_000)     return '₦' + Math.round(n / 1_000) + 'K';
-  return '₦' + n.toLocaleString('en-NG');
-}
 
 type Props = {
   boards: CityMapBoard[];
@@ -74,7 +68,7 @@ export default function CityMap({ boards, city }: Props) {
             <div style={{ fontFamily: "'Inter', sans-serif", minWidth: 150 }}>
               <strong style={{ fontSize: '0.8125rem', display: 'block', marginBottom: 2 }}>{b.name}</strong>
               <span style={{ fontSize: '0.75rem', color: '#64748B' }}>{b.format}</span><br />
-              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{b.asking_rate ? `${fmtRate(b.asking_rate)}/mo` : 'Price on request'}</span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{b.price ?? 'Price on request'}</span>
               <br />
               <a
                 href={boardPath({ id: b.id, name: b.name, city })}

@@ -18,6 +18,8 @@ export type MapBoard = {
   longitude: number;
   rate: string;
   perMonth: boolean;
+  /** The rate is a guide range, not the exact price. */
+  guide?: boolean;
 };
 
 // Pin colours follow the verification badges, so the map and cards read the same.
@@ -84,7 +86,7 @@ export default function MarketplaceMap({ boards, onOpen }: Props) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   {open.perMonth ? (
                     <p style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#1B4F8A', fontFamily: 'monospace', margin: 0, letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>
-                      {open.rate}<span style={{ fontSize: '0.6875rem', fontWeight: 500, color: '#94A3B8', fontFamily: 'inherit' }}>/mo</span>
+                      {open.rate}<span style={{ fontSize: '0.6875rem', fontWeight: 500, color: '#94A3B8', fontFamily: 'inherit' }}>/mo{open.guide ? ' guide' : ''}</span>
                     </p>
                   ) : (
                     <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B', margin: 0, whiteSpace: 'nowrap' }}>Price on request</p>

@@ -16,6 +16,7 @@ import BoardPinEditor from '@/components/admin/BoardPinEditor';
 import BoardDetailsEditor from '@/components/admin/BoardDetailsEditor';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import InventoryDatabase from '@/components/admin/InventoryDatabase';
+import { fetchGuidePrices, guideText, type GuidePrice } from '@/lib/guide-prices';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -344,6 +345,31 @@ function AdminContent() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Guide prices buyers see (051), and the boards we've hidden them on.
+  const [guides, setGuides] = useState<Record<string, GuidePrice>>({});
+  const [guideHidden, setGuideHidden] = useState<Set<string>>(new Set());
+  const boardIdsKey = boards.map(b => b.id).join(',');
+  useEffect(() => {
+    if (!boardIdsKey) return;
+    fetchGuidePrices(boardIdsKey.split(',')).then(setGuides);
+    supabase.from('board_guide_price_hidden').select('board_id').then(({ data, error }) => {
+      if (!error) setGuideHidden(new Set(((data as { board_id: string }[]) || []).map(r => r.board_id)));
+    });
+  }, [boardIdsKey]);
+
+  async function setGuidePriceHidden(list: Board[], hide: boolean) {
+    const ids = list.map(b => b.id);
+    if (!ids.length) return;
+    const { error } = hide
+      ? await supabase.from('board_guide_price_hidden').upsert(ids.map(board_id => ({ board_id })), { onConflict: 'board_id', ignoreDuplicates: true })
+      : await supabase.from('board_guide_price_hidden').delete().in('board_id', ids);
+    if (error) { showToast(`Could not update prices: ${error.message}`, 'error'); return; }
+    setGuideHidden(prev => { const n = new Set(prev); ids.forEach(id => hide ? n.add(id) : n.delete(id)); return n; });
+    const fresh = await fetchGuidePrices(ids);
+    setGuides(prev => { const n = { ...prev }; ids.forEach(id => { if (fresh[id]) n[id] = fresh[id]; else delete n[id]; }); return n; });
+    showToast(hide ? `Guide price hidden on ${ids.length} board${ids.length > 1 ? 's' : ''}` : `Guide price shown on ${ids.length} board${ids.length > 1 ? 's' : ''}`, 'success');
   }
 
   // Owners our team has checked (migration 050). Their boards show as Partner verified.
@@ -915,6 +941,8 @@ function AdminContent() {
           onEditPhotos={board => setPhotoBoard(board as Board)}
           onMovePin={board => setPinBoard(board as Board)}
           onDelete={board => setDeleteBoard(board as Board)}
+          guideOf={board => ({ text: guides[board.id] ? guideText(guides[board.id]) : null, hidden: guideHidden.has(board.id) })}
+          onGuideHidden={(list, hide) => setGuidePriceHidden(list as Board[], hide)}
         />
       )}
 

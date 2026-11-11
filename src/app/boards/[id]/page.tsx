@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { attachVisibleRates } from '@/lib/board-rates';
+import { fetchGuidePrices, guideText, type GuidePrice } from '@/lib/guide-prices';
 import RequestLocation, { OPEN_REQUEST_EVENT } from '@/components/boards/RequestLocation';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 import { VerificationBadge, VERIFICATION_META, verificationOf, formatVerifiedDate, dimensionsText, UNKNOWN } from '@/lib/board-verification';
@@ -65,6 +66,7 @@ export default function PublicBoardPage() {
   const [board, setBoard] = useState<Board | null>(null);
   const [activeListing, setActiveListing] = useState<ActiveListing>(null);
   const [nearby, setNearby] = useState<NearbyBoard[]>([]);
+  const [guide, setGuide] = useState<GuidePrice | null>(null);
   const [loading, setLoading] = useState(true);
   const [photoIdx, setPhotoIdx] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -75,8 +77,11 @@ export default function PublicBoardPage() {
       supabase.from('boards').select('*').eq('id', id).single(),
       supabase.from('listings').select('sell_price, agent_id, board_authorizations(owner_verified)').eq('board_id', id).eq('status', 'active').maybeSingle(),
     ]).then(async ([{ data }, { data: listing }]) => {
-      const b = data ? (await attachVisibleRates([data as Board]))[0] : null;
+      const [b, guides] = data
+        ? await Promise.all([attachVisibleRates([data as Board]).then(r => r[0]), fetchGuidePrices([(data as Board).id])])
+        : [null, {} as Record<string, GuidePrice>];
       setBoard(b);
+      setGuide(b ? guides[b.id] ?? null : null);
       // Show the readable link in the address bar, so shared links read well.
       if (b) {
         const readable = boardPath(b);
@@ -162,11 +167,15 @@ export default function PublicBoardPage() {
 
   const priceBlock = (
     <div>
-      <p className="bp-eyebrow">{effectiveRate ? 'Asking rate' : 'Price'}</p>
-      <p style={{ margin: '2px 0 0', fontSize: effectiveRate ? '1.75rem' : '1.25rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-        {effectiveRate ? <>{formatNaira(effectiveRate)}<span style={{ fontSize: '0.9375rem', fontWeight: 500, color: '#64748B' }}> / month</span></> : 'On request'}
+      <p className="bp-eyebrow">{effectiveRate ? 'Asking rate' : guide ? 'Guide price' : 'Price'}</p>
+      <p data-price style={{ margin: '2px 0 0', fontSize: effectiveRate || guide ? '1.75rem' : '1.25rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+        {effectiveRate ? <>{formatNaira(effectiveRate)}<span style={{ fontSize: '0.9375rem', fontWeight: 500, color: '#64748B' }}> / month</span></>
+          : guide ? <>{guideText(guide)}<span style={{ fontSize: '0.9375rem', fontWeight: 500, color: '#64748B' }}> / month</span></>
+          : 'On request'}
       </p>
-      {!effectiveRate && <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: '#64748B' }}>Set by the board&apos;s owner. Request it to get a quote.</p>}
+      {!effectiveRate && <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: '#64748B' }}>
+        {guide ? 'A guide from the owner’s rate card. The owner confirms the final price when you request it.' : <>Set by the board&apos;s owner. Request it to get a quote.</>}
+      </p>}
     </div>
   );
 
@@ -355,8 +364,8 @@ export default function PublicBoardPage() {
         {/* Phone: request bar always in reach */}
         <div className="bp-mobilebar">
           <div style={{ minWidth: 0, flex: 1 }}>
-            <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748B' }}>{effectiveRate ? 'Asking rate' : 'Price'}</p>
-            <p style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>{effectiveRate ? `${formatNaira(effectiveRate)}/mo` : 'On request'}</p>
+            <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748B' }}>{effectiveRate ? 'Asking rate' : guide ? 'Guide price' : 'Price'}</p>
+            <p style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>{effectiveRate ? `${formatNaira(effectiveRate)}/mo` : guide ? `${guideText(guide)}/mo` : 'On request'}</p>
           </div>
           <button type="button" onClick={openRequest} className="bp-primary bp-btn" style={{ width: 'auto', padding: '13px 20px' }}>
             {isBooked ? 'Request dates' : 'Request this location'}

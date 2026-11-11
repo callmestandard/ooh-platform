@@ -13,8 +13,8 @@ export function pricingFaqs(city?: string): Faq[] {
       a: `Every board's price is set by its media owner. It depends on the city, the road, the size and the format. As a rough guide from boards listed with us: billboards and unipoles in cities like Ibadan, Port Harcourt, Kano or Enugu usually start from about ₦400,000 to ₦850,000 a month. Prime roads and LED screens in Lagos and Abuja often cost ₦2 million to ₦7 million a month. To get the exact price for your dates, request the board and the owner will send you a quote.`,
     },
     {
-      q: 'Why is the price not shown on every board?',
-      a: 'Media owners choose whether to show their rate. Many quote per campaign, because the price changes with your dates, how long you book, and how many boards you take. Send a request with your dates and the owner replies with availability and a price.',
+      q: 'What is a guide price?',
+      a: 'Where we have the owner’s rate card, the board shows a guide range, such as ₦1.3M–1.7M a month. It tells you roughly what the board costs before you ask. The final price depends on your dates, how long you book and how many boards you take, so the owner confirms it in their quote. Boards without a guide show “Request quote”: send your dates and the owner replies with availability and a price.',
     },
     {
       q: 'What other costs should I plan for?',
