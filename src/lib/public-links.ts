@@ -34,9 +34,10 @@ export function boardIdFromParam(param: string | string[] | undefined): string |
 }
 
 // The platform team's WhatsApp number (not a board owner's: buyers deal
-// with owners through the platform). Set NEXT_PUBLIC_WHATSAPP_NUMBER in
-// international form, e.g. 2348012345678. No number = no button.
-export const TEAM_WHATSAPP = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? '').replace(/\D/g, '').replace(/^0/, '234');
+// with owners through the platform). NEXT_PUBLIC_WHATSAPP_NUMBER overrides
+// the default; local (080…) or international (234…) form both work.
+const DEFAULT_TEAM_WHATSAPP = '08156648786';
+export const TEAM_WHATSAPP = (process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || DEFAULT_TEAM_WHATSAPP).replace(/\D/g, '').replace(/^0/, '234');
 
 export function teamWhatsAppLink(message: string) {
   return TEAM_WHATSAPP ? `https://wa.me/${TEAM_WHATSAPP}?text=${encodeURIComponent(message)}` : null;
