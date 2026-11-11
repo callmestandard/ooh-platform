@@ -13,6 +13,7 @@ import { boardIdFromParam, boardPath, citySlug } from '@/lib/public-links';
 import { displayName } from '@/lib/display-name';
 import WhatsAppButton from '@/components/WhatsAppButton';
 import SaveButton from '@/components/shortlist/SaveButton';
+import { track } from '@/lib/track';
 import ShortlistTray from '@/components/shortlist/ShortlistTray';
 import Board3DMap from '@/components/map/Board3DMapLoader';
 import type { NearbyBoard } from '@/components/map/Board3DMap';
@@ -72,6 +73,8 @@ export default function PublicBoardPage() {
   const [loading, setLoading] = useState(true);
   const [photoIdx, setPhotoIdx] = useState(0);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => { if (id) track('board_view', id); }, [id]);
 
   useEffect(() => {
     if (!id) return; // no id: the page shows "Board not found"

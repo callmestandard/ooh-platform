@@ -16,6 +16,7 @@ import { attachGuidePrices, compactNaira, guideText, GUIDE_NOTE, type GuidePrice
 import { boardFormatLabel } from '@/lib/board-formats';
 import { VerificationBadge, dimensionsText } from '@/lib/board-verification';
 import { sendBoardRequests } from '@/lib/availability-requests';
+import { track } from '@/lib/track';
 import type { MapBoard } from '../marketplace/MarketplaceMap';
 
 const MarketplaceMap = dynamic(() => import('../marketplace/MarketplaceMap'), {
@@ -318,7 +319,7 @@ function RequestPanel({ viewer, boards }: { viewer: Viewer; boards: SBoard[] }) 
   }
 
   return (
-    <form onSubmit={submit} data-request-form>
+    <form onSubmit={submit} onFocus={() => track('request_open', null)} data-request-form>
       <p className="sl-p">One request goes to the owner of each board. Up to {REQUEST_MAX} at a time.</p>
       <div className="sl-2">
         <div><label className="sl-lbl" htmlFor="sr-start">Campaign start *</label><input id="sr-start" type="date" required min={today()} value={f.start} onChange={set('start')} className="sl-field" /></div>

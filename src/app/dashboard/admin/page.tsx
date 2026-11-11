@@ -15,6 +15,7 @@ import BoardPhotosEditor from '@/components/admin/BoardPhotosEditor';
 import BoardPinEditor from '@/components/admin/BoardPinEditor';
 import BoardDetailsEditor from '@/components/admin/BoardDetailsEditor';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import FunnelPanel from '@/components/admin/FunnelPanel';
 import InventoryDatabase from '@/components/admin/InventoryDatabase';
 import { fetchGuidePrices, guideText, type GuidePrice } from '@/lib/guide-prices';
 
@@ -788,6 +789,7 @@ function AdminContent() {
       </>}
 
       {/* ═══ TAB: OVERVIEW ═══ */}
+      {activeTab === 'overview' && <FunnelPanel />}
       {activeTab === 'overview' && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
 

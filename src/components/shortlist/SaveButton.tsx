@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useShortlist, toggleShortlist, SHORTLIST_MAX } from '@/lib/shortlist';
+import { track } from '@/lib/track';
 
 /**
  * Save a board to the shortlist. `icon` sits on a card photo; `pill` is a
@@ -16,6 +17,7 @@ export default function SaveButton({ boardId, variant = 'icon', name }: { boardI
     e.preventDefault();
     e.stopPropagation();
     const ok = toggleShortlist(boardId);
+    if (ok && !saved) track('shortlist_add', boardId);
     setFull(!ok);
     if (!ok) setTimeout(() => setFull(false), 2500);
   }

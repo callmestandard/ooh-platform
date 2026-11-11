@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { sendBoardRequest } from '@/lib/availability-requests';
+import { track } from '@/lib/track';
 
 /**
  * "Request this location" on a public board page (MVP core loop).
@@ -62,9 +63,10 @@ export default function RequestLocation({ board, compact }: { board: { id: strin
   }, []);
 
   const start = useCallback(() => {
+    track('request_open', board.id);
     setOpen(true);
     requestAnimationFrame(() => sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  }, []);
+  }, [board.id]);
 
   // Open from ?request=1 (after login), #request, or the page's CTA buttons.
   useEffect(() => {

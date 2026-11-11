@@ -16,6 +16,7 @@ import { boardPath } from '@/lib/public-links';
 import { displayName } from '@/lib/display-name';
 import WhatsAppButton from '@/components/WhatsAppButton';
 import SaveButton from '@/components/shortlist/SaveButton';
+import { track } from '@/lib/track';
 import ShortlistTray from '@/components/shortlist/ShortlistTray';
 import type { MapBoard } from './MarketplaceMap';
 
@@ -367,6 +368,7 @@ function MarketplaceContent() {
   const [verifyFilter, setVerifyFilter] = useState('all');
   const [view, setView]             = useState<'grid' | 'map'>('grid');
   const [selected, setSelected]     = useState<Board | null>(null);
+  useEffect(() => { if (selected) track('board_view', selected.id); }, [selected]);
 
   // Deep links: /marketplace?format=unipole (formats guide), ?state=Oyo and
   // ?q=Ibadan (homepage and city pages), ?view=map
