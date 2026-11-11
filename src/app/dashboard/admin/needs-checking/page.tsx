@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useDashboardRole } from '@/components/layout/DashboardLayout';
 import { notifyRequest } from '@/lib/availability-requests';
+import { authedFetch } from '@/lib/api';
 import { ownerLinkMessage, ownerLinkUrl, sinceText, waNumber, CHECK_EVERY_DAYS } from '@/lib/owner-links';
 
 type Owner = {
@@ -18,6 +19,7 @@ type Owner = {
   oldest_check: string | null; waiting_requests: number; pending_replies: number;
   token: string | null; last_opened_at: string | null; last_saved_at: string | null;
   contact_name: string | null; contact_phone: string | null;
+  email?: string | null; last_reminded_at?: string | null;
 };
 type PendingReply = {
   request_id: string; owner_key: string; available: boolean; quoted_rate: number | null;
@@ -95,7 +97,7 @@ export default function NeedsCheckingPage() {
 
       <section className="nc-sec" data-owners>
         <h2>Owners</h2>
-        <p className="nc-hint">Send each owner their link on WhatsApp once a week. Owners with requests waiting come first.</p>
+        <p className="nc-hint">Owners with an email get their link automatically every Monday at 8am, when they have boards to confirm or requests waiting. For the rest, send it on WhatsApp.</p>
         {owners == null ? (
           <div className="nc-card" style={{ color: '#94A3B8' }}>Loading…</div>
         ) : (
@@ -127,6 +129,29 @@ function OwnerRow({ o, onChanged }: { o: Owner; onChanged: () => Promise<void> }
   const [err, setErr] = useState<string | null>(null);
   const phone = waNumber(o.contact_phone);
   const allStale = o.stale === o.boards;
+  const [email, setEmail] = useState(o.email ?? '');
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [mailNote, setMailNote] = useState<string | null>(null);
+
+  async function saveEmail(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setErr(null);
+    const { error } = await supabase.rpc('admin_set_owner_email', { p_owner_key: o.owner_key, p_owner_name: o.owner_name ?? 'Board owner', p_email: email.trim() || null });
+    setBusy(false);
+    if (error) { setErr(error.message.includes('admin_set_owner_email') ? 'Run migration 055 in Supabase to switch on owner emails.' : error.message); return; }
+    setEditingEmail(false);
+    await onChanged();
+  }
+
+  async function emailNow() {
+    setBusy(true); setErr(null); setMailNote(null);
+    const res = await authedFetch('/api/owner-reminders', { method: 'POST', body: JSON.stringify({ ownerKey: o.owner_key }) });
+    const json = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) { setErr(json.error ?? 'Could not send the email'); return; }
+    setMailNote('Email sent ✓');
+    await onChanged();
+  }
 
   async function getToken(fresh = false): Promise<string | null> {
     if (token && !fresh) return token;
@@ -164,6 +189,21 @@ function OwnerRow({ o, onChanged }: { o: Owner; onChanged: () => Promise<void> }
       <span>
         <strong>{o.owner_name ?? 'Owner'}</strong>
         <em>{o.contact_name || o.contact_phone ? [o.contact_name, o.contact_phone].filter(Boolean).join(' · ') : 'No sales contact saved'}</em>
+        {editingEmail ? (
+          <form className="nc-mail-form" onSubmit={saveEmail}>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="owner@company.com" aria-label={`Email for ${o.owner_name}`} autoFocus />
+            <button type="submit" className="nc-btn" disabled={busy}>Save</button>
+            <button type="button" className="nc-btn-2" onClick={() => { setEditingEmail(false); setEmail(o.email ?? ''); }}>Cancel</button>
+          </form>
+        ) : o.email ? (
+          <span className="nc-mail">
+            ✉ {o.email} · {mailNote ?? (o.last_reminded_at ? `emailed ${sinceText(o.last_reminded_at)}` : 'weekly email on')}
+            <button type="button" onClick={emailNow} disabled={busy}>Email now</button>
+            <button type="button" onClick={() => setEditingEmail(true)}>Edit</button>
+          </span>
+        ) : (
+          <span className="nc-mail"><button type="button" onClick={() => setEditingEmail(true)}>+ Add email for weekly reminders</button></span>
+        )}
         {(o.waiting_requests > 0 || o.pending_replies > 0) && (
           <span className="nc-tags">
             {o.waiting_requests > 0 && <i className="is-hot">{o.waiting_requests} request{o.waiting_requests !== 1 ? 's' : ''} waiting</i>}
@@ -300,6 +340,11 @@ const CSS = `
 .nc-row b { font-weight: 600; font-size: .8125rem; }
 .nc-row b.is-ok { color: #047857; } .nc-row b.is-warn { color: #B45309; }
 .nc-muted { color: #64748B; }
+.nc-mail { font-size: .75rem; color: #475569; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: 3px; }
+.nc-mail button { background: none; border: none; padding: 0; font-family: inherit; font-size: .75rem; font-weight: 700; color: #1B4F8A; cursor: pointer; }
+.nc-mail button:disabled { opacity: .5; }
+.nc-mail-form { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.nc-mail-form input { flex: 1 1 180px; min-width: 0; height: 34px; border-radius: 9px; border: 1px solid #CBD5E1; padding: 0 10px; font-family: inherit; font-size: .8125rem; }
 .nc-m { display: none; font-style: normal; }
 .nc-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .nc-btn, .nc-btn-2, .nc-btn-wa, .nc-btn-x { height: 34px; border-radius: 9px; font-family: inherit; font-size: .8125rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; text-decoration: none; white-space: nowrap; }

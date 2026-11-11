@@ -1,21 +1,26 @@
 import { Resend } from 'resend';
+import { TEAM_WHATSAPP } from './public-links';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM   = process.env.RESEND_FROM_EMAIL ?? 'OOH Platform <onboarding@resend.dev>';
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://oohplatform.ng').replace(/\/$/, '');
 
-export async function sendEmail(to: string, subject: string, html: string) {
-  if (!process.env.RESEND_API_KEY || !to) return;
+/** Sends one email. Never throws; returns whether it was accepted. */
+export async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+  if (!process.env.RESEND_API_KEY || !to) return false;
   try {
-    await resend.emails.send({ from: FROM, to, subject, html });
+    const { error } = await resend.emails.send({ from: FROM, to, subject, html });
+    if (error) { console.error('[email] send failed:', error.message); return false; }
+    return true;
   } catch (err) {
     console.error('[email] send failed:', err);
+    return false;
   }
 }
 
 // ── HTML shell ────────────────────────────────────────────────────────────────
 
-function emailWrap(preheader: string, body: string): string {
+function emailWrap(preheader: string, body: string, footerNote = 'You&apos;re receiving this because you have an account on OOH Platform.'): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -48,7 +53,7 @@ function emailWrap(preheader: string, body: string): string {
       <!-- Footer -->
       <tr><td style="padding:20px 0 0;text-align:center;">
         <p style="font-size:11px;color:#94A3B8;margin:0;">${process.env.NEXT_PUBLIC_MVP_MODE !== 'false' ? 'Nigeria&apos;s billboard marketplace' : 'Nigeria&apos;s OOH Advertising Operating System'} · <a href="${APP_URL}" style="color:#1B4F8A;text-decoration:none;">oohplatform.ng</a></p>
-        <p style="font-size:11px;color:#CBD5E1;margin:4px 0 0;">You're receiving this because you have an account on OOH Platform.</p>
+        <p style="font-size:11px;color:#CBD5E1;margin:4px 0 0;">${footerNote}</p>
       </td></tr>
 
     </table>
@@ -448,4 +453,37 @@ export async function emailDealAgreed(to: string, r: RequestEmailInfo, who: 'buy
      ${btn(copy.cta, copy.link, '#059669')}`,
   );
   await sendEmail(to, `${who === 'admin' ? 'Action needed — deal agreed' : 'Deal agreed'}: ${r.boardName}`, html);
+}
+
+/**
+ * Weekly reminder to a media owner (055): confirm which boards are free and
+ * answer waiting requests, from their private no-login link.
+ */
+type OwnerReminder = { ownerName: string; url: string; boards: number; stale: number; waiting: number };
+
+export async function emailOwnerReminder(to: string, o: OwnerReminder): Promise<boolean> {
+  const { subject, html } = ownerReminderEmail(o);
+  return sendEmail(to, subject, html);
+}
+
+/** Subject and HTML of the weekly owner reminder (separate so it can be previewed). */
+export function ownerReminderEmail(o: OwnerReminder): { subject: string; html: string } {
+  const s = (n: number, one: string, many: string) => (n === 1 ? one : many);
+  const subject = o.waiting > 0
+    ? `${o.waiting} buyer ${s(o.waiting, 'request is', 'requests are')} waiting for your answer`
+    : `Are your ${o.boards} ${s(o.boards, 'board', 'boards')} free this week?`;
+  const asks = [
+    o.waiting > 0 ? `<li style="margin:0 0 6px;"><strong>${o.waiting}</strong> buyer ${s(o.waiting, 'request needs', 'requests need')} your answer (available? your price?)</li>` : '',
+    o.stale > 0 ? `<li style="margin:0 0 6px;">Confirm which of your <strong>${o.boards}</strong> ${s(o.boards, 'board is', 'boards are')} free, booked or off</li>` : '',
+  ].join('');
+  const html = emailWrap(
+    o.waiting > 0 ? 'Buyers are waiting for your answer' : 'A one-minute check of your boards',
+    `${h1(`Hello ${esc(o.ownerName)}`)}
+     ${lead('Your weekly check with OOH Platform. It takes about a minute and needs no login.')}
+     <ul style="font-size:14px;color:#334155;line-height:1.6;margin:0 0 4px;padding-left:20px;">${asks}</ul>
+     ${btn(o.waiting > 0 ? 'Answer requests and update boards' : 'Update my boards', o.url)}
+     <p style="font-size:12px;color:#94A3B8;margin:20px 0 0;line-height:1.6;">Buyers book boards that show as free, so keeping this up to date brings you more requests. This link is just for you; please don&apos;t share it.</p>`,
+    `You&apos;re receiving this weekly because OOH Platform lists your boards.${TEAM_WHATSAPP ? ` To stop, WhatsApp us on 0${TEAM_WHATSAPP.slice(3)}.` : ''}`,
+  );
+  return { subject, html };
 }
