@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signInWithEmail, getSession, getCurrentProfile, signOut, DEMO_CREDENTIALS } from '@/lib/auth';
+import { signInWithEmail, getSession, getCurrentProfile, signOut } from '@/lib/auth';
 import { ROLE_STORAGE_KEY, type DemoRole } from '@/lib/constants';
 import { MVP_MODE, roleHome } from '@/lib/mvp';
 import { supabase } from '@/lib/supabase';
@@ -116,21 +116,7 @@ function LoginContent() {
     setDemoLoading(role);
     setError('');
 
-    // Try real Supabase demo accounts first
-    const creds = DEMO_CREDENTIALS[role];
-    const { data, error: authError } = await signInWithEmail(creds.email, creds.password);
-
-    if (!authError && data.session) {
-      // Real auth succeeded — get profile and redirect
-      const profile = await getCurrentProfile();
-      setDemoLoading(null);
-      if (profile) {
-        router.push(postLoginRedirect(profile.role));
-        return;
-      }
-    }
-
-    // Graceful fallback: demo accounts not in Supabase yet — use localStorage
+    // Demo preview only (hidden in MVP mode): no real account, just the role.
     setDemoLoading(null);
     localStorage.setItem(ROLE_STORAGE_KEY, role);
     router.push(postLoginRedirect(role));
