@@ -219,6 +219,31 @@ export async function sendBoardRequest(input: BoardRequestInput): Promise<{ id: 
   return { id: (data as string) ?? null, error: err(error) };
 }
 
+/**
+ * Request several shortlisted boards at once (052). Each board still becomes
+ * its own request, since each owner quotes their own board. Boards the buyer
+ * already has an open request for come back in `skipped` (by name).
+ */
+export async function sendBoardRequests(input: Omit<BoardRequestInput, 'boardId' | 'sites'> & { boardIds: string[] }): Promise<{ ids: string[]; skipped: string[]; error: string | null }> {
+  const { data, error } = await supabase.rpc('send_board_requests', {
+    p_board_ids: input.boardIds,
+    p_start: input.startDate,
+    p_end: input.endDate,
+    p_name: input.name,
+    p_company: input.company,
+    p_email: input.email,
+    p_phone: input.phone,
+    p_message: input.message,
+    p_budget: input.budget,
+    p_extra: input.extra,
+  });
+  if (error) return { ids: [], skipped: [], error: err(error) };
+  const out = (data ?? {}) as { ids?: string[]; skipped?: string[] };
+  const ids = out.ids ?? [];
+  ids.forEach(id => notifyRequest({ requestId: id }));
+  return { ids, skipped: out.skipped ?? [], error: null };
+}
+
 export type BoardRequest = AvailabilityRequest & {
   board_id: string | null;
   stage: RequestStage;

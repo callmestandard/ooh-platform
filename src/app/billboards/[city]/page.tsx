@@ -11,6 +11,8 @@ import { boardPath, citySlug as toSlug } from '@/lib/public-links';
 import { displayName } from '@/lib/display-name';
 import PricingFaqList, { pricingFaqs, faqJsonLd } from '@/components/PricingFaq';
 import WhatsAppButton from '@/components/WhatsAppButton';
+import SaveButton from '@/components/shortlist/SaveButton';
+import ShortlistTray from '@/components/shortlist/ShortlistTray';
 
 export const revalidate = 3600;
 
@@ -531,6 +533,9 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                   >
                     {/* Photo / mockup */}
                     <div style={{ height: 160, background: fc.bg, position: 'relative', overflow: 'hidden' }}>
+                      <span style={{ position: 'absolute', top: 10, right: 10, zIndex: 2 }}>
+                        <SaveButton boardId={board.id} name={board.name} />
+                      </span>
                       {photo
                         ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -737,6 +742,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
         </div>
       </footer>
       <WhatsAppButton message={`Hi, I'm looking for billboards in ${cityName}. Can you help?`} />
+      <ShortlistTray />
     </RequirePlatformAuth>
   );
 }

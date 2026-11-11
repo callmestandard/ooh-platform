@@ -12,6 +12,8 @@ import { VerificationBadge, VERIFICATION_META, verificationOf, formatVerifiedDat
 import { boardIdFromParam, boardPath, citySlug } from '@/lib/public-links';
 import { displayName } from '@/lib/display-name';
 import WhatsAppButton from '@/components/WhatsAppButton';
+import SaveButton from '@/components/shortlist/SaveButton';
+import ShortlistTray from '@/components/shortlist/ShortlistTray';
 import Board3DMap from '@/components/map/Board3DMapLoader';
 import type { NearbyBoard } from '@/components/map/Board3DMap';
 
@@ -350,6 +352,7 @@ export default function PublicBoardPage() {
                 {priceBlock}
                 <RequestLocation board={{ id: board.id, name, status: board.status }} compact />
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <SaveButton boardId={board.id} name={name} variant="pill" />
                   <button type="button" onClick={shareBoard} className="bp-ghost">
                     <Icon d={copied ? CHECK : SHARE} size={14} /> {copied ? 'Link copied' : 'Share'}
                   </button>
@@ -367,11 +370,13 @@ export default function PublicBoardPage() {
             <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748B' }}>{effectiveRate ? 'Asking rate' : guide ? 'Guide price' : 'Price'}</p>
             <p style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>{effectiveRate ? `${formatNaira(effectiveRate)}/mo` : guide ? `${guideText(guide)}/mo` : 'On request'}</p>
           </div>
+          <SaveButton boardId={board.id} name={name} />
           <button type="button" onClick={openRequest} className="bp-primary bp-btn" style={{ width: 'auto', padding: '13px 20px' }}>
             {isBooked ? 'Request dates' : 'Request this location'}
           </button>
         </div>
       </div>
+      <ShortlistTray bottom={20} mobileBottom={92} />
       <WhatsAppButton bottom={20} mobileBottom={92}
         message={`Hi, I'm interested in this board on OOH Platform: "${name}"${board.city ? ` (${board.city})` : ''}. ${typeof window !== 'undefined' ? window.location.origin + boardPath(board) : ''}`} />
     </>

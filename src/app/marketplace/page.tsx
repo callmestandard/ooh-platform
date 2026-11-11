@@ -15,6 +15,8 @@ import { MVP_MODE } from '@/lib/mvp';
 import { boardPath } from '@/lib/public-links';
 import { displayName } from '@/lib/display-name';
 import WhatsAppButton from '@/components/WhatsAppButton';
+import SaveButton from '@/components/shortlist/SaveButton';
+import ShortlistTray from '@/components/shortlist/ShortlistTray';
 import type { MapBoard } from './MarketplaceMap';
 
 const MarketplaceMap = dynamic(() => import('./MarketplaceMap'), {
@@ -257,9 +259,12 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
       <div style={{
         background: '#fff', borderRadius: 20, width: '100%', maxWidth: 560,
         boxShadow: '0 24px 60px rgba(0,0,0,0.18)',
-        overflow: 'hidden', animation: 'modalIn 0.2s ease',
+        overflow: 'hidden', animation: 'modalIn 0.2s ease', position: 'relative',
       }}>
         {/* Photo / Mockup header */}
+        <span style={{ position: 'absolute', top: 14, left: 14, zIndex: 2 }}>
+          <SaveButton boardId={board.id} name={board.name} />
+        </span>
         {board.photo_urls?.[0] ? (
           <div style={{ height: 200, overflow: 'hidden', background: '#0F172A' }}>
             <img src={board.photo_urls[0]} alt={board.name} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.9 }} />
@@ -763,9 +768,12 @@ function MarketplaceContent() {
                 style={{
                   background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16,
                   overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-                  animation: `fadeUp 0.25s ease ${i * 0.03}s both`,
+                  animation: `fadeUp 0.25s ease ${i * 0.03}s both`, position: 'relative',
                 }}
               >
+                <span style={{ position: 'absolute', top: 10, right: 10, zIndex: 2 }}>
+                  <SaveButton boardId={board.id} name={displayName(board.name)} />
+                </span>
                 {/* Photo when we have one, otherwise the format illustration */}
                 {board.photo_urls?.[0] ? (
                   <div style={{ height: 170, overflow: 'hidden', background: '#0F172A', borderBottom: '1px solid #F1F5F9' }}>
@@ -886,6 +894,7 @@ function MarketplaceContent() {
         <BoardModal board={selected} onClose={() => setSelected(null)} onRequestQuote={handleQuote} />
       )}
       {!selected && <WhatsAppButton message="Hi, I'm looking at billboards on OOH Platform and I'd like some help choosing." />}
+      {!selected && <ShortlistTray />}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { citySlug } from '@/lib/public-links';
 import WhatsAppButton from '@/components/WhatsAppButton';
+import ShortlistTray from '@/components/shortlist/ShortlistTray';
 
 export const revalidate = 3600;
 
@@ -319,6 +320,7 @@ export default async function BillboardsIndexPage() {
         </div>
       </footer>
       <WhatsAppButton message="Hi, I'm looking for billboards in Nigeria. Can you help?" />
+      <ShortlistTray />
     </>
   );
 }
