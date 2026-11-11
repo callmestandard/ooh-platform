@@ -80,6 +80,7 @@ const clientNav: NavItem[] = [
 const ownerNav: NavItem[] = [
   { id: "my-boards",     label: "My Boards",     path: "/dashboard/owner",                     icon: <Icon path="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10" /> },
   { id: "post-board",   label: "Post a Board",  path: "/dashboard/owner/post-board",          icon: <Icon path="M12 5v14 M5 12h14" /> },
+  { id: "import-boards", label: "Import Boards", path: "/dashboard/owner/import-boards",       icon: <Icon path="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12" /> },
   { id: "bookings",      label: "Bookings",       path: "/dashboard/owner?tab=bookings",        icon: <Icon path="M8 6h13 M8 12h13 M8 18h13 M3 6h.01 M3 12h.01 M3 18h.01" /> },
   { id: "calendar",      label: "Calendar",       path: "/dashboard/owner?tab=calendar",        icon: <Icon path="M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /> },
   { id: "negotiations",  label: "Negotiations",   path: "/dashboard/owner/negotiations",        icon: <Icon path="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /> },
@@ -148,7 +149,7 @@ function pick(nav: NavItem[], ids: string[], overrides: Record<string, Partial<N
 }
 const mvpNavByRole: Partial<Record<DemoRole, NavItem[]>> = {
   agency: pick(agencyNav, ["marketplace", "requests", "negotiations", "settings"], { marketplace: { path: "/marketplace" } }),
-  owner:  pick(ownerNav, ["my-boards", "post-board", "availability-requests", "negotiations", "claim-boards", "settings"], { "availability-requests": { label: "Requests" } }),
+  owner:  pick(ownerNav, ["my-boards", "post-board", "import-boards", "availability-requests", "negotiations", "claim-boards", "settings"], { "availability-requests": { label: "Requests" } }),
   admin:  pick(adminNav, ["overview", "requests", "claims", "inventory", "add-board", "import", "users", "settings"]),
 };
 

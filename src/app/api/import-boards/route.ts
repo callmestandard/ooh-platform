@@ -70,6 +70,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Only board owners and their teams can import boards' }, { status: 403 });
     }
     const { data: isAdmin } = ownerId === user.id ? { data: true } : await supabaseAdmin.rpc('is_owner_admin', { p_owner_id: ownerId, p_uid: user.id });
+    // Boards only show as "Partner verified" once our team has approved the
+    // owner (migration 050). Before that, or if the check fails, they start pending.
+    const { data: approval } = await supabaseAdmin.from('owner_approvals').select('owner_id').eq('owner_id', ownerId).maybeSingle();
+    const approved = !!approval;
 
     const payload = rows.map(r => ({
       name: String(r.name).trim(),
@@ -92,10 +96,9 @@ export async function POST(req: NextRequest) {
       face_count: 1,
       // unknown stays unknown — never default to "not illuminated"
       illuminated: typeof r.illuminated === 'boolean' ? r.illuminated : null,
-      // The owner's own team is importing its own boards (this route runs as
-      // the service role, which the 042 trigger trusts to set this).
-      verification_status: 'partner_verified',
-      last_verified_at: new Date().toISOString(),
+      // This route runs as the service role, which the 042 trigger trusts to set this.
+      verification_status: approved ? 'partner_verified' : 'pending',
+      last_verified_at: approved ? new Date().toISOString() : null,
     }));
 
     const { data, error } = await supabaseAdmin.from('boards').insert(payload).select('id');

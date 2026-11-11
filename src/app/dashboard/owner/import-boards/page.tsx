@@ -1,5 +1,6 @@
 'use client';
 
+import OwnerApprovalNotice from '@/components/owner/OwnerApprovalNotice';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -876,6 +877,8 @@ export default function ImportBoardsPage() {
             : 'List hundreds of boards in minutes — upload your spreadsheet, map columns, review, and publish.'}
         </p>
       </div>
+
+      {!adminMode && <OwnerApprovalNotice />}
 
       {adminMode && (
         <div data-admin-import style={{ ...cardStyle, marginBottom: 16, background: '#F8FAFC' }}>

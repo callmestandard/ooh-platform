@@ -1,5 +1,6 @@
 'use client';
 
+import OwnerApprovalNotice from '@/components/owner/OwnerApprovalNotice';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -716,6 +717,7 @@ function PostBoardContent() {
 
       {/* Card container */}
       <div style={{ maxWidth: 660, margin: '0 auto' }}>
+        {!adminMode && <OwnerApprovalNotice />}
         {adminMode && (
           <div data-admin-board style={{ background: '#F8FAFC', border: '1px solid #E8EDF2', borderRadius: 16, padding: '1.25rem 1.5rem', marginBottom: 20 }}>
             <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', margin: '0 0 12px' }}>Adding as admin</p>

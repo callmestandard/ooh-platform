@@ -346,6 +346,31 @@ function AdminContent() {
     }
   }
 
+  // Owners our team has checked (migration 050). Their boards show as Partner verified.
+  const [approvedOwners, setApprovedOwners] = useState<Set<string>>(new Set());
+  const [approvingOwner, setApprovingOwner] = useState<string | null>(null);
+  useEffect(() => {
+    supabase.from('owner_approvals').select('owner_id').then(({ data, error }) => {
+      if (error) { console.error('[admin] owner_approvals fetch failed:', error.message); return; }
+      setApprovedOwners(new Set(((data as { owner_id: string }[]) || []).map(r => r.owner_id)));
+    });
+  }, []);
+
+  async function setOwnerApproval(ownerId: string, approve: boolean) {
+    setApprovingOwner(ownerId);
+    const { data, error } = await supabase.rpc('set_owner_approval', { p_owner: ownerId, p_approved: approve });
+    setApprovingOwner(null);
+    if (error) { showToast(`Could not update the owner: ${error.message}`, 'error'); return; }
+    setApprovedOwners(prev => { const n = new Set(prev); if (approve) n.add(ownerId); else n.delete(ownerId); return n; });
+    // Mirror the database: the owner's boards move between pending and partner verified.
+    setBoards(prev => prev.map(b => b.owner_id !== ownerId ? b
+      : approve && verificationOf(b) === 'pending' ? { ...b, verification_status: 'partner_verified', last_verified_at: new Date().toISOString() }
+      : !approve && b.verification_status === 'partner_verified' ? { ...b, verification_status: 'pending', last_verified_at: null }
+      : b));
+    const n = Number(data) || 0;
+    showToast(approve ? `Owner approved${n ? ` · ${n} board${n > 1 ? 's' : ''} now Partner verified` : ''}` : `Approval removed${n ? ` · ${n} board${n > 1 ? 's' : ''} back to Pending` : ''}`, 'success');
+  }
+
   async function toggleUserSuspension(profileId: string, currentlySuspended: boolean) {
     setTogglingUser(profileId);
     const { error } = await supabase
@@ -1044,6 +1069,27 @@ function AdminContent() {
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <div style={{ display: 'flex', gap: 4 }}>
+                        {user.role === 'owner' && !user.id.startsWith('demo-') && (approvedOwners.has(user.id) ? (
+                          <button
+                            data-owner-approved
+                            onClick={() => setOwnerApproval(user.id, false)}
+                            disabled={approvingOwner === user.id}
+                            title="Approved: their boards show as Partner verified. Click to remove the approval."
+                            style={{ background: '#ECFDF5', color: '#065F46', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: approvingOwner === user.id ? 0.6 : 1 }}
+                          >
+                            {approvingOwner === user.id ? '…' : '✓ Approved owner'}
+                          </button>
+                        ) : (
+                          <button
+                            data-approve-owner
+                            onClick={() => setOwnerApproval(user.id, true)}
+                            disabled={approvingOwner === user.id}
+                            title="Confirm this company owns its boards. Their boards become Partner verified."
+                            style={{ background: '#1B4F8A', color: '#fff', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: approvingOwner === user.id ? 0.6 : 1 }}
+                          >
+                            {approvingOwner === user.id ? '…' : 'Approve owner'}
+                          </button>
+                        ))}
                         {!user.id.startsWith('demo-') && (
                           <button
                             onClick={() => toggleUserSuspension(user.id, user.is_suspended)}

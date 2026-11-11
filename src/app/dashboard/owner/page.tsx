@@ -1,5 +1,6 @@
 'use client';
 
+import OwnerApprovalNotice from '@/components/owner/OwnerApprovalNotice';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import DownloadInvoice from '@/components/invoice/DownloadInvoice';
@@ -952,6 +953,7 @@ function OwnerContent() {
       </div>
 
       {/* ── Boards tab ── */}
+      {activeTab === 'boards' && <OwnerApprovalNotice />}
       {activeTab === 'boards' && (
         <div className="table-scroll" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: '12px', overflow: 'hidden' }}>
           {boards.length === 0 ? (

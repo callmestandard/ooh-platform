@@ -58,6 +58,8 @@ async function verify() {
   const anon = createClient(SUPABASE_URL, ANON, { auth: { persistSession: false } });
 
   // ── Owner adds their own board ──
+  // Since 050 only approved owners get partner_verified; approve O for these checks.
+  await admin.from('owner_approvals').upsert({ owner_id: O.id });
   let r = await o.from('boards').insert({ ...base('owner-own'), owner_id: O.id, verification_status: 'verified', source: 'self-claimed', last_verified_at: '2020-01-01' }).select('id').single();
   check('owner can add a board', !r.error, r.error?.message);
   const ownBoard = r.data?.id; track(ownBoard);
