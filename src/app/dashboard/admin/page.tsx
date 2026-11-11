@@ -9,12 +9,13 @@ import { formatNaira, formatDate } from '@/lib/utils';
 import type { ActivityEvent } from '@/lib/activity-log';
 import { useToast } from '@/components/ui/Toast';
 import { computeTrustBadge, TrustBadgePill } from '@/lib/agent-listings';
-import { VERIFICATION_META, verificationOf, formatVerifiedDate, type VerificationStatus } from '@/lib/board-verification';
+import { VERIFICATION_META, verificationOf, type VerificationStatus } from '@/lib/board-verification';
 import { MVP_MODE, mvpTabs } from '@/lib/mvp';
 import BoardPhotosEditor from '@/components/admin/BoardPhotosEditor';
 import BoardPinEditor from '@/components/admin/BoardPinEditor';
 import BoardDetailsEditor from '@/components/admin/BoardDetailsEditor';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import InventoryDatabase from '@/components/admin/InventoryDatabase';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,8 @@ type Board = {
   photo_urls: string[] | null;
   latitude: number | null;
   longitude: number | null;
+  width?: number | null;
+  height?: number | null;
 };
 
 type Booking = {
@@ -244,8 +247,6 @@ function AdminContent() {
     })();
   }, []);
 
-  // inventory filter
-  const [invFilter, setInvFilter] = useState<'all' | 'available' | 'booked' | 'unavailable' | 'decommissioned'>('all');
   // bookings filter
   const [bookFilter, setBookFilter] = useState<string>('all');
   // user role filter
@@ -304,7 +305,7 @@ function AdminContent() {
   async function fetchAll() {
     try {
       const [bRes, bookRes, campRes, compRes, profRes, actRes, disputedRes, payoutsRes] = await Promise.all([
-        supabase.from('boards').select('id, name, address, city, area, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at, verification_status, last_verified_at, source, photo_urls, latitude, longitude').order('created_at', { ascending: false }).limit(200),
+        supabase.from('boards').select('id, name, address, city, area, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at, verification_status, last_verified_at, source, photo_urls, latitude, longitude, width, height').order('created_at', { ascending: false }).limit(500),
         supabase.from('bookings').select('id, status, offered_rate, agreed_rate, start_date, end_date, duration_months, created_at, boards(name, city, format), campaigns(name, client_name)').order('created_at', { ascending: false }).limit(200),
         supabase.from('campaigns').select('id, name, client_name, status, total_budget, start_date, end_date, agency_id, created_at').order('created_at', { ascending: false }).limit(100),
         supabase.from('compliance_checks').select('id, booking_id, status, submitted_at, photo_url, notes').order('submitted_at', { ascending: false }).limit(100),
@@ -423,13 +424,12 @@ function AdminContent() {
     showToast(`${board.name} → ${VERIFICATION_META[next].label}`);
   }
 
-  async function toggleBoardStatus(board: Board) {
-    const next = board.status === 'available' ? 'unavailable' : 'available';
+  async function setBoardStatus(board: Board, next: Exclude<Board['status'], 'booked'>) {
+    if (board.status === next || board.status === 'booked') return;
     const { error } = await supabase.from('boards').update({ status: next }).eq('id', board.id);
-    if (!error) {
-      setBoards(prev => prev.map(b => b.id === board.id ? { ...b, status: next as Board['status'] } : b));
-      showToast(`${board.name} → ${next}`);
-    }
+    if (error) { showToast(`Could not update ${board.name}: ${error.message}`, 'error'); return; }
+    setBoards(prev => prev.map(b => b.id === board.id ? { ...b, status: next } : b));
+    showToast(`${board.name} → ${next}`);
   }
 
   function saveSettings() {
@@ -567,8 +567,6 @@ function AdminContent() {
         })),
       ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 12);
 
-  // Filtered inventory
-  const filteredBoards = invFilter === 'all' ? boards : boards.filter(b => b.status === invFilter);
   // Filtered bookings
   const filteredBookings = bookFilter === 'all' ? bookings : bookings.filter(b => b.status === bookFilter);
 
@@ -606,6 +604,7 @@ function AdminContent() {
       `}</style>
 
 
+      {activeTab !== 'inventory' && <>
       {/* ── Welcome strip ── */}
       <div className="welcome-strip" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16, padding: '18px 24px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -735,6 +734,7 @@ function AdminContent() {
           </button>
         ))}
       </div>
+      </>}
 
       {/* ═══ TAB: OVERVIEW ═══ */}
       {activeTab === 'overview' && (
@@ -877,186 +877,20 @@ function AdminContent() {
 
       {/* ═══ TAB: INVENTORY ═══ */}
       {activeTab === 'inventory' && (
-        <div className="table-scroll" style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ padding: '14px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <div>
-              <h2 style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>
-                All boards ({filteredBoards.length}{invFilter !== 'all' ? ` · ${invFilter}` : ''})
-              </h2>
-              <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>Full platform inventory</p>
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {(['all', 'available', 'booked', 'unavailable', 'decommissioned'] as const).map(s => (
-                <button
-                  key={s}
-                  className={`admin-filter-btn${invFilter === s ? ' active' : ''}`}
-                  onClick={() => setInvFilter(s)}
-                >
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
-                  {s !== 'all' && <span style={{ marginLeft: 4, opacity: 0.7 }}>({boards.filter(b => b.status === s).length})</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-          {filteredBoards.length === 0 ? (
-            <div style={{ padding: '4rem', textAlign: 'center' }}>
-              <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>No boards match this filter</p>
-            </div>
-          ) : (
-            <>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: '#F8FAFC' }}>
-                    {['Board', 'Location', 'Format', 'Rate', 'Status', 'Verification', 'Listed', 'Actions'].map(h => (
-                      <th key={h} style={{ padding: '10px 16px', fontSize: '0.6875rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.07em', textAlign: 'left', borderBottom: '1px solid #F1F5F9', whiteSpace: 'nowrap' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredBoards.map((board, i) => (
-                    <tr key={board.id} className="row-hover fade" style={{ borderBottom: i < filteredBoards.length - 1 ? '1px solid #F8FAFC' : 'none', background: '#fff', animationDelay: `${i * 0.03}s` }}>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <button type="button" data-inv-photo onClick={() => setPhotoBoard(board)}
-                            title={board.photo_urls?.length ? 'Edit photos' : 'Add a photo'} aria-label={`Photos for ${board.name}`}
-                            className="inv-photo"
-                            style={{ width: 52, height: 40, borderRadius: 8, background: '#F5F3FF', border: board.photo_urls?.length ? '1px solid #E2E8F0' : '1px dashed #C4B5FD', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.625rem', fontWeight: 600, color: '#7C3AED', padding: 0, cursor: 'pointer', overflow: 'hidden', position: 'relative', fontFamily: 'inherit', lineHeight: 1.2 }}>
-                            {board.photo_urls?.length ? (
-                              <>
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={board.photo_urls[0]} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                                <span className="inv-photo-edit">Edit</span>
-                              </>
-                            ) : '+ Photo'}
-                          </button>
-                          <div>
-                            <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: '0 0 2px' }}>{board.name}</p>
-                            {board.address && <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{board.address}</p>}
-                            {(() => {
-                              const acct = board.owner_id ? profiles.find(p => p.id === board.owner_id) : null;
-                              const name = acct ? acct.company_name || acct.full_name : board.owner_id ? null : ownerNames[board.id];
-                              return (
-                                <p data-board-owner style={{ fontSize: '0.6875rem', color: board.owner_id || name ? '#475569' : '#B45309', margin: '2px 0 0', maxWidth: 240, lineHeight: 1.4 }}>
-                                  {board.owner_id ? `Owner: ${name || 'account'}` : name ? `Owner: ${name} · no account yet` : 'Owner unknown · unclaimed'}
-                                </p>
-                              );
-                            })()}
-                            {currentBrands[board.id] && (() => {
-                              const cb = currentBrands[board.id];
-                              const ends = cb.ends_on ? new Date(cb.ends_on + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
-                              const over = cb.ends_on ? cb.ends_on < new Date().toISOString().slice(0, 10) : false;
-                              return (
-                                <p data-current-brand-row style={{ fontSize: '0.6875rem', color: '#6D28D9', margin: '2px 0 0', maxWidth: 240, lineHeight: 1.4 }}>
-                                  {cb.brand ? `Showing: ${cb.brand}` : 'Current campaign'}{ends ? ` · ${over ? 'ended' : 'ends'} ${ends}` : ''}
-                                </p>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: '12px 16px', fontSize: '0.8125rem', color: '#475569', whiteSpace: 'nowrap' }}>
-                        {[board.area && board.area.length <= 40 ? board.area : '', board.city, board.state].filter(Boolean).join(', ') || '—'}
-                        <p data-pin-status style={{ fontSize: '0.6875rem', margin: '2px 0 0', color: board.latitude != null ? '#94A3B8' : '#B45309' }}>
-                          {board.latitude != null && board.longitude != null ? `📍 ${board.latitude.toFixed(4)}, ${board.longitude.toFixed(4)}` : 'No map pin'}
-                        </p>
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#475569', background: '#F1F5F9', padding: '2px 7px', borderRadius: 4, whiteSpace: 'nowrap' }}>
-                          {FORMAT_LABELS[board.format] || board.format}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap' }}>
-                        {board.asking_rate
-                          ? <>{formatNaira(board.asking_rate)}<span style={{ fontSize: '0.6875rem', fontWeight: 400, color: '#94A3B8' }}>/mo</span></>
-                          : <span style={{ fontSize: '0.75rem', fontWeight: 500, color: '#94A3B8', fontFamily: 'inherit' }}>Request quote</span>}
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: board.status === 'available' ? '#ECFDF5' : board.status === 'booked' ? '#EFF6FF' : '#FFFBEB', color: board.status === 'available' ? '#065F46' : board.status === 'booked' ? '#1E3A8A' : '#92400E', padding: '3px 9px', borderRadius: 999, fontSize: '0.6875rem', fontWeight: 600 }}>
-                          <span style={{ width: 5, height: 5, borderRadius: '50%', background: board.status === 'available' ? '#10B981' : board.status === 'booked' ? '#3B82F6' : '#F59E0B' }} />
-                          {board.status.charAt(0).toUpperCase() + board.status.slice(1)}
-                        </span>
-                      </td>
-                      <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
-                        <select
-                          aria-label={`Verification for ${board.name}`}
-                          value={verificationOf(board)}
-                          onChange={e => setBoardVerification(board, e.target.value as VerificationStatus)}
-                          style={{ fontSize: '0.75rem', fontWeight: 600, padding: '4px 6px', borderRadius: 6, border: '1px solid #E2E8F0', fontFamily: 'inherit', background: VERIFICATION_META[verificationOf(board)].bg, color: VERIFICATION_META[verificationOf(board)].color }}
-                        >
-                          <option value="pending">Pending verification</option>
-                          <option value="verified">Verified (owner confirmed)</option>
-                          {/* Partner verified means the owner manages it here — only possible with an owner account. */}
-                          <option value="partner_verified" disabled={!board.owner_id}>Partner verified{board.owner_id ? '' : ' (needs owner account)'}</option>
-                        </select>
-                        <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '3px 0 0' }}>
-                          {formatVerifiedDate(board.last_verified_at) ? `Checked ${formatVerifiedDate(board.last_verified_at)}` : 'Never checked'}
-                          {board.source ? ` · ${board.source}` : ''}
-                        </p>
-                      </td>
-                      <td style={{ padding: '12px 16px', fontSize: '0.75rem', color: '#94A3B8', whiteSpace: 'nowrap' }}>
-                        {timeAgo(board.created_at)}
-                      </td>
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <button
-                          type="button"
-                          data-edit-details
-                          onClick={() => setDetailsBoard(board)}
-                          style={{ background: '#F1F5F9', color: '#0F172A', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
-                        >
-                          Edit details
-                        </button>
-                        <button
-                          type="button"
-                          data-edit-photos
-                          onClick={() => setPhotoBoard(board)}
-                          style={{ background: '#F5F3FF', color: '#6D28D9', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
-                        >
-                          {board.photo_urls?.length ? 'Edit photo' : 'Add photo'}
-                        </button>
-                        <button
-                          type="button"
-                          data-move-pin
-                          onClick={() => setPinBoard(board)}
-                          style={{ background: '#EFF6FF', color: '#1E40AF', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
-                        >
-                          {board.latitude != null ? 'Move pin' : 'Add pin'}
-                        </button>
-                        <button
-                          type="button"
-                          data-delete-board
-                          onClick={() => setDeleteBoard(board)}
-                          aria-label={`Delete ${board.name}`}
-                          style={{ background: '#FEF2F2', color: '#B91C1C', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
-                        >
-                          Delete
-                        </button>
-                        {(board.status === 'available' || board.status === 'unavailable') && (
-                          <button
-                            onClick={() => toggleBoardStatus(board)}
-                            style={{ background: board.status === 'available' ? '#FFFBEB' : '#ECFDF5', color: board.status === 'available' ? '#92400E' : '#065F46', border: 'none', cursor: 'pointer', padding: '4px 10px', borderRadius: 6, fontSize: '0.6875rem', fontWeight: 600, fontFamily: 'inherit' }}
-                          >
-                            {board.status === 'available' ? 'Unavailable' : 'Available'}
-                          </button>
-                        )}
-                        {(board.status === 'booked' || board.status === 'decommissioned') && (
-                          <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>{board.status.charAt(0).toUpperCase() + board.status.slice(1)}</span>
-                        )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div style={{ padding: '10px 16px', borderTop: '1px solid #F1F5F9', background: '#FAFBFC', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>
-                  {boards.length} total · {boards.filter(b => b.status === 'available').length} available · {bookedBoards} booked
-                </span>
-                <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>{occupancy}% occupancy</span>
-              </div>
-            </>
-          )}
-        </div>
+        <InventoryDatabase
+          boards={boards}
+          ownerOf={board => {
+            const acct = board.owner_id ? profiles.find(p => p.id === board.owner_id) : null;
+            return { name: acct ? acct.company_name || acct.full_name : board.owner_id ? null : ownerNames[board.id] ?? null, hasAccount: !!board.owner_id };
+          }}
+          brandOf={board => currentBrands[board.id]}
+          onStatus={(board, next) => setBoardStatus(board as Board, next)}
+          onVerification={(board, next) => setBoardVerification(board as Board, next)}
+          onEditDetails={board => setDetailsBoard(board as Board)}
+          onEditPhotos={board => setPhotoBoard(board as Board)}
+          onMovePin={board => setPinBoard(board as Board)}
+          onDelete={board => setDeleteBoard(board as Board)}
+        />
       )}
 
       {/* ═══ TAB: BOOKINGS ═══ */}
