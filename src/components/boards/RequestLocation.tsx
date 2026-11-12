@@ -116,11 +116,12 @@ export default function RequestLocation({ board, compact }: { board: { id: strin
         <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>Loading…</p>
       ) : !open ? (
         <>
-          <p style={{ fontSize: '0.875rem', color: '#475569', margin: '0 0 12px', lineHeight: 1.55 }}>
+          {/* The board page explains the steps itself, so the compact form skips this. */}
+          {(!compact || isBooked) && <p style={{ fontSize: '0.875rem', color: '#475569', margin: '0 0 12px', lineHeight: 1.55 }}>
             {isBooked
               ? 'This board is currently booked. Tell us your campaign dates and we’ll ask the owner when it is free.'
               : 'Tell us your campaign dates. The media owner replies with availability and a price, and our team helps you complete the booking.'}
-          </p>
+          </p>}
           <button type="button" onClick={start} style={primary}>Request this location</button>
         </>
       ) : viewer.kind === 'anon' ? (

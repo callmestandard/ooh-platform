@@ -15,6 +15,7 @@ import SiteHeader from '@/components/public/SiteHeader';
 import WhatsAppButton from '@/components/WhatsAppButton';
 import SaveButton from '@/components/shortlist/SaveButton';
 import { track } from '@/lib/track';
+import { sinceText } from '@/lib/owner-links';
 import ShortlistTray from '@/components/shortlist/ShortlistTray';
 import Board3DMap from '@/components/map/Board3DMapLoader';
 import type { NearbyBoard } from '@/components/map/Board3DMap';
@@ -39,6 +40,7 @@ type Board = {
   area: string | null;
   verification_status: string | null;
   last_verified_at: string | null;
+  availability_checked_at?: string | null;
   facing_deg?: number | null;
 };
 
@@ -67,6 +69,7 @@ const CHECK = 'M20 6L9 17l-5-5';
 export default function PublicBoardPage() {
   // Accepts "/boards/<id>" and the readable "/boards/<name>-<city>-<id>".
   const id = boardIdFromParam(useParams().id);
+  const [now] = useState(() => Date.now());
   const [board, setBoard] = useState<Board | null>(null);
   const [activeListing, setActiveListing] = useState<ActiveListing>(null);
   const [nearby, setNearby] = useState<NearbyBoard[]>([]);
@@ -171,6 +174,11 @@ export default function PublicBoardPage() {
     { label: 'Verification', value: verifiedOn ? `${VERIFICATION_META[verified].label} · ${verifiedOn}` : VERIFICATION_META[verified].label },
   ].filter(Boolean) as { label: string; value: string }[];
 
+  // Shown only when the owner confirmed the board in the last two weeks.
+  const checkedDays = board.availability_checked_at ? Math.floor((now - new Date(board.availability_checked_at).getTime()) / 86_400_000) : null;
+  const fresh = board.status === 'available' && checkedDays != null && checkedDays <= 14
+    ? `Confirmed free by the owner · ${sinceText(board.availability_checked_at)}` : null;
+
   const priceBlock = (
     <div>
       <p className="bp-eyebrow">{effectiveRate ? 'Asking rate' : guide ? 'Guide price' : 'Price'}</p>
@@ -180,7 +188,10 @@ export default function PublicBoardPage() {
           : 'On request'}
       </p>
       {!effectiveRate && <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: '#64748B' }}>
-        {guide ? 'A guide from the owner’s rate card. The owner confirms the final price when you request it.' : <>Set by the board&apos;s owner. Request it to get a quote.</>}
+        {guide ? 'From the owner’s rate card. Your quote confirms the final price.' : <>Set by the board&apos;s owner. Request it to get a quote.</>}
+      </p>}
+      {fresh && <p data-fresh style={{ margin: '10px 0 0', display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.8125rem', fontWeight: 600, color: '#047857' }}>
+        <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', flexShrink: 0 }} />{fresh}
       </p>}
     </div>
   );
@@ -210,11 +221,17 @@ export default function PublicBoardPage() {
         .bp-mobilebar { display: none; }
         .bp-mobile-only { display: none; }
         @media (max-width: 900px) {
-          .bp-wrap { padding: 0 0 110px; }
-          .bp-grid { grid-template-columns: 1fr; gap: 0; }
-          .bp-side { position: static; padding: 0 16px; margin-top: -8px; }
-          .bp-main > * { margin-left: 16px; margin-right: 16px; }
-          .bp-main > .bp-gallery { margin: 0; }
+          .bp-wrap { padding: 0 0 104px; }
+          /* One column in reading order: photos, title, price and request, then the rest. */
+          .bp-grid { display: flex; flex-direction: column; align-items: stretch; gap: 22px; }
+          .bp-main { display: contents !important; }
+          .bp-main > * { margin-left: 16px; margin-right: 16px; order: 4; }
+          .bp-main > .bp-gallery { margin: 0; order: 1; }
+          .bp-main > .bp-mobile-only { order: 2; margin-top: -4px; }
+          .bp-side { order: 3; position: static; padding: 0 16px; }
+          .bp-side-note { display: none; }
+          .bp-bar-price { white-space: nowrap; }
+          .bp-facts { grid-template-columns: 1fr 1fr; }
           .bp-gallery-main { border-radius: 0 !important; aspect-ratio: 4 / 3 !important; }
           .bp-thumbs { padding: 0 16px; }
           .bp-desktop-only { display: none !important; }
@@ -296,7 +313,7 @@ export default function PublicBoardPage() {
                 ) : (
                   <div className="bp-card" style={{ color: '#64748B', fontSize: '0.875rem' }}>The exact map location hasn&apos;t been added yet. {address ? `Address: ${address}.` : ''}</div>
                 )}
-                {hasPin && <p style={{ margin: '8px 2px 0', fontSize: '0.75rem', color: '#94A3B8' }}>3D model is drawn to the listed size. Drag to look around; use two fingers on a phone.</p>}
+                {hasPin && <p style={{ margin: '8px 2px 0', fontSize: '0.75rem', color: '#94A3B8' }}>Drag to look around. The 3D board is drawn to its listed size.</p>}
               </section>
 
               {/* Details */}
@@ -350,10 +367,9 @@ export default function PublicBoardPage() {
                   <button type="button" onClick={shareBoard} className="bp-ghost">
                     <Icon d={copied ? CHECK : SHARE} size={14} /> {copied ? 'Link copied' : 'Share'}
                   </button>
-                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="bp-ghost"><Icon d={PIN} size={14} /> Directions</a>
                 </div>
               </div>
-              <p style={{ margin: 0, fontSize: '0.75rem', color: '#94A3B8', textAlign: 'center' }}>Listed by its media owner on OOH Platform</p>
+              <p className="bp-side-note" style={{ margin: 0, fontSize: '0.75rem', color: '#94A3B8', textAlign: 'center' }}>Listed by its media owner on OOH Platform</p>
             </aside>
           </div>
         </div>
@@ -362,10 +378,9 @@ export default function PublicBoardPage() {
         <div className="bp-mobilebar">
           <div style={{ minWidth: 0, flex: 1 }}>
             <p style={{ margin: 0, fontSize: '0.75rem', color: '#64748B' }}>{effectiveRate ? 'Asking rate' : guide ? 'Guide price' : 'Price'}</p>
-            <p style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>{effectiveRate ? `${formatNaira(effectiveRate)}/mo` : guide ? `${guideText(guide)}/mo` : 'On request'}</p>
+            <p className="bp-bar-price" style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>{effectiveRate ? `${formatNaira(effectiveRate)}/mo` : guide ? `${guideText(guide)}/mo` : 'On request'}</p>
           </div>
-          <SaveButton boardId={board.id} name={name} />
-          <button type="button" onClick={openRequest} className="bp-primary bp-btn" style={{ width: 'auto', padding: '13px 20px' }}>
+          <button type="button" onClick={openRequest} className="bp-primary bp-btn" style={{ width: 'auto', padding: '13px 20px', whiteSpace: 'nowrap', flexShrink: 0 }}>
             {isBooked ? 'Request dates' : 'Request this location'}
           </button>
         </div>
