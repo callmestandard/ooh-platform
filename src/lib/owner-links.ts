@@ -7,9 +7,19 @@
 
 export type OwnerBoardStatus = 'available' | 'booked' | 'unavailable';
 
+/** A correction the owner sent for a board (056). It waits for our team. */
+export type OwnerBoardChanges = { name?: string; area?: string; address?: string; width?: number; height?: number; illuminated?: boolean };
+export type OwnerBoardEdit = {
+  changes: OwnerBoardChanges; photo_url: string | null; note: string | null;
+  status: 'pending' | 'applied' | 'dismissed'; updated_at?: string;
+};
+
 export type OwnerLinkBoard = {
   id: string; name: string; area: string | null; city: string | null; format: string | null; photo: string | null;
   status: OwnerBoardStatus | string; available_from: string | null; checked_at: string | null;
+  // From 056 on:
+  address?: string | null; width?: number | null; height?: number | null; illuminated?: boolean | null;
+  photos?: string[]; edit?: OwnerBoardEdit | null;
 };
 
 export type OwnerLinkReply = {

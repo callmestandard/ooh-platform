@@ -31,6 +31,14 @@ type PendingReply = {
   } | null;
 };
 
+/** A correction an owner sent from their link (056), with what the listing says now. */
+type BoardEdit = {
+  board_id: string; owner_key: string; owner_name: string | null; updated_at: string;
+  changes: { name?: string; area?: string; address?: string; width?: number; height?: number; illuminated?: boolean };
+  photo_url: string | null; note: string | null;
+  now: { name: string; area: string | null; city: string | null; address: string | null; width: number | null; height: number | null; illuminated: boolean | null; photo: string | null };
+};
+
 const naira = (n: number) => '₦' + Math.round(n).toLocaleString('en-NG');
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const companyOf = (r: PendingReply['request']) => {
@@ -42,6 +50,7 @@ export default function NeedsCheckingPage() {
   const role = useDashboardRole();
   const [owners, setOwners] = useState<Owner[] | null>(null);
   const [replies, setReplies] = useState<PendingReply[]>([]);
+  const [boardEdits, setBoardEdits] = useState<BoardEdit[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
@@ -55,6 +64,9 @@ export default function NeedsCheckingPage() {
     setError(null);
     setOwners((o.data ?? []) as Owner[]);
     setReplies(((r.data ?? []) as unknown) as PendingReply[]);
+    // Until migration 056 is run this simply stays empty.
+    const e = await supabase.rpc('admin_owner_board_edits');
+    setBoardEdits(e.error ? [] : ((e.data ?? []) as BoardEdit[]));
   }
 
   useEffect(() => {
@@ -83,7 +95,7 @@ export default function NeedsCheckingPage() {
       {error && <div className="nc-card nc-error">{error}</div>}
 
       <div className="nc-stats">
-        <div className={replies.length ? 'is-hot' : ''}><strong>{replies.length}</strong><span>owner answer{replies.length !== 1 ? 's' : ''} to check</span></div>
+        <div className={replies.length + boardEdits.length ? 'is-hot' : ''}><strong>{replies.length + boardEdits.length}</strong><span>owner answer{replies.length + boardEdits.length !== 1 ? 's' : ''} and correction{replies.length + boardEdits.length !== 1 ? 's' : ''} to check</span></div>
         <div className={waiting ? 'is-warm' : ''}><strong>{waiting}</strong><span>request{waiting !== 1 ? 's' : ''} waiting on owners</span></div>
         <div className={stale ? 'is-warm' : ''}><strong>{stale}<small>/{total}</small></strong><span>boards not confirmed in {CHECK_EVERY_DAYS} days</span></div>
       </div>
@@ -92,6 +104,14 @@ export default function NeedsCheckingPage() {
         <section className="nc-sec" data-replies>
           <h2>Owner answers to check</h2>
           {replies.map(x => <ReplyCard key={x.request_id} x={x} ownerName={nameOf(x.owner_key)} onDone={refresh} />)}
+        </section>
+      )}
+
+      {boardEdits.length > 0 && (
+        <section className="nc-sec" data-board-edits>
+          <h2>Board corrections from owners</h2>
+          <p className="nc-hint">Buyers see a correction only after you apply it. To change more than the owner sent, apply it and then edit the board in the inventory.</p>
+          {boardEdits.map(x => <EditCard key={x.board_id} x={x} onDone={refresh} />)}
         </section>
       )}
 
@@ -233,6 +253,73 @@ function OwnerRow({ o, onChanged }: { o: Owner; onChanged: () => Promise<void> }
   );
 }
 
+function EditCard({ x, onDone }: { x: BoardEdit; onDone: () => Promise<void> }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const c = x.changes ?? {};
+  const lit = (v: boolean | null | undefined) => (v == null ? 'not set' : v ? 'lit at night' : 'not lit');
+  const rows: [string, string, string][] = [];
+  if (c.name != null) rows.push(['Name', x.now.name, c.name]);
+  if (c.area != null) rows.push(['Area', x.now.area || 'not set', c.area || 'none']);
+  if (c.address != null) rows.push(['Address', x.now.address || 'not set', c.address]);
+  if (c.width != null) rows.push(['Width', x.now.width != null ? `${x.now.width}m` : 'not set', `${c.width}m`]);
+  if (c.height != null) rows.push(['Height', x.now.height != null ? `${x.now.height}m` : 'not set', `${c.height}m`]);
+  if (c.illuminated != null) rows.push(['Lighting', lit(x.now.illuminated), lit(c.illuminated)]);
+
+  async function decide(apply: boolean) {
+    if (!apply && !window.confirm('Dismiss this correction? The listing stays as it is.')) return;
+    setBusy(apply ? 'apply' : 'dismiss'); setErr(null);
+    const { error } = await supabase.rpc('admin_decide_owner_board_edit', { p_board_id: x.board_id, p_apply: apply });
+    setBusy(null);
+    if (error) { setErr(error.message); return; }
+    await onDone();
+  }
+
+  return (
+    <article className="nc-card nc-reply" data-edit-card>
+      <div className="nc-reply-main">
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p className="nc-title">{x.now.name}</p>
+          <p className="nc-meta">{[x.now.area, x.now.city].filter(Boolean).join(', ') || 'No area'} · sent {sinceText(x.updated_at)} by {x.owner_name ?? 'the owner'}</p>
+          {x.photo_url && (
+            <div className="nc-photos">
+              <figure>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {x.now.photo ? <img src={x.now.photo} alt="Photo on the listing now" /> : <span>No photo</span>}
+                <figcaption>Now</figcaption>
+              </figure>
+              <span className="nc-arrow" aria-hidden="true">→</span>
+              <figure className="is-new">
+                <a href={x.photo_url} target="_blank" rel="noopener noreferrer" title="Open the full photo">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={x.photo_url} alt="New photo from the owner" />
+                </a>
+                <figcaption>New main photo</figcaption>
+              </figure>
+            </div>
+          )}
+          {rows.length > 0 && (
+            <dl className="nc-diff">
+              {rows.map(([label, was, next]) => (
+                <div key={label}><dt>{label}</dt><dd><s>{was}</s><b>{next}</b></dd></div>
+              ))}
+            </dl>
+          )}
+          {x.note && <p className="nc-note">Note: {x.note}</p>}
+        </div>
+      </div>
+      <div className="nc-reply-act">
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className="nc-btn" onClick={() => decide(true)} disabled={!!busy} data-apply-edit>{busy === 'apply' ? 'Applying…' : rows.length || x.photo_url ? 'Apply to listing' : 'Mark as done'}</button>
+          <button type="button" className="nc-btn-2" onClick={() => decide(false)} disabled={!!busy}>Dismiss</button>
+        </div>
+        <Link href="/dashboard/admin?tab=inventory" className="nc-btn-2">Open inventory</Link>
+        {err && <p className="nc-err" style={{ margin: 0 }}>{err}</p>}
+      </div>
+    </article>
+  );
+}
+
 function ReplyCard({ x, ownerName, onDone }: { x: PendingReply; ownerName: string; onDone: () => Promise<void> }) {
   const [rate, setRate] = useState(x.quoted_rate ? String(x.quoted_rate) : '');
   const [busy, setBusy] = useState<string | null>(null);
@@ -323,6 +410,19 @@ const CSS = `
 .nc-said { font-size: .875rem; margin: 0; }
 .nc-said.is-yes strong { color: #047857; } .nc-said.is-no strong { color: #B91C1C; }
 .nc-note { font-size: .8125rem; color: #475569; background: #F8FAFC; border-radius: 8px; padding: 6px 9px; margin: 6px 0 0; }
+.nc-photos { display: flex; align-items: center; gap: 10px; margin: 8px 0 4px; }
+.nc-photos figure { margin: 0; width: 132px; }
+.nc-photos img, .nc-photos figure > span { width: 132px; height: 92px; border-radius: 10px; object-fit: cover; display: block; background: #EEF2F7; }
+.nc-photos figure > span { display: grid; place-items: center; font-size: .75rem; color: #94A3B8; }
+.nc-photos figure.is-new img { box-shadow: 0 0 0 2px #1B4F8A; }
+.nc-photos figcaption { font-size: .6875rem; font-weight: 600; color: #64748B; margin-top: 4px; }
+.nc-arrow { color: #94A3B8; font-size: 1.125rem; margin-bottom: 18px; }
+.nc-diff { margin: 8px 0 0; display: grid; gap: 4px; }
+.nc-diff div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 10px; font-size: .8125rem; }
+.nc-diff dt { color: #64748B; }
+.nc-diff dd { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
+.nc-diff s { color: #94A3B8; overflow-wrap: anywhere; }
+.nc-diff b { font-weight: 700; color: #0F172A; overflow-wrap: anywhere; }
 .nc-price { display: flex; flex-direction: column; gap: 3px; font-size: .6875rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: .04em; }
 .nc-price input { width: 170px; height: 36px; border-radius: 9px; border: 1px solid #CBD5E1; padding: 0 10px; font-family: inherit; font-size: .9375rem; font-weight: 700; color: #0F172A; text-align: right; }
 .nc-price em { font-style: normal; text-transform: none; letter-spacing: 0; color: #64748B; text-align: right; font-weight: 500; }

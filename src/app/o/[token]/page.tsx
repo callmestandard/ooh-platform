@@ -12,7 +12,7 @@ import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { boardFormatLabel } from '@/lib/board-formats';
 import { teamWhatsAppLink } from '@/lib/public-links';
-import { isStale, sinceText, type OwnerBoardStatus, type OwnerLinkBoard, type OwnerLinkReply, type OwnerLinkRequest, type OwnerLinkView } from '@/lib/owner-links';
+import { isStale, sinceText, type OwnerBoardChanges, type OwnerBoardEdit, type OwnerBoardStatus, type OwnerLinkBoard, type OwnerLinkReply, type OwnerLinkRequest, type OwnerLinkView } from '@/lib/owner-links';
 
 type Edit = { status: OwnerBoardStatus; from: string };
 
@@ -22,6 +22,24 @@ const naira = (n: number) => '₦' + Math.round(n).toLocaleString('en-NG');
 const months = (a: string, b: string) => Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / (30.4 * 86_400_000)));
 const asStatus = (s: string): OwnerBoardStatus => (s === 'booked' || s === 'unavailable' ? s : 'available');
 const friendly = (m: string) => m.replace(/^.*?ERROR:\s*/, '');
+const sizeText = (b: OwnerLinkBoard) => (b.width && b.height ? `${b.width}m × ${b.height}m` : 'Not set');
+const litText = (v: boolean | null | undefined) => (v == null ? 'Not set' : v ? 'Lit at night' : 'Not lit');
+
+/** Shrinks a phone photo to at most 1600px so it uploads quickly on mobile data. */
+async function shrinkPhoto(file: File): Promise<Blob> {
+  try {
+    const img = await createImageBitmap(file);
+    const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>(done => canvas.toBlob(done, 'image/jpeg', 0.82));
+    return blob ?? file;
+  } catch {
+    return file;
+  }
+}
 
 export default function OwnerLinkPage() {
   const { token } = useParams<{ token: string }>();
@@ -31,6 +49,7 @@ export default function OwnerLinkPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +102,11 @@ export default function OwnerLinkPage() {
     setSavedCount(Number(data) || updates.length);
   }
 
+  function onCorrected(id: string, edit: OwnerBoardEdit) {
+    setView(v => v && { ...v, boards: v.boards.map(b => (b.id === id ? { ...b, edit } : b)) });
+  }
+  const openBoard = boards.find(b => b.id === openId) ?? null;
+
   function onReplied(id: string, reply: OwnerLinkReply) {
     setView(v => v && { ...v, requests: v.requests.map(r => (r.id === id ? { ...r, reply } : r)) });
   }
@@ -124,7 +148,7 @@ export default function OwnerLinkPage() {
 
             <section className="ol-sec" data-boards>
               <h2>Your boards ({boards.length})</h2>
-              <p className="ol-sec-sub">Is each board free, booked or off right now? Change any that are wrong, then confirm.</p>
+              <p className="ol-sec-sub">Is each board free, booked or off right now? Change any that are wrong, then confirm. Tap a board to see its photo or fix its details.</p>
               {boards.length === 0 && <p className="ol-empty">No boards are listed for you yet. Message our team to add them.</p>}
               <ul className="ol-boards">
                 {boards.map(b => {
@@ -132,17 +156,20 @@ export default function OwnerLinkPage() {
                   const old = isStale(b.checked_at);
                   return (
                     <li key={b.id} className="ol-board" data-owner-board>
-                      <div className="ol-board-top">
+                      <button type="button" className="ol-board-top ol-open" onClick={() => setOpenId(b.id)} aria-label={`See photo and details of ${b.name}`} data-open-board>
                         <span className="ol-thumb">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          {b.photo ? <img src={b.photo} alt="" loading="lazy" /> : null}
+                          {b.photo ? <img src={b.photo} alt="" loading="lazy" /> : <span className="ol-nophoto">No photo</span>}
                         </span>
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <p className="ol-bname">{b.name}</p>
-                          <p className="ol-bmeta">{[b.area, b.city].filter(Boolean).join(', ') || '—'} · {boardFormatLabel(b.format)}</p>
-                          <p className={`ol-checked${old ? ' is-old' : ''}`}>{b.checked_at ? `Confirmed ${sinceText(b.checked_at)}` : 'Not confirmed yet'}</p>
-                        </div>
-                      </div>
+                        <span style={{ minWidth: 0, flex: 1, display: 'block' }}>
+                          <span className="ol-bname">{b.name}</span>
+                          <span className="ol-bmeta">{[b.area, b.city].filter(Boolean).join(', ') || '—'} · {boardFormatLabel(b.format)}</span>
+                          <span className={`ol-checked${old ? ' is-old' : ''}`}>{b.checked_at ? `Confirmed ${sinceText(b.checked_at)}` : 'Not confirmed yet'}</span>
+                          {b.edit?.status === 'pending' && <span className="ol-chip" data-edit-chip>Correction sent · with our team</span>}
+                          {b.edit?.status === 'applied' && <span className="ol-chip is-done">Correction applied</span>}
+                        </span>
+                        <svg className="ol-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18" /></svg>
+                      </button>
                       <div className="ol-seg" role="radiogroup" aria-label={`Status of ${b.name}`}>
                         {([['available', 'Free'], ['booked', 'Booked'], ['unavailable', 'Off']] as const).map(([v, t]) => (
                           <button key={v} type="button" role="radio" aria-checked={e.status === v} className={e.status === v ? `is-on is-${v}` : ''}
@@ -179,6 +206,169 @@ export default function OwnerLinkPage() {
           </>
         )}
       </main>
+      {openBoard && <BoardSheet key={openBoard.id} token={token} b={openBoard} onClose={() => setOpenId(null)} onSent={onCorrected} />}
+    </div>
+  );
+}
+
+/** A board opened from the list: its photos and details, and a form to correct them. */
+function BoardSheet({ token, b, onClose, onSent }: { token: string; b: OwnerLinkBoard; onClose: () => void; onSent: (id: string, edit: OwnerBoardEdit) => void }) {
+  const photos = b.photos?.length ? b.photos : b.photo ? [b.photo] : [];
+  const waiting = b.edit?.status === 'pending' ? b.edit : null;
+  const [at, setAt] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(waiting?.changes.name ?? b.name);
+  const [area, setArea] = useState(waiting?.changes.area ?? b.area ?? '');
+  const [address, setAddress] = useState(waiting?.changes.address ?? b.address ?? '');
+  const [width, setWidth] = useState(String(waiting?.changes.width ?? b.width ?? ''));
+  const [height, setHeight] = useState(String(waiting?.changes.height ?? b.height ?? ''));
+  const lit0 = waiting?.changes.illuminated ?? b.illuminated;
+  const [lit, setLit] = useState<'' | 'yes' | 'no'>(lit0 == null ? '' : lit0 ? 'yes' : 'no');
+  const [note, setNote] = useState(waiting?.note ?? '');
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+  }, [onClose]);
+
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+
+  function pick(f: File | undefined) {
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { setErr('Choose a photo.'); return; }
+    setErr(null);
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+  }
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    if (name.trim().length < 2) { setErr('Add the board name.'); return; }
+    setBusy(true); setErr(null);
+
+    let photoUrl: string | null = waiting?.photo_url ?? null;
+    if (file) {
+      const body = new FormData();
+      body.append('token', token);
+      body.append('boardId', b.id);
+      body.append('file', new File([await shrinkPhoto(file)], 'photo.jpg', { type: 'image/jpeg' }));
+      const res = await fetch('/api/owner-link/photo', { method: 'POST', body }).catch(() => null);
+      const json = await res?.json().catch(() => ({}));
+      if (!res?.ok || !json?.url) { setBusy(false); setErr(json?.error ?? 'The photo could not be sent. Check your connection and try again.'); return; }
+      photoUrl = json.url as string;
+    }
+
+    const changes: Record<string, unknown> = { name, area, address, width, height };
+    if (lit) changes.illuminated = lit === 'yes';
+    const { error } = await supabase.rpc('owner_link_suggest_edit', { p_token: token, p_board_id: b.id, p_changes: changes, p_photo_url: photoUrl, p_note: note });
+    setBusy(false);
+    if (error) {
+      setErr(error.message.includes('owner_link_suggest_edit') ? 'Corrections are not switched on yet. Please message our team.' : friendly(error.message));
+      return;
+    }
+    // What we show back is what differs from the listing.
+    const diff: OwnerBoardChanges = {};
+    if (name.trim() !== b.name) diff.name = name.trim();
+    if (area.trim() !== (b.area ?? '')) diff.area = area.trim();
+    if (address.trim() && address.trim() !== (b.address ?? '')) diff.address = address.trim();
+    if (Number(width) > 0 && Number(width) !== Number(b.width)) diff.width = Number(width);
+    if (Number(height) > 0 && Number(height) !== Number(b.height)) diff.height = Number(height);
+    if (lit && (lit === 'yes') !== b.illuminated) diff.illuminated = lit === 'yes';
+    onSent(b.id, { changes: diff, photo_url: photoUrl, note: note.trim() || null, status: 'pending' });
+    setDone(true);
+    setEditing(false);
+  }
+
+  const shown = preview ?? (editing && waiting?.photo_url ? waiting.photo_url : photos[at]);
+
+  return (
+    <div className="ol-sheet-bg" onClick={e => { if (e.target === e.currentTarget) onClose(); }} data-board-sheet>
+      <div className="ol-sheet" role="dialog" aria-modal="true" aria-label={b.name}>
+        <div className="ol-sheet-photo">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {shown ? <img src={shown} alt={b.name} /> : <span className="ol-nophoto is-big">No photo yet</span>}
+          <button type="button" className="ol-x" onClick={onClose} aria-label="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
+          </button>
+          {editing && (
+            <label className="ol-photo-btn">
+              <input type="file" accept="image/*" onChange={e => pick(e.target.files?.[0])} data-photo-input />
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></svg>
+              {preview || waiting?.photo_url ? 'Choose another photo' : shown ? 'Change photo' : 'Add a photo'}
+            </label>
+          )}
+        </div>
+        {!editing && photos.length > 1 && (
+          <div className="ol-thumbs">
+            {photos.map((src, i) => (
+              <button key={src + i} type="button" className={i === at ? 'is-on' : ''} onClick={() => setAt(i)} aria-label={`Photo ${i + 1}`}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt="" loading="lazy" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="ol-sheet-body">
+          {!editing ? (
+            <>
+              <h2 className="ol-sheet-h">{b.name}</h2>
+              <p className="ol-bmeta" style={{ marginTop: 4 }}>{[b.area, b.city].filter(Boolean).join(', ') || '—'} · {boardFormatLabel(b.format)}</p>
+
+              {(done || waiting) && (
+                <p className="ol-sent" role="status" data-edit-sent>
+                  <strong>Correction sent.</strong> Our team will check it, then buyers will see it.
+                </p>
+              )}
+              {b.edit?.status === 'applied' && !done && <p className="ol-sent is-done">Your last correction was applied. Thank you.</p>}
+
+              <dl className="ol-facts">
+                <div><dt>Address</dt><dd>{b.address || 'Not set'}</dd></div>
+                <div><dt>Size</dt><dd>{sizeText(b)}</dd></div>
+                <div><dt>Lighting</dt><dd>{litText(b.illuminated)}</dd></div>
+                <div><dt>Photos</dt><dd>{photos.length || 'None'}</dd></div>
+              </dl>
+
+              <button type="button" className="ol-btn-2 ol-wide" onClick={() => { setDone(false); setEditing(true); }} data-edit-board>
+                {waiting || done ? 'Change your correction' : 'Fix details or change the photo'}
+              </button>
+            </>
+          ) : (
+            <form onSubmit={send}>
+              <h2 className="ol-sheet-h" style={{ marginBottom: 12 }}>Fix this board</h2>
+              <label className="ol-lbl" htmlFor="ed-name">Board name</label>
+              <input id="ed-name" className="ol-field" value={name} maxLength={200} onChange={e => setName(e.target.value)} />
+              <label className="ol-lbl" htmlFor="ed-area">Area</label>
+              <input id="ed-area" className="ol-field" value={area} maxLength={120} onChange={e => setArea(e.target.value)} placeholder="e.g. Ikeja" />
+              <label className="ol-lbl" htmlFor="ed-address">Address or landmark</label>
+              <input id="ed-address" className="ol-field" value={address} maxLength={300} onChange={e => setAddress(e.target.value)} placeholder="e.g. Allen Avenue, by the roundabout" />
+              <div className="ol-2">
+                <div><label className="ol-lbl" htmlFor="ed-w">Width (m)</label><input id="ed-w" className="ol-field" inputMode="decimal" value={width} onChange={e => setWidth(e.target.value.replace(/[^\d.]/g, ''))} /></div>
+                <div><label className="ol-lbl" htmlFor="ed-h">Height (m)</label><input id="ed-h" className="ol-field" inputMode="decimal" value={height} onChange={e => setHeight(e.target.value.replace(/[^\d.]/g, ''))} /></div>
+              </div>
+              <span className="ol-lbl">Lit at night?</span>
+              <div className="ol-choice">
+                <button type="button" className={lit === 'yes' ? 'is-pick' : ''} onClick={() => setLit('yes')} aria-pressed={lit === 'yes'}>Yes</button>
+                <button type="button" className={lit === 'no' ? 'is-pick' : ''} onClick={() => setLit('no')} aria-pressed={lit === 'no'}>No</button>
+              </div>
+              <label className="ol-lbl" htmlFor="ed-note">Anything else we should fix? (optional)</label>
+              <input id="ed-note" className="ol-field" value={note} maxLength={500} onChange={e => setNote(e.target.value)} placeholder="e.g. the map pin is on the wrong side of the road" />
+              {err && <p role="alert" className="ol-err">{err}</p>}
+              <button type="submit" className="ol-btn ol-wide" disabled={busy} data-send-edit>{busy ? 'Sending…' : 'Send to our team'}</button>
+              <button type="button" className="ol-link ol-cancel" onClick={() => { setEditing(false); setErr(null); }} disabled={busy}>Cancel</button>
+              <p className="ol-hint" style={{ textAlign: 'center' }}>Our team checks every correction before buyers see it.</p>
+            </form>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -294,6 +484,45 @@ const CSS = `
 .ol-thumb { width: 64px; height: 64px; border-radius: 10px; background: #EEF2F7; overflow: hidden; flex-shrink: 0; display: block; }
 .ol-thumb.is-sm { width: 52px; height: 52px; }
 .ol-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ol-open { width: 100%; background: none; border: none; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 10px; }
+.ol-open:focus-visible { outline: 2px solid #1B4F8A; outline-offset: 3px; }
+.ol-open .ol-bname, .ol-open .ol-bmeta, .ol-open .ol-checked { display: block; }
+.ol-open .ol-bname { display: -webkit-box; }
+.ol-chev { color: #CBD5E1; flex-shrink: 0; }
+.ol-nophoto { width: 100%; height: 100%; display: grid; place-items: center; font-size: .625rem; font-weight: 600; color: #94A3B8; text-align: center; }
+.ol-nophoto.is-big { font-size: .875rem; }
+.ol-chip { display: inline-block; margin-top: 6px; font-size: .6875rem; font-weight: 700; color: #1D4ED8; background: #DBEAFE; border-radius: 999px; padding: 3px 9px; }
+.ol-chip.is-done { color: #047857; background: #D1FAE5; }
+.ol-sheet-bg { position: fixed; inset: 0; z-index: 100; background: rgba(15,23,42,.55); display: flex; align-items: flex-end; justify-content: center; }
+.ol-sheet { background: #fff; width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; border-radius: 20px 20px 0 0; animation: olUp .22s ease; overscroll-behavior: contain; }
+@keyframes olUp { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.ol-sheet-photo { position: relative; aspect-ratio: 4 / 3; background: #0F172A; display: grid; place-items: center; }
+.ol-sheet-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+.ol-sheet-photo .ol-nophoto { color: rgba(255,255,255,.55); }
+.ol-x { position: absolute; top: 12px; right: 12px; width: 38px; height: 38px; border-radius: 50%; border: none; background: rgba(255,255,255,.94); color: #0F172A; display: grid; place-items: center; cursor: pointer; box-shadow: 0 2px 10px rgba(15,23,42,.25); }
+.ol-photo-btn { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 16px; border-radius: 999px; background: rgba(255,255,255,.96); color: #0F172A; font-size: .875rem; font-weight: 700; cursor: pointer; white-space: nowrap; box-shadow: 0 4px 14px rgba(15,23,42,.3); }
+.ol-photo-btn input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.ol-photo-btn:focus-within { outline: 2px solid #1B4F8A; outline-offset: 2px; }
+.ol-thumbs { display: flex; gap: 8px; padding: 10px 16px 0; overflow-x: auto; }
+.ol-thumbs button { width: 60px; height: 44px; border-radius: 8px; overflow: hidden; padding: 0; border: 2px solid transparent; background: #EEF2F7; flex-shrink: 0; cursor: pointer; }
+.ol-thumbs button.is-on { border-color: #1B4F8A; }
+.ol-thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ol-sheet-body { padding: 16px 16px calc(20px + env(safe-area-inset-bottom)); }
+.ol-sheet-h { font-size: 1.125rem; font-weight: 800; letter-spacing: -.015em; line-height: 1.3; margin: 0; }
+.ol-facts { margin: 14px 0 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ol-facts div { background: #F8FAFC; border: 1px solid #EEF2F7; border-radius: 12px; padding: 9px 12px; min-width: 0; }
+.ol-facts div:first-child { grid-column: 1 / -1; }
+.ol-facts dt { font-size: .6875rem; font-weight: 600; color: #64748B; }
+.ol-facts dd { margin: 2px 0 0; font-size: .875rem; font-weight: 600; overflow-wrap: anywhere; }
+.ol-sent { margin: 12px 0 0; font-size: .8125rem; line-height: 1.5; color: #1E3A8A; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 12px; padding: 10px 12px; }
+.ol-sent.is-done { color: #065F46; background: #ECFDF5; border-color: #A7F3D0; }
+.ol-btn-2 { display: inline-flex; align-items: center; justify-content: center; height: 48px; padding: 0 20px; border-radius: 12px; background: #fff; color: #1B4F8A; border: 1.5px solid #BFDBFE; font-family: inherit; font-size: .9375rem; font-weight: 700; cursor: pointer; }
+.ol-choice .is-pick { background: #1B4F8A; border-color: #1B4F8A; color: #fff; }
+.ol-cancel { display: block; margin: 12px auto 0; font-size: .875rem; }
+@media (min-width: 640px) {
+  .ol-sheet-bg { align-items: center; padding: 24px; }
+  .ol-sheet { border-radius: 20px; }
+}
 .ol-bname { font-weight: 700; font-size: .9375rem; margin: 0; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .ol-bmeta { font-size: .8125rem; color: #475569; margin: 3px 0 0; line-height: 1.4; }
 .ol-bmeta strong { color: #0F172A; }
