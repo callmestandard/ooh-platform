@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { attachVisibleRates } from '@/lib/board-rates';
 import { attachGuidePrices, guideText, GUIDE_NOTE, type GuidePrice } from '@/lib/guide-prices';
 import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
+import Link from 'next/link';
 import SiteHeader from '@/components/public/SiteHeader';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 import { VerificationBadge, dimensionsText, illuminationText, locationText, verificationOf, UNKNOWN } from '@/lib/board-verification';
@@ -18,6 +19,7 @@ import WhatsAppButton from '@/components/WhatsAppButton';
 import SaveButton from '@/components/shortlist/SaveButton';
 import { track } from '@/lib/track';
 import ShortlistTray from '@/components/shortlist/ShortlistTray';
+import { sinceText } from '@/lib/owner-links';
 import type { MapBoard } from './MarketplaceMap';
 
 const MarketplaceMap = dynamic(() => import('./MarketplaceMap'), {
@@ -45,6 +47,7 @@ type Board = {
   face_count: number | null;
   status: 'available' | 'booked' | 'unavailable' | 'decommissioned';
   photo_urls: string[] | null;
+  availability_checked_at?: string | null;
   area: string | null;
   verification_status: string | null;
   latitude: number | null;
@@ -69,11 +72,6 @@ function rateText(board: Board): string {
 /** True when a monthly figure (exact or guide) is shown. */
 function hasPrice(board: Board): boolean {
   return !!effectiveRate(board) || !!board.guide;
-}
-
-/** "per month" or "per month · guide". */
-function priceSub(board: Board): string {
-  return effectiveRate(board) ? 'per month' : 'per month · guide price';
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -112,6 +110,14 @@ const BUDGET_BANDS = [
 
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+/** "Confirmed free · 3 days ago" when the owner confirmed this board recently. */
+function freshText(board: Board): string | null {
+  if (board.status !== 'available' || !board.availability_checked_at) return null;
+  const days = Math.floor((Date.now() - new Date(board.availability_checked_at).getTime()) / 86_400_000);
+  if (isNaN(days) || days > 14) return null;
+  return `Confirmed free · ${sinceText(board.availability_checked_at)}`;
+}
 
 function formatNaira(n: number) {
   if (n >= 1_000_000) return `₦${(n / 1_000_000).toFixed(1)}M`;
@@ -348,6 +354,7 @@ function MarketplaceContent() {
   const [verifyFilter, setVerifyFilter] = useState('all');
   const [view, setView]             = useState<'grid' | 'map'>('grid');
   const [selected, setSelected]     = useState<Board | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   useEffect(() => { if (selected) track('board_view', selected.id); }, [selected]);
 
   // Deep links: /marketplace?format=unipole (formats guide), ?state=Oyo and
@@ -385,7 +392,7 @@ function MarketplaceContent() {
       const [{ data }, { data: listingsData }] = await Promise.all([
         supabase
           .from('boards')
-          .select('id, name, address, city, state, area, format, asking_rate, width, height, illuminated, face_count, status, photo_urls, verification_status, latitude, longitude')
+          .select('id, name, address, city, state, area, format, asking_rate, width, height, illuminated, face_count, status, photo_urls, verification_status, latitude, longitude, availability_checked_at')
           .order('created_at', { ascending: false }),
         supabase.from('listings').select('id, board_id, sell_price, agent_id, board_authorizations(owner_verified)').eq('status', 'active'),
       ]);
@@ -454,6 +461,8 @@ function MarketplaceContent() {
   const filtersActive = !!search || stateFilter !== 'all' || areaFilter !== 'all' || formatFilter !== 'all'
     || kindFilter !== 'all' || verifyFilter !== 'all' || statusFilter !== 'available' || priceMax !== Infinity;
 
+  const filterCount = [stateFilter !== 'all', areaFilter !== 'all', formatFilter !== 'all', kindFilter !== 'all', verifyFilter !== 'all', statusFilter !== 'available', priceMax !== Infinity].filter(Boolean).length;
+
   const availableCount = boards.filter(b => b.status === 'available').length;
 
   // Booked boards can still be requested for future dates.
@@ -478,6 +487,7 @@ function MarketplaceContent() {
         .mk-select { padding: 7px 26px 7px 10px; border-radius: 8px; border: 1px solid #E2E8F0; font-size: 0.8125rem; color: #374151;
           background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394A3B8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center;
           appearance: none; -webkit-appearance: none; font-family: inherit; cursor: pointer; outline: none; max-width: 100%; }
+        @media (min-width: 641px) { .mk-select { max-width: 200px; } }
         .mk-select:focus { border-color: #1B4F8A; box-shadow: 0 0 0 3px rgba(27,79,138,0.1); }
         .mk-select.on { border-color: #1B4F8A; color: #1B4F8A; font-weight: 600; background-color: #EFF6FF; }
         .mk-select:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -487,14 +497,57 @@ function MarketplaceContent() {
         .mk-seg button:hover { color: #0F172A; }
         .mk-seg button.on { background: #1B4F8A; color: #fff; box-shadow: 0 1px 3px rgba(27,79,138,0.3); }
         .mk-map { height: min(72vh, 680px); }
+        .mk-filter-btn { display: none; align-items: center; gap: 7px; height: 36px; padding: 0 13px; border-radius: 10px; border: 1px solid #E2E8F0; background: #fff; color: #0F172A; font-family: inherit; font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+        .mk-filter-btn.on { border-color: #1B4F8A; color: #1B4F8A; background: #EFF6FF; }
+        .mk-filter-btn b { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #1B4F8A; color: #fff; font-size: 0.6875rem; font-weight: 700; display: inline-grid; place-items: center; }
+        .mk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
+        .bc { display: block; text-decoration: none; color: inherit; background: #fff; border: 1px solid #E8EDF2; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+        .bc-photo { position: relative; height: 170px; background: #F1F5F9; overflow: hidden; }
+        .bc-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+        .bc-mock { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px 28px; }
+        .bc-mock svg { width: auto !important; max-width: 100%; height: 100%; }
+        .bc-save { position: absolute; top: 10px; right: 10px; z-index: 2; }
+        .bc-status { position: absolute; left: 10px; bottom: 10px; z-index: 2; }
+        .bc-body { padding: 14px 16px 15px; min-width: 0; }
+        .bc-name { font-size: 0.9375rem; font-weight: 700; color: #0F172A; margin: 0 0 3px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .bc-place { font-size: 0.8125rem; color: #64748B; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .bc-spec { font-size: 0.75rem; color: #94A3B8; margin: 3px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .bc-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 9px; }
+        .bc-fresh { display: inline-flex; align-items: center; gap: 5px; font-size: 0.6875rem; font-weight: 600; color: #047857; white-space: nowrap; }
+        .bc-fresh::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #10B981; }
+        .bc-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; margin-top: 12px; }
+        .bc-price { font-size: 1.0625rem; font-weight: 800; color: #0F172A; margin: 0; letter-spacing: -0.02em; white-space: nowrap; line-height: 1.2; }
+        .bc-price small { font-size: 0.75rem; font-weight: 500; color: #94A3B8; letter-spacing: 0; }
+        .bc-price.none { font-size: 0.8125rem; font-weight: 600; color: #64748B; letter-spacing: 0; }
+        .bc-price-sub { font-size: 0.6875rem; color: #94A3B8; margin: 1px 0 0; }
+        .bc-go { font-size: 0.8125rem; font-weight: 600; color: #1B4F8A; white-space: nowrap; }
+        .mk-cities { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
         @media (max-width: 640px) {
-          nav { padding: 0 16px !important; }
-          .mk-nav-links { display: none !important; }
-          .mk-hero { padding: 36px 16px 28px !important; }
-          .mk-hero h1 { font-size: 1.875rem !important; }
-          .mk-body { padding: 24px 16px !important; }
-          .mk-filters .mk-select { flex: 1 1 calc(50% - 4px); }
+          .mk-hero { padding: 22px 16px 18px !important; }
+          .mk-hero h1 { font-size: 1.5rem !important; margin-bottom: 14px !important; }
+          .mk-hero h1 br { display: none; }
+          .mk-hero-sub, .mk-hero-pill { display: none !important; }
+          .mk-cities { flex-wrap: nowrap; overflow-x: auto; margin: 12px -16px 0; padding: 0 16px 2px; scrollbar-width: none; }
+          .mk-cities::-webkit-scrollbar { display: none; }
+          .mk-cities button { flex-shrink: 0; }
+          .mk-body { padding: 16px 16px 24px !important; }
+          .mk-filter-btn { display: inline-flex; }
+          .mk-filters { display: none !important; }
+          .mk-filters.open { display: flex !important; }
+          .mk-filters .mk-select { flex: 1 1 calc(50% - 4px); min-width: 0; }
           .mk-map { height: 64vh; }
+          .mk-grid { grid-template-columns: 1fr; gap: 10px; }
+          .bc { display: flex; border-radius: 14px; }
+          .bc-photo { width: 116px; height: auto; min-height: 116px; flex-shrink: 0; }
+          .bc-mock { padding: 10px; }
+          .bc-save { top: 6px; left: 6px; right: auto; transform: scale(.86); transform-origin: top left; }
+          .bc-status { left: 6px; bottom: 6px; }
+          .bc-body { padding: 10px 12px 11px; flex: 1; display: flex; flex-direction: column; }
+          .bc-name { font-size: 0.875rem; }
+          .bc-tags { margin-top: 6px; }
+          .bc-foot { margin-top: auto; padding-top: 8px; }
+          .bc-price { font-size: 0.9375rem; }
+          .bc-go { display: none; }
         }
       `}</style>
 
@@ -507,7 +560,7 @@ function MarketplaceContent() {
         padding: '52px 24px 40px',
       }} className="mk-hero">
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
-          <div style={{
+          <div className="mk-hero-pill" style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             background: 'rgba(255,255,255,0.1)', borderRadius: 999, padding: '4px 12px', marginBottom: 20,
           }}>
@@ -518,10 +571,10 @@ function MarketplaceContent() {
             fontSize: '2.5rem', fontWeight: 800, color: '#fff',
             letterSpacing: '-0.04em', lineHeight: 1.1, margin: '0 0 14px',
           }}>
-            Find the perfect billboard<br />for your campaign
+            Find a billboard{' '}<br />anywhere in Nigeria
           </h1>
-          <p style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.55)', margin: '0 0 32px', maxWidth: 480, lineHeight: 1.6 }}>
-            Browse {boards.length}+ OOH locations across Nigeria. Filter by area, format and verification, see them on a map, then request a quote in seconds.
+          <p className="mk-hero-sub" style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.6)', margin: '0 0 28px', maxWidth: 480, lineHeight: 1.6 }}>
+            Photos, locations and guide prices from the media owners. Request a board and get a quote.
           </p>
 
           {/* Search bar */}
@@ -531,7 +584,7 @@ function MarketplaceContent() {
             </svg>
             <input
               type="text"
-              placeholder="Search by name, city, or address..."
+              placeholder="Search city, area or road"
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{
@@ -545,7 +598,7 @@ function MarketplaceContent() {
           </div>
 
           {/* Quick city filters */}
-          <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+          <div className="mk-cities">
             {['all', 'Lagos', 'Abuja', 'Port Harcourt', 'Kano', 'Ibadan'].map(city => (
               <button
                 key={city}
@@ -604,6 +657,11 @@ function MarketplaceContent() {
             )}
           </div>
 
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button type="button" className={`mk-filter-btn${filterCount ? ' on' : ''}`} onClick={() => setFiltersOpen(o => !o)} aria-expanded={filtersOpen} data-filter-toggle>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+            Filters{filterCount > 0 && <b>{filterCount}</b>}
+          </button>
           <div className="mk-seg" role="tablist" aria-label="View">
             <button role="tab" aria-selected={view === 'grid'} className={view === 'grid' ? 'on' : ''} onClick={() => changeView('grid')} data-view="grid">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
@@ -614,10 +672,11 @@ function MarketplaceContent() {
               Map
             </button>
           </div>
+          </div>
         </div>
 
         {/* Filters */}
-        <div className="mk-filters" style={{
+        <div className={`mk-filters${filtersOpen ? ' open' : ''}`} style={{
           display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 20,
           background: '#fff', border: '1px solid #E8EDF2', borderRadius: 14, padding: 10,
           boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
@@ -724,83 +783,48 @@ function MarketplaceContent() {
 
         {/* Grid */}
         {!loading && filtered.length > 0 && view === 'grid' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 16 }}>
-            {filtered.map((board, i) => (
-              <div
-                key={board.id}
-                className="board-card"
-                onClick={() => setSelected(board)}
-                style={{
-                  background: '#fff', border: '1px solid #E8EDF2', borderRadius: 16,
-                  overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-                  animation: `fadeUp 0.25s ease ${i * 0.03}s both`, position: 'relative',
-                }}
-              >
-                <span style={{ position: 'absolute', top: 10, right: 10, zIndex: 2 }}>
-                  <SaveButton boardId={board.id} name={displayName(board.name)} />
-                </span>
-                {/* Photo when we have one, otherwise the format illustration */}
-                {board.photo_urls?.[0] ? (
-                  <div style={{ height: 170, overflow: 'hidden', background: '#0F172A', borderBottom: '1px solid #F1F5F9' }}>
-                    <img src={board.photo_urls[0]} alt={board.name} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          <div className="mk-grid">
+            {filtered.map((board, i) => {
+              const fresh = freshText(board);
+              const priced = hasPrice(board);
+              const spec = [FORMAT_LABELS[board.format] ?? board.format, board.width && board.height ? `${board.width}m × ${board.height}m` : null, board.illuminated ? 'Lit' : null].filter(Boolean).join(' · ');
+              return (
+                <Link
+                  key={board.id}
+                  href={boardPath(board)}
+                  className="board-card bc"
+                  style={{ animation: `fadeUp 0.25s ease ${Math.min(i, 12) * 0.03}s both` }}
+                >
+                  {/* Photo when we have one, otherwise the format illustration */}
+                  <div className="bc-photo">
+                    {board.photo_urls?.[0]
+                      ? <img src={board.photo_urls[0]} alt={board.name} loading="lazy" />
+                      : <div className="bc-mock"><BoardMockup format={board.format} illuminated={!!board.illuminated} status={board.status} /></div>}
+                    <span className="bc-save"><SaveButton boardId={board.id} name={displayName(board.name)} /></span>
+                    {board.status !== 'available' && <span className="bc-status"><StatusBadge status={board.status} /></span>}
                   </div>
-                ) : (
-                  <div style={{ background: '#F8FAFC', padding: '20px 24px 10px', borderBottom: '1px solid #F1F5F9' }}>
-                    <BoardMockup format={board.format} illuminated={!!board.illuminated} status={board.status} />
-                  </div>
-                )}
 
-                {/* Info */}
-                <div style={{ padding: '14px 16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-                    <div>
-                      <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: '0 0 3px', lineHeight: 1.3 }}>{displayName(board.name)}</p>
-                      <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: 0 }}>{[board.area, board.city].filter(Boolean).join(', ') || UNKNOWN}</p>
+                  <div className="bc-body">
+                    <p className="bc-name">{displayName(board.name)}</p>
+                    <p className="bc-place">{[board.area, board.city].filter(Boolean).join(', ') || UNKNOWN}</p>
+                    <p className="bc-spec">{spec}</p>
+                    <div className="bc-tags">
+                      {fresh ? <span className="bc-fresh" data-fresh>{fresh}</span> : <VerificationBadge status={board.verification_status} small />}
+                      {board.activeListing && <TrustBadgePill badge={board.activeListing.badge} small />}
                     </div>
-                    <StatusBadge status={board.status} />
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-                    <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#1B4F8A', background: '#EFF6FF', padding: '2px 8px', borderRadius: 999 }}>
-                      {FORMAT_LABELS[board.format] ?? board.format}
-                    </span>
-                    {board.width && board.height ? (
-                      <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#64748B', background: '#F1F5F9', padding: '2px 8px', borderRadius: 999 }}>
-                        {board.width}m × {board.height}m
-                      </span>
-                    ) : null}
-                    {board.illuminated && (
-                      <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#D97706', background: '#FFFBEB', padding: '2px 8px', borderRadius: 999 }}>
-                        Illuminated
-                      </span>
-                    )}
-                    <VerificationBadge status={board.verification_status} small />
-                    {board.activeListing && <TrustBadgePill badge={board.activeListing.badge} small />}
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <p style={{ fontSize: '1.125rem', fontWeight: 800, color: '#1B4F8A', margin: 0, letterSpacing: '-0.02em' }}>
-                        {rateText(board)}
-                      </p>
-                      {hasPrice(board) ? <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: 0 }} title={effectiveRate(board) ? undefined : GUIDE_NOTE}>{priceSub(board)}</p> : null}
+                    <div className="bc-foot">
+                      <div>
+                        <p className={`bc-price${priced ? '' : ' none'}`} title={!priced || effectiveRate(board) ? undefined : GUIDE_NOTE}>
+                          {priced ? <>{rateText(board)}<small> /mo</small></> : 'Price on request'}
+                        </p>
+                        {priced && !effectiveRate(board) && <p className="bc-price-sub">Guide price</p>}
+                      </div>
+                      <span className="bc-go">View →</span>
                     </div>
-                    {board.status === 'available' && (
-                      <button
-                        onClick={e => { e.stopPropagation(); setSelected(board); }}
-                        style={{
-                          padding: '7px 14px', background: '#1B4F8A', color: '#fff',
-                          border: 'none', borderRadius: 8, fontSize: '0.8125rem', fontWeight: 600,
-                          cursor: 'pointer', fontFamily: 'inherit',
-                        }}
-                      >
-                        View details
-                      </button>
-                    )}
                   </div>
-                </div>
-              </div>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         )}
 
@@ -834,7 +858,7 @@ function MarketplaceContent() {
                 { num: '03', title: 'Go live', body: 'Sign digitally, upload creatives, and track compliance in real time.' },
               ]).map(({ num, title, body }) => (
                 <div key={num} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: '16px' }}>
-                  <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#F59E0B', margin: '0 0 8px', letterSpacing: '0.06em' }}>{num}</p>
+                  <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#93C5FD', margin: '0 0 8px', letterSpacing: '0.06em' }}>{num}</p>
                   <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#fff', margin: '0 0 6px' }}>{title}</p>
                   <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.45)', margin: 0, lineHeight: 1.5 }}>{body}</p>
                 </div>
