@@ -11,6 +11,7 @@ import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-
 import { VerificationBadge, VERIFICATION_META, verificationOf, formatVerifiedDate, dimensionsText, UNKNOWN } from '@/lib/board-verification';
 import { boardIdFromParam, boardPath, citySlug } from '@/lib/public-links';
 import { displayName } from '@/lib/display-name';
+import SiteHeader from '@/components/public/SiteHeader';
 import WhatsAppButton from '@/components/WhatsAppButton';
 import SaveButton from '@/components/shortlist/SaveButton';
 import { track } from '@/lib/track';
@@ -227,22 +228,12 @@ export default function PublicBoardPage() {
 
       <div className="bp">
         {/* ── Header ── */}
-        <header style={{ position: 'sticky', top: 0, zIndex: 700, background: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E2E8F0' }}>
-          <div style={{ maxWidth: 1180, margin: '0 auto', padding: '11px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 9 }}>
-              <span style={{ width: 30, height: 30, background: '#1B4F8A', borderRadius: 8, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><rect x="3" y="3" width="18" height="5" rx="1.5" /><line x1="6" y1="8" x2="6" y2="21" /><line x1="18" y1="8" x2="18" y2="21" /></svg>
-              </span>
-              <span style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>OOH Platform</span>
-            </Link>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <SiteHeader zIndex={700} right={<>
               <Link href="/marketplace" className="bp-ghost" style={{ border: 'none', padding: '8px 6px' }}>All boards</Link>
               <button type="button" onClick={openRequest} className="bp-btn bp-head-cta" style={{ background: '#1B4F8A', color: '#fff', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '9px 16px', fontSize: '0.8125rem', fontWeight: 700 }}>
                 {isBooked ? 'Request future dates' : 'Request this location'}
               </button>
-            </div>
-          </div>
-        </header>
+        </>} />
 
         <div className="bp-wrap">
           {/* Breadcrumb */}

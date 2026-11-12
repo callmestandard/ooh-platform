@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { attachVisibleRates } from '@/lib/board-rates';
 import { attachGuidePrices, guideText, GUIDE_NOTE, type GuidePrice } from '@/lib/guide-prices';
 import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
-import AccountNavButtons from '@/components/layout/AccountNavButtons';
+import SiteHeader from '@/components/public/SiteHeader';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 import { VerificationBadge, dimensionsText, illuminationText, locationText, verificationOf, UNKNOWN } from '@/lib/board-verification';
 import { FORMAT_GROUPS, formatGroup } from '@/lib/board-formats';
@@ -224,26 +224,6 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Nav ────────────────────────────────────────────────────────────────────
 
-function Logo() {
-  return (
-    <svg width="120" height="28" viewBox="0 0 160 36" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="2" width="28" height="18" rx="2" fill="#1B4F8A"/>
-      <rect x="3" y="5" width="22" height="12" rx="1.5" fill="#fff"/>
-      <rect x="10" y="20" width="2.5" height="6" fill="#1B4F8A"/>
-      <rect x="15.5" y="20" width="2.5" height="6" fill="#1B4F8A"/>
-      <rect x="34" y="6" width="24" height="16" rx="2" fill="#1B4F8A"/>
-      <rect x="37" y="9" width="18" height="10" rx="1.5" fill="#fff"/>
-      <rect x="42" y="22" width="2.5" height="6" fill="#1B4F8A"/>
-      <rect x="47.5" y="22" width="2.5" height="6" fill="#1B4F8A"/>
-      <rect x="64" y="2" width="4" height="28" rx="2" fill="#1B4F8A"/>
-      <rect x="80" y="2" width="4" height="28" rx="2" fill="#1B4F8A"/>
-      <rect x="64" y="13" width="20" height="4" rx="1" fill="#1B4F8A"/>
-      <circle cx="88" cy="4" r="3" fill="#F59E0B"/>
-      <text x="98" y="20" fontFamily="Georgia, serif" fontSize="18" fontWeight="700" fill="#0F172A" letterSpacing="-0.5">OOH</text>
-      <text x="99" y="30" fontFamily="Arial, sans-serif" fontSize="6.5" fontWeight="400" fill="#94A3B8" letterSpacing="3">PLATFORM</text>
-    </svg>
-  );
-}
 
 // ── Detail Modal ───────────────────────────────────────────────────────────
 
@@ -519,24 +499,7 @@ function MarketplaceContent() {
       `}</style>
 
       {/* ── Navbar ── */}
-      <nav style={{
-        position: 'sticky', top: 0, zIndex: 100,
-        background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)',
-        borderBottom: '1px solid #E8EDF2',
-        padding: '0 24px', height: 60, gap: 12,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        <div className="mk-nav" style={{ display: 'flex', alignItems: 'center', gap: 32, minWidth: 0 }}>
-          <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
-            <Logo />
-          </button>
-          <div className="mk-nav-links" style={{ display: 'flex', gap: 20 }}>
-            <a className="nav-link" href="#" style={{ color: '#1B4F8A', fontWeight: 600, fontSize: '0.875rem', textDecoration: 'none' }}>Marketplace</a>
-            <a className="nav-link" href="#how" style={{ textDecoration: 'none' }}>How it works</a>
-          </div>
-        </div>
-        <AccountNavButtons />
-      </nav>
+      <SiteHeader active="boards" />
 
       {/* ── Hero ── */}
       <div style={{

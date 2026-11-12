@@ -17,6 +17,7 @@ import { boardFormatLabel } from '@/lib/board-formats';
 import { VerificationBadge, dimensionsText } from '@/lib/board-verification';
 import { sendBoardRequests } from '@/lib/availability-requests';
 import { track } from '@/lib/track';
+import SiteHeader from '@/components/public/SiteHeader';
 import type { MapBoard } from '../marketplace/MarketplaceMap';
 
 const MarketplaceMap = dynamic(() => import('../marketplace/MarketplaceMap'), {
@@ -118,20 +119,10 @@ export default function ShortlistPage() {
     <div className="sl">
       <style>{CSS}</style>
 
-      <header className="sl-head">
-        <div className="sl-head-in">
-          <Link href="/" className="sl-logo">
-            <span className="sl-logo-mark">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><rect x="3" y="3" width="18" height="5" rx="1.5" /><line x1="6" y1="8" x2="6" y2="21" /><line x1="18" y1="8" x2="18" y2="21" /></svg>
-            </span>
-            <span>OOH Platform</span>
-          </Link>
-          <nav style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <SiteHeader zIndex={700} right={<>
             <Link href={browseHref} className="sl-ghost">Browse boards</Link>
             {boards.length > 0 && <button type="button" className="sl-ghost sl-hide-m" onClick={() => window.print()}>Print / PDF</button>}
-          </nav>
-        </div>
-      </header>
+      </>} />
 
       <main className="sl-main">
         <div className="sl-title-row">

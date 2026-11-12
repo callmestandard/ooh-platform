@@ -3,6 +3,7 @@ import { fetchGuidePrices } from '@/lib/guide-prices';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import { citySlug } from '@/lib/public-links';
+import SiteHeader from '@/components/public/SiteHeader';
 import WhatsAppButton from '@/components/WhatsAppButton';
 import ShortlistTray from '@/components/shortlist/ShortlistTray';
 
@@ -100,8 +101,6 @@ export default async function BillboardsIndexPage() {
         .city-card { transition: box-shadow 0.18s, transform 0.18s; }
         .city-card:hover { box-shadow: 0 16px 40px -12px rgba(27,79,138,0.16) !important; transform: translateY(-2px); }
         .city-card:hover .city-card-cta { color: #1B4F8A !important; }
-        .idx-nav-link { transition: color 0.12s; }
-        .idx-nav-link:hover { color: #F59E0B !important; }
         @media (max-width: 900px) {
           .idx-city-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
@@ -113,34 +112,7 @@ export default async function BillboardsIndexPage() {
       `}</style>
 
       {/* ── NAV ── */}
-      <nav style={{
-        position: 'sticky', top: 0, zIndex: 100,
-        background: '#0F172A', borderBottom: '1px solid rgba(255,255,255,0.07)',
-        padding: '0 24px', height: 60,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 7,
-            background: 'linear-gradient(135deg, #1B4F8A, #3B82F6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <span style={{ color: '#fff', fontSize: 14, fontWeight: 800 }}>O</span>
-          </div>
-          <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.9375rem', letterSpacing: '-0.02em' }}>OOH Platform</span>
-        </Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <Link href="/signup?role=owner" className="idx-nav-link idx-nav-owner" style={{ color: '#94A3B8', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}>
-            List your boards
-          </Link>
-          <Link href="/marketplace" style={{
-            background: '#F59E0B', color: '#fff', textDecoration: 'none',
-            padding: '7px 16px', borderRadius: 8, fontSize: '0.8125rem', fontWeight: 600, whiteSpace: 'nowrap',
-          }}>
-            Find a board
-          </Link>
-        </div>
-      </nav>
+      <SiteHeader active="cities" />
 
       {/* ── HERO ── */}
       <div style={{
@@ -150,8 +122,8 @@ export default async function BillboardsIndexPage() {
         <div style={{ maxWidth: 800, margin: '0 auto', textAlign: 'center' }}>
           <div style={{
             display: 'inline-block', padding: '5px 14px', borderRadius: 20,
-            background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)',
-            color: '#F59E0B', fontSize: '0.8125rem', fontWeight: 600, marginBottom: 20,
+            background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.18)',
+            color: '#BFDBFE', fontSize: '0.8125rem', fontWeight: 600, marginBottom: 20,
           }}>
             {totalBoards} board{totalBoards !== 1 ? 's' : ''} in {totalCities} cit{totalCities !== 1 ? 'ies' : 'y'}
           </div>
@@ -169,9 +141,9 @@ export default async function BillboardsIndexPage() {
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link href="/marketplace" style={{
-              background: '#F59E0B', color: '#fff', textDecoration: 'none',
+              background: '#fff', color: '#1B4F8A', textDecoration: 'none',
               padding: '13px 28px', borderRadius: 10, fontSize: '0.9375rem', fontWeight: 700,
-              boxShadow: '0 10px 24px -6px rgba(245,158,11,0.45)',
+              boxShadow: '0 10px 24px -10px rgba(0,0,0,0.45)',
             }}>
               Browse all boards →
             </Link>

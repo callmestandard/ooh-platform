@@ -8,6 +8,7 @@ import { MVP_MODE, roleHome } from '@/lib/mvp';
 import { supabase } from '@/lib/supabase';
 import { citySlug } from '@/lib/public-links';
 import PricingFaqList, { pricingFaqs } from '@/components/PricingFaq';
+import SiteHeader, { OOHLogo } from '@/components/public/SiteHeader';
 import WhatsAppButton from '@/components/WhatsAppButton';
 
 /* ═══════════════════════════════════════════════════════════
@@ -223,8 +224,8 @@ function ScrollProgress() {
     <div style={{
       position: 'fixed', top: 0, left: 0, height: 2.5, zIndex: 300,
       width: `${pct}%`,
-      background: 'linear-gradient(90deg,#2f6bff,#7b5cff,#2fd27a)',
-      boxShadow: '0 0 12px rgba(47,107,255,.7)',
+      background: 'linear-gradient(90deg,#1B4F8A,#2563A8,#2fd27a)',
+      boxShadow: '0 0 12px rgba(27,79,138,.7)',
       transition: 'width .08s linear',
       pointerEvents: 'none',
     }} />
@@ -240,19 +241,19 @@ function CityMapSVG({ h = 340 }: { h?: number }) {
     <svg viewBox="0 0 500 340" width="100%" height={h} preserveAspectRatio="xMidYMid slice">
       <defs>
         <pattern id="lp-cgrid" width="30" height="30" patternUnits="userSpaceOnUse">
-          <path d="M 30 0 L 0 0 0 30" fill="none" stroke="rgba(26,22,15,.04)" strokeWidth="0.6"/>
+          <path d="M 30 0 L 0 0 0 30" fill="none" stroke="rgba(15,23,42,.04)" strokeWidth="0.6"/>
         </pattern>
       </defs>
       <rect width="500" height="340" fill="url(#lp-cgrid)"/>
-      <line x1="0" y1="85"  x2="500" y2="85"  stroke="rgba(26,22,15,.09)" strokeWidth="1.4"/>
-      <line x1="0" y1="185" x2="500" y2="185" stroke="rgba(26,22,15,.09)" strokeWidth="1.4"/>
-      <line x1="0" y1="260" x2="500" y2="260" stroke="rgba(26,22,15,.06)" strokeWidth="1"/>
-      <line x1="105" y1="0" x2="105" y2="340" stroke="rgba(26,22,15,.09)" strokeWidth="1.4"/>
-      <line x1="245" y1="0" x2="245" y2="340" stroke="rgba(26,22,15,.09)" strokeWidth="1.4"/>
-      <line x1="375" y1="0" x2="375" y2="340" stroke="rgba(26,22,15,.06)" strokeWidth="1"/>
-      <path d="M 0 135 Q 120 108 245 140 T 500 118" fill="none" stroke="rgba(26,22,15,.06)" strokeWidth="1.2"/>
-      <path d="M 105 185 Q 175 208 245 185 T 375 200" fill="none" stroke="rgba(26,22,15,.05)" strokeWidth="1"/>
-      <path d="M 0 295 Q 75 270 155 284 T 305 258 T 460 276 T 500 263" fill="none" stroke="rgba(47,107,255,.25)" strokeWidth="3" strokeLinecap="round"/>
+      <line x1="0" y1="85"  x2="500" y2="85"  stroke="rgba(15,23,42,.09)" strokeWidth="1.4"/>
+      <line x1="0" y1="185" x2="500" y2="185" stroke="rgba(15,23,42,.09)" strokeWidth="1.4"/>
+      <line x1="0" y1="260" x2="500" y2="260" stroke="rgba(15,23,42,.06)" strokeWidth="1"/>
+      <line x1="105" y1="0" x2="105" y2="340" stroke="rgba(15,23,42,.09)" strokeWidth="1.4"/>
+      <line x1="245" y1="0" x2="245" y2="340" stroke="rgba(15,23,42,.09)" strokeWidth="1.4"/>
+      <line x1="375" y1="0" x2="375" y2="340" stroke="rgba(15,23,42,.06)" strokeWidth="1"/>
+      <path d="M 0 135 Q 120 108 245 140 T 500 118" fill="none" stroke="rgba(15,23,42,.06)" strokeWidth="1.2"/>
+      <path d="M 105 185 Q 175 208 245 185 T 375 200" fill="none" stroke="rgba(15,23,42,.05)" strokeWidth="1"/>
+      <path d="M 0 295 Q 75 270 155 284 T 305 258 T 460 276 T 500 263" fill="none" stroke="rgba(27,79,138,.25)" strokeWidth="3" strokeLinecap="round"/>
     </svg>
   );
 }
@@ -264,8 +265,8 @@ function CityMapSVG({ h = 340 }: { h?: number }) {
 function MapPin({ x, y, price, tone, active, delay, pulse }: {
   x: number; y: number; price: string; tone: string; active?: boolean; delay?: number; pulse?: boolean;
 }) {
-  const needleColor = tone === 'green' ? '#2fd27a' : tone === 'amber' ? '#f2b34b' : '#2f6bff';
-  const ringColor   = tone === 'green' ? 'rgba(47,210,122,.18)' : tone === 'amber' ? 'rgba(242,179,75,.18)' : 'rgba(47,107,255,.18)';
+  const needleColor = tone === 'green' ? '#2fd27a' : tone === 'amber' ? '#f2b34b' : '#1B4F8A';
+  const ringColor   = tone === 'green' ? 'rgba(47,210,122,.18)' : tone === 'amber' ? 'rgba(242,179,75,.18)' : 'rgba(27,79,138,.18)';
   return (
     <div style={{
       position: 'absolute',
@@ -276,12 +277,12 @@ function MapPin({ x, y, price, tone, active, delay, pulse }: {
       animation: `lp-pindrop .55s cubic-bezier(.2,.9,.2,1.1) ${delay ?? 0}s both`,
     }}>
       <span style={{
-        fontFamily: 'var(--font-geist-mono, monospace)', fontSize: 11, fontWeight: 600,
-        background: active ? '#2f6bff' : '#fff',
-        color: active ? '#fff' : '#1a1712',
-        border: `1px solid ${active ? '#5d8cff' : 'rgba(26,22,15,.16)'}`,
+        fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
+        background: active ? '#1B4F8A' : '#fff',
+        color: active ? '#fff' : '#0F172A',
+        border: `1px solid ${active ? '#1B4F8A' : 'rgba(15,23,42,.16)'}`,
         padding: '3px 7px', borderRadius: 7, whiteSpace: 'nowrap', marginBottom: 4,
-        boxShadow: '0 6px 16px -8px rgba(26,22,15,.35)',
+        boxShadow: '0 6px 16px -8px rgba(15,23,42,.35)',
         transition: 'all .18s',
       }}>{price}</span>
       <span style={{
@@ -299,96 +300,6 @@ function MapPin({ x, y, price, tone, active, delay, pulse }: {
         }}/>
       )}
     </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════
-   NAV
-═══════════════════════════════════════════════════════════ */
-
-function Nav({ scrolled }: { scrolled: boolean }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  return (
-    <nav style={{
-      position: 'sticky', top: 0, zIndex: 100,
-      transition: 'background .3s, border-color .3s, box-shadow .3s',
-      borderBottom: scrolled || menuOpen ? '1px solid rgba(26,22,15,.10)' : '1px solid transparent',
-      background: scrolled || menuOpen ? 'rgba(246,244,239,0.96)' : 'transparent',
-      WebkitBackdropFilter: scrolled ? 'blur(18px) saturate(140%)' : 'none',
-      backdropFilter: scrolled ? 'blur(18px) saturate(140%)' : 'none',
-      boxShadow: scrolled ? '0 6px 20px -16px rgba(26,22,15,0.5)' : 'none',
-    }} className="lp-nav">
-      <div className="lp-wrap" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 70 }}>
-        {/* Brand */}
-        <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none' }}>
-          <span style={{
-            width: 32, height: 32, borderRadius: 9, flexShrink: 0,
-            background: 'linear-gradient(150deg,#2f6bff,#7b5cff)',
-            display: 'grid', placeItems: 'center',
-            boxShadow: '0 6px 18px -6px rgba(47,107,255,.8), inset 0 1px 0 rgba(255,255,255,.4)',
-            position: 'relative', overflow: 'hidden',
-          }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="2.5" strokeLinecap="round">
-              <rect x="3" y="4" width="18" height="5" rx="1.5"/>
-              <line x1="6" y1="9" x2="6" y2="20"/><line x1="18" y1="9" x2="18" y2="20"/>
-            </svg>
-          </span>
-          <span style={{ fontFamily: 'var(--font-archivo, sans-serif)', fontWeight: 800, fontSize: 19, letterSpacing: '-.01em', color: '#1a1712', lineHeight: 1 }}>
-            OOH
-            <small style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontWeight: 400, fontSize: 10, color: '#756e62', letterSpacing: '.12em', display: 'block', marginTop: -1, textTransform: 'uppercase' }}>Operating System</small>
-          </span>
-        </Link>
-
-        {/* Center links (desktop) */}
-        <div className="lp-nav-links">
-          {(MVP_MODE ? [['Explore inventory','/marketplace'],['Locations','#states'],['Prices','#prices'],['How it works','#how']] : [['Marketplace','#marketplace'],['How it works','#how'],['Features','#features'],['Pricing','#pricing']]).map(([l,h]) => (
-            <a key={l} href={h} style={{ fontSize: 14.5, fontWeight: 500, color: '#4a443b', padding: '8px 14px', borderRadius: 9, textDecoration: 'none', transition: 'color .15s, background .15s' }}
-              onMouseEnter={e => { (e.target as HTMLElement).style.color='#1a1712'; (e.target as HTMLElement).style.background='rgba(26,22,15,.05)'; }}
-              onMouseLeave={e => { (e.target as HTMLElement).style.color='#4a443b'; (e.target as HTMLElement).style.background='transparent'; }}>
-              {l}
-            </a>
-          ))}
-        </div>
-
-        {/* Right */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Link href="/auth/login" className="lp-nav-desktop" style={{ fontSize: 14.5, fontWeight: 500, color: '#4a443b', padding: '9px 14px', textDecoration: 'none', borderRadius: 9, transition: 'color .15s' }}>
-            Log in
-          </Link>
-          <Link href="/signup" className="lp-nav-desktop" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 7,
-            background: '#2f6bff', color: '#fff', borderRadius: 12,
-            padding: '10px 18px', fontSize: 14, fontWeight: 600, textDecoration: 'none',
-            boxShadow: '0 8px 22px -8px rgba(47,107,255,.7)',
-            transition: 'transform .15s, background .15s',
-            position: 'relative', overflow: 'hidden',
-          }}>
-            Start free
-            <Ico n="arrow" size={15} color="#fff" sw={2.2}/>
-          </Link>
-          {/* Hamburger (mobile only) */}
-          <button className="lp-hamburger" onClick={() => setMenuOpen(m => !m)} aria-label="Menu">
-            <span style={{ width: 20, height: 2, background: '#1a1712', borderRadius: 2, display: 'block', transition: 'transform .2s', transform: menuOpen ? 'translateY(7px) rotate(45deg)' : 'none' }}/>
-            <span style={{ width: 20, height: 2, background: '#1a1712', borderRadius: 2, display: 'block', transition: 'opacity .2s', opacity: menuOpen ? 0 : 1 }}/>
-            <span style={{ width: 20, height: 2, background: '#1a1712', borderRadius: 2, display: 'block', transition: 'transform .2s', transform: menuOpen ? 'translateY(-7px) rotate(-45deg)' : 'none' }}/>
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile dropdown */}
-      {menuOpen && (
-        <div className="lp-mob-menu" style={{ display: 'flex', flexDirection: 'column', padding: '4px 20px 20px', borderTop: '1px solid rgba(26,22,15,.08)' }}>
-          {(MVP_MODE ? [['Explore inventory','/marketplace'],['Locations','#states'],['Prices','#prices'],['How it works','#how']] : [['Marketplace','#marketplace'],['How it works','#how'],['Features','#features'],['Pricing','#pricing']]).map(([l,h]) => (
-            <a key={l} href={h} onClick={() => setMenuOpen(false)} style={{ fontSize: 16, fontWeight: 500, color: '#1a1712', padding: '13px 0', borderBottom: '1px solid rgba(26,22,15,.06)', textDecoration: 'none' }}>{l}</a>
-          ))}
-          <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-            <Link href="/auth/login" onClick={() => setMenuOpen(false)} style={{ flex: 1, textAlign: 'center', padding: '13px', borderRadius: 11, border: '1px solid rgba(26,22,15,.16)', fontSize: 15, fontWeight: 600, color: '#1a1712', textDecoration: 'none' }}>Log in</Link>
-            <Link href="/signup" onClick={() => setMenuOpen(false)} style={{ flex: 1, textAlign: 'center', padding: '13px', borderRadius: 11, background: '#2f6bff', fontSize: 15, fontWeight: 600, color: '#fff', textDecoration: 'none', boxShadow: '0 8px 22px -8px rgba(47,107,255,.7)' }}>Start free</Link>
-          </div>
-        </div>
-      )}
-    </nav>
   );
 }
 
@@ -412,17 +323,17 @@ function LiveTicker() {
     <div style={{
       position: 'absolute', left: 14, bottom: 14, zIndex: 6, maxWidth: 250,
       display: 'flex', alignItems: 'center', gap: 10,
-      background: 'rgba(255,255,255,.92)', border: '1px solid rgba(26,22,15,.14)',
+      background: 'rgba(255,255,255,.92)', border: '1px solid rgba(15,23,42,.14)',
       backdropFilter: 'blur(10px)', borderRadius: 12, padding: '9px 13px 9px 11px',
-      boxShadow: '0 8px 24px -12px rgba(26,22,15,.3)',
+      boxShadow: '0 8px 24px -12px rgba(15,23,42,.3)',
       animation: anim ? 'lp-tickin .5s cubic-bezier(.2,.8,.2,1)' : 'none',
     }}>
       <span style={{ width: 9, height: 9, borderRadius: '50%', flexShrink: 0, background: '#2fd27a', boxShadow: '0 0 0 4px rgba(47,210,122,.18)', position: 'relative' }}>
         <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#2fd27a', animation: 'lp-ping 2s ease-out infinite' }}/>
       </span>
       <span style={{ minWidth: 0 }}>
-        <b style={{ fontSize: 12.5, fontWeight: 700, display: 'block', lineHeight: 1.2, color: '#1a1712' }}>{item.name}</b>
-        <small style={{ fontSize: 11, color: '#756e62', fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '.02em' }}>{item.sub}</small>
+        <b style={{ fontSize: 12.5, fontWeight: 700, display: 'block', lineHeight: 1.2, color: '#0F172A' }}>{item.name}</b>
+        <small style={{ fontSize: 11, color: '#64748B', fontFamily: 'inherit', letterSpacing: '.02em' }}>{item.sub}</small>
       </span>
     </div>
   );
@@ -439,7 +350,7 @@ function Hero() {
     <section style={{ padding: '70px 0 90px', overflow: 'hidden', position: 'relative' }}>
       {/* Subtle background warmth */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0,
-        background: 'radial-gradient(100% 70% at 70% -10%, rgba(47,107,255,.06), transparent 55%)' }}/>
+        background: 'radial-gradient(100% 70% at 70% -10%, rgba(27,79,138,.06), transparent 55%)' }}/>
 
       <div className="lp-wrap lp-hero-grid">
         {/* ── Left: copy ── */}
@@ -447,28 +358,28 @@ function Hero() {
           {/* Badge */}
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
-            fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 11.5, letterSpacing: '.14em',
-            textTransform: 'uppercase', fontWeight: 500, color: '#2f6bff',
+            fontFamily: 'inherit', fontSize: 11.5, letterSpacing: '.14em',
+            textTransform: 'uppercase', fontWeight: 500, color: '#1B4F8A',
             padding: '7px 13px 7px 11px', borderRadius: 999,
-            background: 'rgba(47,107,255,.10)', border: '1px solid rgba(47,107,255,.28)',
+            background: 'rgba(27,79,138,.10)', border: '1px solid rgba(27,79,138,.28)',
             marginBottom: 22,
           }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2f6bff', boxShadow: '0 0 0 4px rgba(47,107,255,.18)' }}/>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#1B4F8A', boxShadow: '0 0 0 4px rgba(27,79,138,.18)' }}/>
             {MVP_MODE ? <>Nigeria&apos;s billboard marketplace</> : <>Nigeria&apos;s OOH Operating System</>}
           </div>
 
           {/* H1 with rotating word */}
           <h1 style={{
-            fontFamily: 'var(--font-archivo, sans-serif)',
+            fontFamily: 'inherit',
             fontWeight: 800,
             fontSize: 'clamp(40px,5.4vw,68px)',
             lineHeight: .98,
             letterSpacing: '-.032em',
-            color: '#1a1712',
+            color: '#0F172A',
             margin: '0 0 0',
             textWrap: 'balance',
           }}>
-            {MVP_MODE ? <>Find and book billboards <span style={{ color: '#2f6bff' }}>across Nigeria</span></> : <>The platform that runs{' '}
+            {MVP_MODE ? <>Find and book billboards <span style={{ color: '#1B4F8A' }}>across Nigeria</span></> : <>The platform that runs{' '}
             <span style={{ display: 'inline-flex', position: 'relative', verticalAlign: 'bottom', overflow: 'hidden', height: '1.05em' }}>
               <span style={{
                 display: 'inline-flex', flexDirection: 'column',
@@ -476,14 +387,14 @@ function Hero() {
                 transform: `translateY(-${wordIdx * 1.05}em)`,
               }}>
                 {ROTATING_WORDS.map(w => (
-                  <span key={w} style={{ height: '1.05em', lineHeight: 1.05, whiteSpace: 'nowrap', color: '#2f6bff' }}>{w}</span>
+                  <span key={w} style={{ height: '1.05em', lineHeight: 1.05, whiteSpace: 'nowrap', color: '#1B4F8A' }}>{w}</span>
                 ))}
               </span>
             </span></>}
           </h1>
 
           {/* Subhead */}
-          <p style={{ marginTop: 22, fontSize: 19, color: '#4a443b', maxWidth: 480, lineHeight: 1.55 }}>
+          <p style={{ marginTop: 22, fontSize: 19, color: '#475569', maxWidth: 480, lineHeight: 1.55 }}>
             {MVP_MODE
               ? 'Browse locations with photos and verification status, request availability for your dates, and get a price from the media owner. Our team helps you complete the booking.'
               : 'Billboard owners list space. Agencies plan and book campaigns. Brands track results in real time. One platform — the whole transaction.'}
@@ -494,17 +405,17 @@ function Hero() {
             <div style={{ marginTop: 32, display: 'flex', gap: 13, flexWrap: 'wrap' }}>
               <Link href="/marketplace" data-cta="explore" style={{
                 display: 'inline-flex', alignItems: 'center', gap: 9,
-                background: '#2f6bff', color: '#fff', borderRadius: 13,
+                background: '#1B4F8A', color: '#fff', borderRadius: 13,
                 padding: '16px 26px', fontSize: 16, fontWeight: 600, textDecoration: 'none',
-                boxShadow: '0 12px 30px -10px rgba(47,107,255,.6), inset 0 1px 0 rgba(255,255,255,.25)',
+                boxShadow: '0 12px 30px -10px rgba(27,79,138,.6), inset 0 1px 0 rgba(255,255,255,.25)',
               }}>
                 Explore OOH inventory
                 <Ico n="arrow" size={17} color="#fff" sw={2}/>
               </Link>
               <Link href="/signup?role=owner" style={{
                 display: 'inline-flex', alignItems: 'center', gap: 9,
-                background: '#fff', color: '#1a1712',
-                border: '1px solid rgba(26,22,15,.16)', borderRadius: 13,
+                background: '#fff', color: '#0F172A',
+                border: '1px solid rgba(15,23,42,.16)', borderRadius: 13,
                 padding: '16px 26px', fontSize: 16, fontWeight: 600, textDecoration: 'none',
               }}>
                 List your locations
@@ -514,9 +425,9 @@ function Hero() {
           <div style={{ marginTop: 32, display: 'flex', gap: 13, flexWrap: 'wrap' }}>
             <Link href="/signup" style={{
               display: 'inline-flex', alignItems: 'center', gap: 9,
-              background: '#2f6bff', color: '#fff', borderRadius: 13,
+              background: '#1B4F8A', color: '#fff', borderRadius: 13,
               padding: '16px 26px', fontSize: 16, fontWeight: 600, textDecoration: 'none',
-              boxShadow: '0 12px 30px -10px rgba(47,107,255,.6), inset 0 1px 0 rgba(255,255,255,.25)',
+              boxShadow: '0 12px 30px -10px rgba(27,79,138,.6), inset 0 1px 0 rgba(255,255,255,.25)',
               position: 'relative', overflow: 'hidden',
             }}>
               Start for free
@@ -532,10 +443,10 @@ function Hero() {
             </Link>
             <Link href="/marketplace" style={{
               display: 'inline-flex', alignItems: 'center', gap: 9,
-              background: '#fff', color: '#1a1712',
-              border: '1px solid rgba(26,22,15,.16)', borderRadius: 13,
+              background: '#fff', color: '#0F172A',
+              border: '1px solid rgba(15,23,42,.16)', borderRadius: 13,
               padding: '16px 26px', fontSize: 16, fontWeight: 600, textDecoration: 'none',
-              boxShadow: '0 1px 0 rgba(26,22,15,.04)',
+              boxShadow: '0 1px 0 rgba(15,23,42,.04)',
             }}>
               ⊞ Browse boards
             </Link>
@@ -543,14 +454,14 @@ function Hero() {
           )}
 
           {/* Meta */}
-          {!MVP_MODE && <div style={{ marginTop: 30, display: 'flex', alignItems: 'center', gap: 18, color: '#756e62', fontSize: 13.5 }}>
+          {!MVP_MODE && <div style={{ marginTop: 30, display: 'flex', alignItems: 'center', gap: 18, color: '#64748B', fontSize: 13.5 }}>
             <div style={{ display: 'flex' }}>
-              {[['AD','#2f6bff'],['BO','#7b5cff'],['BR','#2fd27a']].map(([lbl,clr],i) => (
+              {[['AD','#1B4F8A'],['BO','#2563A8'],['BR','#2fd27a']].map(([lbl,clr],i) => (
                 <span key={lbl} style={{
                   width: 30, height: 30, borderRadius: '50%',
                   background: clr, display: 'grid', placeItems: 'center',
                   fontSize: 10, fontWeight: 700, color: '#fff',
-                  border: '2px solid #f6f4ef', marginLeft: i > 0 ? -9 : 0,
+                  border: '2px solid #F8FAFC', marginLeft: i > 0 ? -9 : 0,
                 }}>{lbl}</span>
               ))}
             </div>
@@ -564,12 +475,12 @@ function Hero() {
           {!MVP_MODE && <div style={{ position: 'absolute', left: -16, top: -14, zIndex: 6, display: 'flex', gap: 10 }} className="lp-float-a lp-hero-chips">
             {[{ v: '143', l: 'boards live', tone: 'b' }, { v: '28', l: 'active deals', tone: 'g' }].map(({ v, l, tone }) => (
               <div key={l} style={{
-                background: '#fff', border: '1px solid rgba(26,22,15,.14)',
+                background: '#fff', border: '1px solid rgba(15,23,42,.14)',
                 borderRadius: 13, padding: '11px 14px',
-                boxShadow: '0 18px 44px -26px rgba(26,22,15,.30)', minWidth: 84,
+                boxShadow: '0 18px 44px -26px rgba(15,23,42,.30)', minWidth: 84,
               }}>
-                <b style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 800, fontSize: 21, display: 'block', lineHeight: 1, color: tone === 'b' ? '#5d8cff' : '#2fd27a' }}>{v}</b>
-                <small style={{ fontSize: 10.5, color: '#756e62', marginTop: 5, display: 'block' }}>{l}</small>
+                <b style={{ fontFamily: 'inherit', fontWeight: 800, fontSize: 21, display: 'block', lineHeight: 1, color: tone === 'b' ? '#1B4F8A' : '#2fd27a' }}>{v}</b>
+                <small style={{ fontSize: 10.5, color: '#64748B', marginTop: 5, display: 'block' }}>{l}</small>
               </div>
             ))}
           </div>}
@@ -578,17 +489,17 @@ function Hero() {
           <div style={{
             borderRadius: 24, overflow: 'hidden',
             background: 'linear-gradient(160deg,#eef1f6,#e6eaf1)',
-            border: '1px solid rgba(26,22,15,.14)',
-            boxShadow: '0 34px 70px -34px rgba(26,22,15,.28)',
+            border: '1px solid rgba(15,23,42,.14)',
+            boxShadow: '0 34px 70px -34px rgba(15,23,42,.28)',
           }} className="lp-float-b">
             {/* Toolbar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 14px', borderBottom: '1px solid rgba(26,22,15,.10)', background: '#fff' }}>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 9, background: '#faf8f3', border: '1px solid rgba(26,22,15,.10)', borderRadius: 9, padding: '8px 12px', color: '#756e62', fontSize: 13 }}>
-                <Ico n="search" size={15} color="#756e62"/>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 14px', borderBottom: '1px solid rgba(15,23,42,.10)', background: '#fff' }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 9, background: '#F8FAFC', border: '1px solid rgba(15,23,42,.10)', borderRadius: 9, padding: '8px 12px', color: '#64748B', fontSize: 13 }}>
+                <Ico n="search" size={15} color="#64748B"/>
                 Search Lagos, Abuja, Port Harcourt…
               </div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, padding: '8px 11px', borderRadius: 9, background: '#fff', border: '1px solid rgba(26,22,15,.10)', color: '#4a443b' }}>
-                <Ico n="filter" size={13} color="#4a443b"/>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, padding: '8px 11px', borderRadius: 9, background: '#fff', border: '1px solid rgba(15,23,42,.10)', color: '#475569' }}>
+                <Ico n="filter" size={13} color="#475569"/>
                 Filters
               </div>
             </div>
@@ -605,17 +516,17 @@ function Hero() {
           {/* Featured board card */}
           <div className="lp-hero-board" style={{
             position: 'absolute', width: 268, right: -18, bottom: -22, zIndex: 5,
-            background: '#fff', border: '1px solid rgba(26,22,15,.14)',
+            background: '#fff', border: '1px solid rgba(15,23,42,.14)',
             borderRadius: 16, overflow: 'hidden',
-            boxShadow: '0 34px 70px -34px rgba(26,22,15,.28)',
+            boxShadow: '0 34px 70px -34px rgba(15,23,42,.28)',
           }}>
             <div style={{ height: 124, position: 'relative', background: 'linear-gradient(150deg,#e7ebf2,#dde2ec)' }}>
-              <div style={{ position: 'absolute', inset: 0, opacity: 1, background: 'repeating-linear-gradient(135deg,rgba(26,22,15,.045) 0 10px,transparent 10px 20px)' }}/>
-              <span style={{ position: 'absolute', left: 12, bottom: 10, fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 10, color: 'rgba(26,22,15,.4)', letterSpacing: '.08em' }}>[ board photo ]</span>
+              <div style={{ position: 'absolute', inset: 0, opacity: 1, background: 'repeating-linear-gradient(135deg,rgba(15,23,42,.045) 0 10px,transparent 10px 20px)' }}/>
+              <span style={{ position: 'absolute', left: 12, bottom: 10, fontFamily: 'inherit', fontSize: 10, color: 'rgba(15,23,42,.4)', letterSpacing: '.08em' }}>[ board photo ]</span>
               <div style={{
                 position: 'absolute', top: 11, left: 11,
                 display: 'flex', alignItems: 'center', gap: 6,
-                fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 10, fontWeight: 600,
+                fontFamily: 'inherit', fontSize: 10, fontWeight: 600,
                 letterSpacing: '.1em', textTransform: 'uppercase',
                 background: 'rgba(47,210,122,.14)', border: '1px solid rgba(47,210,122,.3)', color: '#2fd27a',
                 padding: '4px 8px', borderRadius: 999, backdropFilter: 'blur(4px)',
@@ -625,15 +536,15 @@ function Hero() {
               </div>
             </div>
             <div style={{ padding: '13px 14px 15px' }}>
-              <div style={{ fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 10.5, color: '#2f6bff', letterSpacing: '.1em', textTransform: 'uppercase' }}>Victoria Island · Lagos</div>
-              <h4 style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 700, fontSize: 18, marginTop: 5, letterSpacing: '-.01em', color: '#1a1712' }}>Ozumba Gantry</h4>
-              <div style={{ color: '#756e62', fontSize: 12.5, marginTop: 3 }}>60m × 12m Gantry · Illuminated</div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 13, paddingTop: 12, borderTop: '1px solid rgba(26,22,15,.10)' }}>
+              <div style={{ fontFamily: 'inherit', fontSize: 10.5, color: '#1B4F8A', letterSpacing: '.1em', textTransform: 'uppercase' }}>Victoria Island · Lagos</div>
+              <h4 style={{ fontFamily: 'inherit', fontWeight: 700, fontSize: 18, marginTop: 5, letterSpacing: '-.01em', color: '#0F172A' }}>Ozumba Gantry</h4>
+              <div style={{ color: '#64748B', fontSize: 12.5, marginTop: 3 }}>60m × 12m Gantry · Illuminated</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 13, paddingTop: 12, borderTop: '1px solid rgba(15,23,42,.10)' }}>
                 <div>
-                  <small style={{ fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 9.5, color: '#756e62', letterSpacing: '.1em', textTransform: 'uppercase', display: 'block' }}>Rate</small>
-                  <b style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontSize: 19, fontWeight: 800, color: '#1a1712' }}>₦1.2M<span style={{ fontSize: 12, color: '#756e62', fontWeight: 500 }}>/mo</span></b>
+                  <small style={{ fontFamily: 'inherit', fontSize: 9.5, color: '#64748B', letterSpacing: '.1em', textTransform: 'uppercase', display: 'block' }}>Rate</small>
+                  <b style={{ fontFamily: 'inherit', fontSize: 19, fontWeight: 800, color: '#0F172A' }}>₦1.2M<span style={{ fontSize: 12, color: '#64748B', fontWeight: 500 }}>/mo</span></b>
                 </div>
-                <Link href="/signup" style={{ background: '#2f6bff', color: '#fff', borderRadius: 10, padding: '8px 14px', fontSize: 12.5, fontWeight: 700, textDecoration: 'none', boxShadow: '0 6px 16px -6px rgba(47,107,255,.6)' }}>
+                <Link href="/signup" style={{ background: '#1B4F8A', color: '#fff', borderRadius: 10, padding: '8px 14px', fontSize: 12.5, fontWeight: 700, textDecoration: 'none', boxShadow: '0 6px 16px -6px rgba(27,79,138,.6)' }}>
                   Book now
                 </Link>
               </div>
@@ -658,18 +569,18 @@ function StatCell({ prefix = '', target, suffix = '', label, tone, first = false
     if (ref.current) obs.observe(ref.current);
     return () => obs.disconnect();
   }, []);
-  const c = tone === 'green' ? '#2fd27a' : tone === 'blue' ? '#5d8cff' : '#1a1712';
+  const c = tone === 'green' ? '#2fd27a' : tone === 'blue' ? '#1B4F8A' : '#0F172A';
   return (
-    <div ref={ref} style={{ padding: '34px 24px', textAlign: 'center', borderLeft: first ? 'none' : '1px solid rgba(26,22,15,.10)' }}>
-      <b style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 800, fontSize: 'clamp(28px,3.4vw,42px)', letterSpacing: '-.02em', display: 'block', color: c }}>{prefix}{val.toLocaleString()}{suffix}</b>
-      <small style={{ display: 'block', marginTop: 7, color: '#756e62', fontSize: 13.5 }}>{label}</small>
+    <div ref={ref} style={{ padding: '34px 24px', textAlign: 'center', borderLeft: first ? 'none' : '1px solid rgba(15,23,42,.10)' }}>
+      <b style={{ fontFamily: 'inherit', fontWeight: 800, fontSize: 'clamp(28px,3.4vw,42px)', letterSpacing: '-.02em', display: 'block', color: c }}>{prefix}{val.toLocaleString()}{suffix}</b>
+      <small style={{ display: 'block', marginTop: 7, color: '#64748B', fontSize: 13.5 }}>{label}</small>
     </div>
   );
 }
 
 function StatsBar() {
   return (
-    <section style={{ borderBlock: '1px solid rgba(26,22,15,.10)', background: '#fff' }}>
+    <section style={{ borderBlock: '1px solid rgba(15,23,42,.10)', background: '#fff' }}>
       <div className="lp-wrap lp-statsbar-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)' }}>
         <StatCell prefix="₦" target={100} suffix="B+" label="Nigerian OOH market value" tone="green" first/>
         <StatCell target={143} label="Billboard locations indexed" tone="blue"/>
@@ -688,7 +599,7 @@ function TrustWall() {
   const logos = [...PARTNERS, ...PARTNERS];
   return (
     <section style={{ padding: '56px 0' }}>
-      <p style={{ textAlign: 'center', color: '#756e62', fontSize: 13.5, marginBottom: 30 }}>
+      <p style={{ textAlign: 'center', color: '#64748B', fontSize: 13.5, marginBottom: 30 }}>
         Trusted by agencies, board owners and brands across Nigeria
       </p>
       <div style={{ position: 'relative', overflow: 'hidden', WebkitMaskImage: 'linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)', maskImage: 'linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)' }}
@@ -697,8 +608,8 @@ function TrustWall() {
         <div className="lp-marquee-track" style={{ display: 'flex', width: 'max-content', animation: 'lp-marquee 34s linear infinite', gap: 0 }}>
           {logos.map((name, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 32px', opacity: .55, filter: 'grayscale(1)', flexShrink: 0, transition: 'opacity .2s' }}>
-              <span style={{ width: 26, height: 26, borderRadius: 7, background: '#efece4', display: 'grid', placeItems: 'center', fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 800, fontSize: 13, color: '#4a443b' }}>{name[0]}</span>
-              <span style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 700, fontSize: 17, letterSpacing: '-.01em', color: '#4a443b' }}>{name}</span>
+              <span style={{ width: 26, height: 26, borderRadius: 7, background: '#F1F5F9', display: 'grid', placeItems: 'center', fontFamily: 'inherit', fontWeight: 800, fontSize: 13, color: '#475569' }}>{name[0]}</span>
+              <span style={{ fontFamily: 'inherit', fontWeight: 700, fontSize: 17, letterSpacing: '-.01em', color: '#475569' }}>{name}</span>
             </div>
           ))}
         </div>
@@ -723,7 +634,7 @@ function HowItWorks() {
     MVP_MODE && tab !== 'brands' ? MVP_ROLES[tab] : ROLES[tab];
 
   return (
-    <section id="how" style={{ padding: '92px 0', background: '#f6f4ef' }}>
+    <section id="how" style={{ padding: '92px 0', background: '#F8FAFC' }}>
       <div className="lp-wrap">
         <div ref={ref} className={`lp-section-head${inView ? ' lp-in' : ''}`}>
           <span className="lp-eyebrow">How it works</span>
@@ -738,13 +649,13 @@ function HowItWorks() {
               display: 'flex', alignItems: 'center', gap: 9,
               padding: '11px 20px', borderRadius: 12, fontWeight: 600, fontSize: 15,
               border: '1px solid transparent',
-              background: tab === k ? '#2f6bff' : 'transparent',
-              color: tab === k ? '#fff' : '#756e62',
-              boxShadow: tab === k ? '0 12px 28px -12px rgba(47,107,255,.8)' : 'none',
+              background: tab === k ? '#1B4F8A' : 'transparent',
+              color: tab === k ? '#fff' : '#64748B',
+              boxShadow: tab === k ? '0 12px 28px -12px rgba(27,79,138,.8)' : 'none',
               cursor: 'pointer', transition: 'all .18s',
               fontFamily: 'inherit',
             }}>
-              <Ico n={tabIcos[k]} size={17} color={tab === k ? '#fff' : '#756e62'}/>
+              <Ico n={tabIcos[k]} size={17} color={tab === k ? '#fff' : '#64748B'}/>
               {tabLabels[k]}
             </button>
           ))}
@@ -754,25 +665,25 @@ function HowItWorks() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 22 }} className="lp-steps-grid">
           {role.steps.map((s) => (
             <div key={s.n} style={{
-              position: 'relative', background: '#fff', border: '1px solid rgba(26,22,15,.10)',
+              position: 'relative', background: '#fff', border: '1px solid rgba(15,23,42,.10)',
               borderRadius: 16, padding: '26px 24px 28px', overflow: 'hidden',
               transition: 'transform .2s, border-color .2s',
-              boxShadow: '0 1px 0 rgba(26,22,15,.03)',
+              boxShadow: '0 1px 0 rgba(15,23,42,.03)',
             }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(47,107,255,.30)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ''; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(26,22,15,.10)'; }}>
-              <div style={{ position: 'absolute', top: 0, left: 24, right: 24, height: 3, borderRadius: '0 0 3px 3px', background: 'linear-gradient(90deg,#2f6bff,transparent)' }}/>
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-4px)'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(27,79,138,.30)'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ''; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(15,23,42,.10)'; }}>
+              <div style={{ position: 'absolute', top: 0, left: 24, right: 24, height: 3, borderRadius: '0 0 3px 3px', background: 'linear-gradient(90deg,#1B4F8A,transparent)' }}/>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-                <div style={{ width: 46, height: 46, borderRadius: 12, background: 'rgba(47,107,255,.10)', border: '1px solid rgba(47,107,255,.28)', display: 'grid', placeItems: 'center' }}>
-                  <Ico n={s.ico} size={21} color="#2f6bff"/>
+                <div style={{ width: 46, height: 46, borderRadius: 12, background: 'rgba(27,79,138,.10)', border: '1px solid rgba(27,79,138,.28)', display: 'grid', placeItems: 'center' }}>
+                  <Ico n={s.ico} size={21} color="#1B4F8A"/>
                 </div>
-                <span style={{ fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 13, color: '#a59d8f', fontWeight: 600 }}>{s.n}</span>
+                <span style={{ fontFamily: 'inherit', fontSize: 13, color: '#94A3B8', fontWeight: 600 }}>{s.n}</span>
               </div>
-              <h4 style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 700, fontSize: 19, letterSpacing: '-.01em', color: '#1a1712' }}>{s.title}</h4>
-              <p style={{ color: '#756e62', fontSize: 14.5, marginTop: 9, lineHeight: 1.55 }}>{s.body}</p>
-              <a href={s.href ?? '/signup'} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 16, color: '#2f6bff', fontWeight: 600, fontSize: 13.5, textDecoration: 'none' }}>
+              <h4 style={{ fontFamily: 'inherit', fontWeight: 700, fontSize: 19, letterSpacing: '-.01em', color: '#0F172A' }}>{s.title}</h4>
+              <p style={{ color: '#64748B', fontSize: 14.5, marginTop: 9, lineHeight: 1.55 }}>{s.body}</p>
+              <a href={s.href ?? '/signup'} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 16, color: '#1B4F8A', fontWeight: 600, fontSize: 13.5, textDecoration: 'none' }}>
                 {s.link}
-                <Ico n="arrow" size={14} color="#2f6bff"/>
+                <Ico n="arrow" size={14} color="#1B4F8A"/>
               </a>
             </div>
           ))}
@@ -813,26 +724,26 @@ function Marketplace() {
         </div>
 
         {/* Shell */}
-        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', background: '#fff', border: '1px solid rgba(26,22,15,.14)', borderRadius: 24, overflow: 'hidden', boxShadow: '0 34px 70px -34px rgba(26,22,15,.28)' }} className="lp-market-shell">
+        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', background: '#fff', border: '1px solid rgba(15,23,42,.14)', borderRadius: 24, overflow: 'hidden', boxShadow: '0 34px 70px -34px rgba(15,23,42,.28)' }} className="lp-market-shell">
           {/* Sidebar */}
-          <div style={{ padding: 22, borderRight: '1px solid rgba(26,22,15,.10)', background: '#faf8f3' }}>
+          <div style={{ padding: 22, borderRight: '1px solid rgba(15,23,42,.10)', background: '#F8FAFC' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-              <h5 style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 700, fontSize: 16, color: '#1a1712' }}>Filters</h5>
-              <span style={{ fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 11, color: '#756e62' }}>{matches.length} boards</span>
+              <h5 style={{ fontFamily: 'inherit', fontWeight: 700, fontSize: 16, color: '#0F172A' }}>Filters</h5>
+              <span style={{ fontFamily: 'inherit', fontSize: 11, color: '#64748B' }}>{matches.length} boards</span>
             </div>
 
             {/* City */}
             <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 11.5, fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '.12em', textTransform: 'uppercase', color: '#756e62', display: 'block', marginBottom: 10 }}>City</label>
+              <label style={{ fontSize: 11.5, fontFamily: 'inherit', letterSpacing: '.12em', textTransform: 'uppercase', color: '#64748B', display: 'block', marginBottom: 10 }}>City</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
                 {cities.map(c => (
                   <button key={c} onClick={() => setCity(c)} style={{
                     fontSize: 13, fontWeight: 600, padding: '7px 12px', borderRadius: 9,
                     border: '1px solid', cursor: 'pointer', fontFamily: 'inherit',
                     transition: 'all .15s',
-                    background: city === c ? 'rgba(47,107,255,.10)' : '#fff',
-                    borderColor: city === c ? 'rgba(47,107,255,.30)' : 'rgba(26,22,15,.10)',
-                    color: city === c ? '#2f6bff' : '#4a443b',
+                    background: city === c ? 'rgba(27,79,138,.10)' : '#fff',
+                    borderColor: city === c ? 'rgba(27,79,138,.30)' : 'rgba(15,23,42,.10)',
+                    color: city === c ? '#1B4F8A' : '#475569',
                   }}>{c}</button>
                 ))}
               </div>
@@ -840,16 +751,16 @@ function Marketplace() {
 
             {/* Format */}
             <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 11.5, fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '.12em', textTransform: 'uppercase', color: '#756e62', display: 'block', marginBottom: 10 }}>Format</label>
+              <label style={{ fontSize: 11.5, fontFamily: 'inherit', letterSpacing: '.12em', textTransform: 'uppercase', color: '#64748B', display: 'block', marginBottom: 10 }}>Format</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
                 {formats.map(f => (
                   <button key={f} onClick={() => setFormat(format === f ? null : f)} style={{
                     fontSize: 13, fontWeight: 600, padding: '7px 12px', borderRadius: 9,
                     border: '1px solid', cursor: 'pointer', fontFamily: 'inherit',
                     transition: 'all .15s',
-                    background: format === f ? 'rgba(47,107,255,.10)' : '#fff',
-                    borderColor: format === f ? 'rgba(47,107,255,.30)' : 'rgba(26,22,15,.10)',
-                    color: format === f ? '#2f6bff' : '#4a443b',
+                    background: format === f ? 'rgba(27,79,138,.10)' : '#fff',
+                    borderColor: format === f ? 'rgba(27,79,138,.30)' : 'rgba(15,23,42,.10)',
+                    color: format === f ? '#1B4F8A' : '#475569',
                   }}>{f}</button>
                 ))}
               </div>
@@ -857,38 +768,38 @@ function Marketplace() {
 
             {/* Budget */}
             <div>
-              <label style={{ fontSize: 11.5, fontFamily: 'var(--font-geist-mono,monospace)', letterSpacing: '.12em', textTransform: 'uppercase', color: '#756e62', display: 'block', marginBottom: 10 }}>Max monthly budget</label>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#4a443b', marginBottom: 9, fontFamily: 'var(--font-geist-mono,monospace)' }}>
+              <label style={{ fontSize: 11.5, fontFamily: 'inherit', letterSpacing: '.12em', textTransform: 'uppercase', color: '#64748B', display: 'block', marginBottom: 10 }}>Max monthly budget</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#475569', marginBottom: 9, fontFamily: 'inherit' }}>
                 <span>₦300K</span><span>{fmtBudget(budget)}</span>
               </div>
               <input type="range" min={300_000} max={2_000_000} step={50_000} value={budget}
                 onChange={e => setBudget(Number(e.target.value))}
-                style={{ width: '100%', height: 5, borderRadius: 5, background: `linear-gradient(90deg,#2f6bff ${(budget-300_000)/(2_000_000-300_000)*100}%,#efece4 0)`, outline: 'none', WebkitAppearance: 'none', cursor: 'pointer' }}
+                style={{ width: '100%', height: 5, borderRadius: 5, background: `linear-gradient(90deg,#1B4F8A ${(budget-300_000)/(2_000_000-300_000)*100}%,#F1F5F9 0)`, outline: 'none', WebkitAppearance: 'none', cursor: 'pointer' }}
               />
-              <div style={{ marginTop: 6, fontSize: 13, color: '#756e62' }}>
-                Showing <b style={{ color: '#1a1712' }}>{matches.length}</b> of {BOARDS_DATA.length} boards
+              <div style={{ marginTop: 6, fontSize: 13, color: '#64748B' }}>
+                Showing <b style={{ color: '#0F172A' }}>{matches.length}</b> of {BOARDS_DATA.length} boards
               </div>
             </div>
           </div>
 
           {/* Main */}
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(26,22,15,.10)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontWeight: 600, fontSize: 14.5, color: '#1a1712' }}>
-                <Ico n="map" size={16} color="#2f6bff"/>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid rgba(15,23,42,.10)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontWeight: 600, fontSize: 14.5, color: '#0F172A' }}>
+                <Ico n="map" size={16} color="#1B4F8A"/>
                 {matches.length} boards match your search
               </div>
-              <div style={{ display: 'flex', gap: 4, background: '#faf8f3', border: '1px solid rgba(26,22,15,.10)', borderRadius: 9, padding: 3 }}>
+              <div style={{ display: 'flex', gap: 4, background: '#F8FAFC', border: '1px solid rgba(15,23,42,.10)', borderRadius: 9, padding: 3 }}>
                 {[['grid','Grid'],['map','Map']].map(([v,l]) => (
                   <button key={v} onClick={() => setView(v as 'grid'|'map')} style={{
                     fontSize: 12.5, fontWeight: 600, padding: '6px 12px', borderRadius: 7,
                     background: view === v ? '#fff' : 'transparent',
-                    color: view === v ? '#1a1712' : '#756e62',
+                    color: view === v ? '#0F172A' : '#64748B',
                     border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                    boxShadow: view === v ? '0 1px 2px rgba(26,22,15,.12)' : 'none',
+                    boxShadow: view === v ? '0 1px 2px rgba(15,23,42,.12)' : 'none',
                     transition: 'all .15s',
                   }}>
-                    <Ico n={v === 'grid' ? 'grid' : 'map'} size={13} color={view === v ? '#1a1712' : '#756e62'}/>{' '}{l}
+                    <Ico n={v === 'grid' ? 'grid' : 'map'} size={13} color={view === v ? '#0F172A' : '#64748B'}/>{' '}{l}
                   </button>
                 ))}
               </div>
@@ -897,31 +808,31 @@ function Marketplace() {
             {view === 'grid' ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 16, padding: 20 }} className="lp-results-grid">
                 {matches.length === 0 && (
-                  <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '48px 24px', color: '#756e62' }}>No boards match your filters</div>
+                  <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '48px 24px', color: '#64748B' }}>No boards match your filters</div>
                 )}
                 {matches.map(b => (
-                  <div key={b.name} style={{ background: '#fff', border: '1px solid rgba(26,22,15,.10)', borderRadius: 14, overflow: 'hidden', transition: 'transform .2s, border-color .2s, box-shadow .2s' }}
-                    onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.transform='translateY(-4px)'; el.style.borderColor='rgba(47,107,255,.30)'; el.style.boxShadow='0 18px 44px -26px rgba(26,22,15,.30)'; }}
-                    onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.transform=''; el.style.borderColor='rgba(26,22,15,.10)'; el.style.boxShadow=''; }}>
+                  <div key={b.name} style={{ background: '#fff', border: '1px solid rgba(15,23,42,.10)', borderRadius: 14, overflow: 'hidden', transition: 'transform .2s, border-color .2s, box-shadow .2s' }}
+                    onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.transform='translateY(-4px)'; el.style.borderColor='rgba(27,79,138,.30)'; el.style.boxShadow='0 18px 44px -26px rgba(15,23,42,.30)'; }}
+                    onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.transform=''; el.style.borderColor='rgba(15,23,42,.10)'; el.style.boxShadow=''; }}>
                     <div style={{ height: 120, position: 'relative', background: 'linear-gradient(150deg,#e7ebf2,#dde2ec)' }}>
-                      <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(135deg,rgba(26,22,15,.045) 0 9px,transparent 9px 18px)', opacity: 1 }}/>
-                      <span style={{ position: 'absolute', top: 10, left: 10, fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 9.5, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', padding: '4px 8px', borderRadius: 999, backdropFilter: 'blur(4px)', ...(b.status === 'avail' ? { background: 'rgba(47,210,122,.14)', border: '1px solid rgba(47,210,122,.3)', color: '#1a8a5a' } : { background: 'rgba(242,179,75,.14)', border: '1px solid rgba(242,179,75,.3)', color: '#a06b1a' }) }}>
+                      <div style={{ position: 'absolute', inset: 0, background: 'repeating-linear-gradient(135deg,rgba(15,23,42,.045) 0 9px,transparent 9px 18px)', opacity: 1 }}/>
+                      <span style={{ position: 'absolute', top: 10, left: 10, fontFamily: 'inherit', fontSize: 9.5, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', padding: '4px 8px', borderRadius: 999, backdropFilter: 'blur(4px)', ...(b.status === 'avail' ? { background: 'rgba(47,210,122,.14)', border: '1px solid rgba(47,210,122,.3)', color: '#1a8a5a' } : { background: 'rgba(242,179,75,.14)', border: '1px solid rgba(242,179,75,.3)', color: '#a06b1a' }) }}>
                         {b.status === 'avail' ? 'Available' : 'Booking soon'}
                       </span>
-                      <span style={{ position: 'absolute', top: 9, right: 9, width: 28, height: 28, borderRadius: 8, background: 'rgba(255,255,255,.8)', border: '1px solid rgba(26,22,15,.12)', display: 'grid', placeItems: 'center' }}>
-                        <Ico n="heart" size={14} color="#756e62"/>
+                      <span style={{ position: 'absolute', top: 9, right: 9, width: 28, height: 28, borderRadius: 8, background: 'rgba(255,255,255,.8)', border: '1px solid rgba(15,23,42,.12)', display: 'grid', placeItems: 'center' }}>
+                        <Ico n="heart" size={14} color="#64748B"/>
                       </span>
-                      <span style={{ position: 'absolute', left: 10, bottom: 8, fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 9, color: 'rgba(26,22,15,.4)', letterSpacing: '.06em' }}>[ board photo ]</span>
+                      <span style={{ position: 'absolute', left: 10, bottom: 8, fontFamily: 'inherit', fontSize: 9, color: 'rgba(15,23,42,.4)', letterSpacing: '.06em' }}>[ board photo ]</span>
                     </div>
                     <div style={{ padding: '12px 13px 14px' }}>
-                      <div style={{ fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 9.5, color: '#2f6bff', letterSpacing: '.09em', textTransform: 'uppercase' }}>{b.loc}</div>
-                      <h5 style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 700, fontSize: 15.5, marginTop: 4, letterSpacing: '-.01em', color: '#1a1712' }}>{b.name}</h5>
-                      <div style={{ color: '#756e62', fontSize: 12, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {b.spec[0]}<span style={{ width: 3, height: 3, borderRadius: '50%', background: '#a59d8f', display: 'inline-block' }}/>{b.spec[1]}
+                      <div style={{ fontFamily: 'inherit', fontSize: 9.5, color: '#1B4F8A', letterSpacing: '.09em', textTransform: 'uppercase' }}>{b.loc}</div>
+                      <h5 style={{ fontFamily: 'inherit', fontWeight: 700, fontSize: 15.5, marginTop: 4, letterSpacing: '-.01em', color: '#0F172A' }}>{b.name}</h5>
+                      <div style={{ color: '#64748B', fontSize: 12, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {b.spec[0]}<span style={{ width: 3, height: 3, borderRadius: '50%', background: '#94A3B8', display: 'inline-block' }}/>{b.spec[1]}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 11, paddingTop: 11, borderTop: '1px solid rgba(26,22,15,.08)' }}>
-                        <b style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontSize: 16, fontWeight: 800, color: '#1a1712' }}>{b.rate}<span style={{ fontSize: 11, color: '#756e62', fontWeight: 500 }}>{b.per}</span></b>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#4a443b' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 11, paddingTop: 11, borderTop: '1px solid rgba(15,23,42,.08)' }}>
+                        <b style={{ fontFamily: 'inherit', fontSize: 16, fontWeight: 800, color: '#0F172A' }}>{b.rate}<span style={{ fontSize: 11, color: '#64748B', fontWeight: 500 }}>{b.per}</span></b>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#475569' }}>
                           <Ico n="star" size={13} color="#f2b34b"/>
                           {b.rating}
                         </div>
@@ -952,11 +863,11 @@ function Marketplace() {
 function Ambition() {
   const [ref, inView] = useInView(0.1);
   return (
-    <section style={{ padding: '110px 0 120px', overflow: 'hidden', background: '#f6f4ef' }}>
+    <section style={{ padding: '110px 0 120px', overflow: 'hidden', background: '#F8FAFC' }}>
       <div className="lp-wrap">
         <div ref={ref} className={`lp-section-head${inView ? ' lp-in' : ''}`}>
           <span className="lp-eyebrow">The mission</span>
-          <h2>Built for the world. <span style={{ color: '#2f6bff' }}>Starting in Nigeria.</span></h2>
+          <h2>Built for the world. <span style={{ color: '#1B4F8A' }}>Starting in Nigeria.</span></h2>
           <p>The infrastructure layer for out-of-home advertising — proven in Africa&apos;s biggest market, built to run on every street in the world.</p>
         </div>
 
@@ -964,16 +875,16 @@ function Ambition() {
         <div style={{ position: 'relative', maxWidth: 920, margin: '64px auto 0', aspectRatio: '1000/560', isolation: 'isolate' }}>
           <svg viewBox="0 0 1000 560" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
             {/* Rings */}
-            <ellipse cx="500" cy="280" rx="110" ry="75" fill="none" stroke="rgba(26,22,15,.06)" strokeWidth="1"/>
-            <ellipse cx="500" cy="280" rx="230" ry="158" fill="none" stroke="rgba(26,22,15,.06)" strokeWidth="1"/>
-            <ellipse cx="500" cy="280" rx="420" ry="264" fill="none" stroke="rgba(26,22,15,.06)" strokeWidth="1"/>
+            <ellipse cx="500" cy="280" rx="110" ry="75" fill="none" stroke="rgba(15,23,42,.06)" strokeWidth="1"/>
+            <ellipse cx="500" cy="280" rx="230" ry="158" fill="none" stroke="rgba(15,23,42,.06)" strokeWidth="1"/>
+            <ellipse cx="500" cy="280" rx="420" ry="264" fill="none" stroke="rgba(15,23,42,.06)" strokeWidth="1"/>
             {/* Connection lines */}
             {WORLD_CITIES.filter(c => !c.home).map(c => {
               const cx = c.x * 10, cy = c.y * 5.6;
               return (
                 <g key={c.name}>
-                  <line x1="500" y1="280" x2={cx} y2={cy} stroke="rgba(26,22,15,.10)" strokeWidth="1" fill="none"/>
-                  <line x1="500" y1="280" x2={cx} y2={cy} stroke="#2f6bff" strokeWidth="1.6" fill="none"
+                  <line x1="500" y1="280" x2={cx} y2={cy} stroke="rgba(15,23,42,.10)" strokeWidth="1" fill="none"/>
+                  <line x1="500" y1="280" x2={cx} y2={cy} stroke="#1B4F8A" strokeWidth="1.6" fill="none"
                     strokeDasharray="2 12" strokeLinecap="round"
                     style={{ animation: 'lp-flow 1.4s linear infinite', animationDelay: `${c.delay}s`, opacity: .85 }}/>
                 </g>
@@ -986,7 +897,7 @@ function Ambition() {
             <div key={d} style={{
               position: 'absolute', left: '50%', top: '50%',
               width: 46, height: 46, borderRadius: '50%',
-              border: '1px solid rgba(47,107,255,.28)',
+              border: '1px solid rgba(27,79,138,.28)',
               transform: 'translate(-50%,-50%)',
               animation: `lp-orbpulse 4.5s ease-out ${d}s infinite`,
               pointerEvents: 'none',
@@ -1002,23 +913,23 @@ function Ambition() {
               display: 'flex', alignItems: 'center', gap: 8,
               padding: c.home ? '11px 17px' : '7px 12px',
               borderRadius: 999,
-              background: c.home ? 'linear-gradient(150deg,#2f6bff,#7b5cff)' : '#fff',
-              border: c.home ? 'none' : '1px solid rgba(26,22,15,.14)',
+              background: c.home ? 'linear-gradient(150deg,#1B4F8A,#2563A8)' : '#fff',
+              border: c.home ? 'none' : '1px solid rgba(15,23,42,.14)',
               fontSize: c.home ? 14 : 12.5, fontWeight: 600, whiteSpace: 'nowrap',
-              color: c.home ? '#fff' : '#1a1712',
-              boxShadow: c.home ? '0 16px 40px -12px rgba(47,107,255,.85)' : '0 18px 44px -26px rgba(26,22,15,.30)',
+              color: c.home ? '#fff' : '#0F172A',
+              boxShadow: c.home ? '0 16px 40px -12px rgba(27,79,138,.85)' : '0 18px 44px -26px rgba(15,23,42,.30)',
               zIndex: c.home ? 3 : 1,
               animation: `lp-chipin .6s cubic-bezier(.2,.8,.2,1) ${c.delay}s forwards`,
               opacity: 0,
             }}>
               <span style={{
                 width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                background: c.home ? '#fff' : '#5d8cff',
-                boxShadow: c.home ? '0 0 0 5px rgba(255,255,255,.22)' : '0 0 0 4px rgba(47,107,255,.16)',
+                background: c.home ? '#fff' : '#1B4F8A',
+                boxShadow: c.home ? '0 0 0 5px rgba(255,255,255,.22)' : '0 0 0 4px rgba(27,79,138,.16)',
               }}/>
               <span>{c.name}</span>
-              {!c.home && <small style={{ color: '#756e62', fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 10 }}>{c.tag}</small>}
-              {c.home && <small style={{ color: 'rgba(255,255,255,.75)', fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 10 }}>HQ</small>}
+              {!c.home && <small style={{ color: '#64748B', fontFamily: 'inherit', fontSize: 10 }}>{c.tag}</small>}
+              {c.home && <small style={{ color: 'rgba(255,255,255,.75)', fontFamily: 'inherit', fontSize: 10 }}>HQ</small>}
             </div>
           ))}
         </div>
@@ -1027,8 +938,8 @@ function Ambition() {
         <div style={{ textAlign: 'center', marginTop: 64, display: 'flex', gap: 38, justifyContent: 'center', flexWrap: 'wrap' }}>
           {[{ v: '12', l: 'Cities live today' }, { v: '3', l: 'Countries in pilot' }, { v: '2030', l: 'On every continent' }].map(({ v, l }) => (
             <div key={l} style={{ textAlign: 'center' }}>
-              <b style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 800, fontSize: 30, display: 'block', color: '#1a1712' }}>{v}</b>
-              <small style={{ color: '#756e62', fontSize: 13 }}>{l}</small>
+              <b style={{ fontFamily: 'inherit', fontWeight: 800, fontSize: 30, display: 'block', color: '#0F172A' }}>{v}</b>
+              <small style={{ color: '#64748B', fontSize: 13 }}>{l}</small>
             </div>
           ))}
         </div>
@@ -1062,33 +973,33 @@ function Features() {
           {FEATURES_DATA.map(f => (
             <div key={f.title} onMouseMove={onMove} style={{
               position: 'relative', background: '#fff',
-              border: '1px solid rgba(26,22,15,.10)',
+              border: '1px solid rgba(15,23,42,.10)',
               borderRadius: 16, padding: '28px 26px 30px', overflow: 'hidden',
               transition: 'transform .2s, border-color .2s',
-              boxShadow: '0 1px 0 rgba(26,22,15,.03)',
+              boxShadow: '0 1px 0 rgba(15,23,42,.03)',
               cursor: 'default',
               '--mx': '80%', '--my': '0%',
             } as React.CSSProperties}
-              onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.transform='translateY(-5px)'; el.style.borderColor=f.tone==='green'?'rgba(47,210,122,.30)':'rgba(47,107,255,.30)'; }}
-              onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.transform=''; el.style.borderColor='rgba(26,22,15,.10)'; }}>
+              onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.transform='translateY(-5px)'; el.style.borderColor=f.tone==='green'?'rgba(47,210,122,.30)':'rgba(27,79,138,.30)'; }}
+              onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.transform=''; el.style.borderColor='rgba(15,23,42,.10)'; }}>
               {/* Cursor glow overlay */}
               <div style={{
                 position: 'absolute', inset: 0, opacity: 0, transition: 'opacity .3s', pointerEvents: 'none',
-                background: `radial-gradient(220px 220px at var(--mx) var(--my), ${f.tone==='green'?'rgba(47,210,122,.12)':'rgba(47,107,255,.12)'}, transparent 65%)`,
+                background: `radial-gradient(220px 220px at var(--mx) var(--my), ${f.tone==='green'?'rgba(47,210,122,.12)':'rgba(27,79,138,.12)'}, transparent 65%)`,
               }} className="lp-feat-glow"/>
               <div style={{
                 width: 50, height: 50, borderRadius: 13, marginBottom: 20,
                 display: 'grid', placeItems: 'center',
-                background: 'linear-gradient(150deg,#fff,#faf8f3)',
-                border: '1px solid rgba(26,22,15,.14)',
-                color: f.tone === 'green' ? '#2fd27a' : '#2f6bff',
+                background: 'linear-gradient(150deg,#fff,#F8FAFC)',
+                border: '1px solid rgba(15,23,42,.14)',
+                color: f.tone === 'green' ? '#2fd27a' : '#1B4F8A',
                 position: 'relative', zIndex: 1,
               }}>
-                <Ico n={f.ico} size={23} color={f.tone === 'green' ? '#2fd27a' : '#2f6bff'}/>
+                <Ico n={f.ico} size={23} color={f.tone === 'green' ? '#2fd27a' : '#1B4F8A'}/>
               </div>
-              <h4 style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 700, fontSize: 19, letterSpacing: '-.01em', color: '#1a1712', position: 'relative', zIndex: 1 }}>{f.title}</h4>
-              <p style={{ color: '#756e62', fontSize: 14.5, marginTop: 10, position: 'relative', zIndex: 1, lineHeight: 1.55 }}>{f.body}</p>
-              <div style={{ marginTop: 16, fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: f.tone === 'green' ? '#2fd27a' : '#2f6bff', display: 'flex', alignItems: 'center', gap: 7, position: 'relative', zIndex: 1 }}>
+              <h4 style={{ fontFamily: 'inherit', fontWeight: 700, fontSize: 19, letterSpacing: '-.01em', color: '#0F172A', position: 'relative', zIndex: 1 }}>{f.title}</h4>
+              <p style={{ color: '#64748B', fontSize: 14.5, marginTop: 10, position: 'relative', zIndex: 1, lineHeight: 1.55 }}>{f.body}</p>
+              <div style={{ marginTop: 16, fontFamily: 'inherit', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: f.tone === 'green' ? '#2fd27a' : '#1B4F8A', display: 'flex', alignItems: 'center', gap: 7, position: 'relative', zIndex: 1 }}>
                 <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }}/>
                 {f.tag}
               </div>
@@ -1107,7 +1018,7 @@ function Features() {
 function Pricing() {
   const [ref, inView] = useInView();
   return (
-    <section id="pricing" style={{ padding: '92px 0', background: '#f6f4ef' }}>
+    <section id="pricing" style={{ padding: '92px 0', background: '#F8FAFC' }}>
       <div className="lp-wrap">
         <div ref={ref} className={`lp-section-head${inView ? ' lp-in' : ''}`}>
           <span className="lp-eyebrow">Pricing</span>
@@ -1120,30 +1031,30 @@ function Pricing() {
             const isFeat = plan.featured;
             return (
               <div key={plan.tag} className={isFeat ? 'lp-feat-plan' : undefined} style={{
-                background: isFeat ? 'linear-gradient(165deg,#211d16,#14110b)' : '#fff',
-                border: isFeat ? '1px solid transparent' : '1px solid rgba(26,22,15,.10)',
+                background: isFeat ? 'linear-gradient(165deg,#0F172A,#1B4F8A)' : '#fff',
+                border: isFeat ? '1px solid transparent' : '1px solid rgba(15,23,42,.10)',
                 borderRadius: 24, padding: '32px 28px 30px',
                 display: 'flex', flexDirection: 'column', position: 'relative',
-                boxShadow: isFeat ? '0 34px 70px -28px rgba(26,22,15,.55)' : '0 18px 44px -26px rgba(26,22,15,.28)',
+                boxShadow: isFeat ? '0 34px 70px -28px rgba(15,23,42,.55)' : '0 18px 44px -26px rgba(15,23,42,.28)',
                 transform: isFeat ? 'translateY(-12px)' : 'none',
                 transition: 'transform .2s',
               }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = isFeat ? 'translateY(-16px)' : 'translateY(-4px)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = isFeat ? 'translateY(-12px)' : 'none'; }}>
                 {isFeat && (
-                  <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 10.5, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', background: '#2f6bff', color: '#fff', padding: '5px 13px', borderRadius: 999, boxShadow: '0 8px 20px -8px rgba(47,107,255,.9)', whiteSpace: 'nowrap' }}>
+                  <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', fontFamily: 'inherit', fontSize: 10.5, fontWeight: 600, letterSpacing: '.12em', textTransform: 'uppercase', background: '#1B4F8A', color: '#fff', padding: '5px 13px', borderRadius: 999, boxShadow: '0 8px 20px -8px rgba(27,79,138,.9)', whiteSpace: 'nowrap' }}>
                     {plan.ribbon}
                   </div>
                 )}
-                <div style={{ fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: isFeat ? '#5d8cff' : '#756e62', fontWeight: 600 }}>{plan.tag}</div>
+                <div style={{ fontFamily: 'inherit', fontSize: 11, letterSpacing: '.16em', textTransform: 'uppercase', color: isFeat ? '#1B4F8A' : '#64748B', fontWeight: 600 }}>{plan.tag}</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '18px 0 4px' }}>
-                  <b style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 800, fontSize: 48, letterSpacing: '-.03em', color: isFeat ? '#fff' : plan.free ? '#2fd27a' : '#1a1712' }}>{plan.amount}</b>
-                  {plan.per && <span style={{ color: isFeat ? 'rgba(255,255,255,.5)' : '#756e62', fontSize: 14 }}>{plan.per}</span>}
+                  <b style={{ fontFamily: 'inherit', fontWeight: 800, fontSize: 48, letterSpacing: '-.03em', color: isFeat ? '#fff' : plan.free ? '#2fd27a' : '#0F172A' }}>{plan.amount}</b>
+                  {plan.per && <span style={{ color: isFeat ? 'rgba(255,255,255,.5)' : '#64748B', fontSize: 14 }}>{plan.per}</span>}
                 </div>
-                <p style={{ color: isFeat ? 'rgba(255,255,255,.6)' : '#756e62', fontSize: 14, minHeight: 40 }}>{plan.desc}</p>
+                <p style={{ color: isFeat ? 'rgba(255,255,255,.6)' : '#64748B', fontSize: 14, minHeight: 40 }}>{plan.desc}</p>
                 <ul style={{ listStyle: 'none', margin: '22px 0 26px', display: 'flex', flexDirection: 'column', gap: 13 }}>
                   {plan.feats.map(feat => (
-                    <li key={feat} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14.5, color: isFeat ? 'rgba(255,255,255,.75)' : '#4a443b' }}>
+                    <li key={feat} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14.5, color: isFeat ? 'rgba(255,255,255,.75)' : '#475569' }}>
                       <Ico n="check" size={17} color="#2fd27a" sw={2.5}/>
                       {feat}
                     </li>
@@ -1151,21 +1062,21 @@ function Pricing() {
                 </ul>
                 <Link href="/signup" style={{
                   display: 'block', textAlign: 'center', marginTop: 'auto',
-                  background: isFeat ? '#2f6bff' : 'rgba(47,107,255,.08)',
-                  color: isFeat ? '#fff' : '#2f6bff',
+                  background: isFeat ? '#1B4F8A' : 'rgba(27,79,138,.08)',
+                  color: isFeat ? '#fff' : '#1B4F8A',
                   borderRadius: 12, padding: 11, fontSize: 14.5, fontWeight: 700,
                   textDecoration: 'none',
-                  boxShadow: isFeat ? '0 4px 16px rgba(47,107,255,.4)' : 'none',
-                  border: isFeat ? 'none' : '1px solid rgba(47,107,255,.20)',
+                  boxShadow: isFeat ? '0 4px 16px rgba(27,79,138,.4)' : 'none',
+                  border: isFeat ? 'none' : '1px solid rgba(27,79,138,.20)',
                 }}>{plan.cta}</Link>
               </div>
             );
           })}
         </div>
 
-        <p style={{ textAlign: 'center', marginTop: 34, color: '#756e62', fontSize: 14 }}>
+        <p style={{ textAlign: 'center', marginTop: 34, color: '#64748B', fontSize: 14 }}>
           Questions about enterprise volume or agency partnerships?{' '}
-          <a href="mailto:hello@oohplatform.ng" style={{ color: '#1a1712', fontWeight: 600, borderBottom: '1px solid rgba(26,22,15,.20)' }}>Talk to our team →</a>
+          <a href="mailto:hello@oohplatform.ng" style={{ color: '#0F172A', fontWeight: 600, borderBottom: '1px solid rgba(15,23,42,.20)' }}>Talk to our team →</a>
         </p>
       </div>
     </section>
@@ -1217,31 +1128,31 @@ function BoardsByState() {
 
         <div className="lp-state-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
           {(rows ?? Array.from({ length: 8 }, () => null)).map((r, i) => r ? (
-            <div key={r.state} data-state-card style={{ border: '1px solid rgba(26,22,15,.10)', borderRadius: 16, padding: '18px 18px 16px', background: '#fbfaf7', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div key={r.state} data-state-card style={{ border: '1px solid rgba(15,23,42,.10)', borderRadius: 16, padding: '18px 18px 16px', background: '#F8FAFC', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-                <h3 style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 700, fontSize: 18, letterSpacing: '-.01em', color: '#1a1712', margin: 0 }}>{stateLabel(r.state)}</h3>
-                <b style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 800, fontSize: 26, letterSpacing: '-.02em', color: '#2f6bff', lineHeight: 1 }}>{r.count}</b>
+                <h3 style={{ fontFamily: 'inherit', fontWeight: 700, fontSize: 18, letterSpacing: '-.01em', color: '#0F172A', margin: 0 }}>{stateLabel(r.state)}</h3>
+                <b style={{ fontFamily: 'inherit', fontWeight: 800, fontSize: 26, letterSpacing: '-.02em', color: '#1B4F8A', lineHeight: 1 }}>{r.count}</b>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {r.cities.map(c => (
                   <Link key={c.city} href={`/billboards/${citySlug(c.city)}`} className="lp-city-pill"
-                    style={{ fontSize: 13, fontWeight: 600, color: '#4a443b', background: '#fff', border: '1px solid rgba(26,22,15,.12)', borderRadius: 999, padding: '4px 10px', textDecoration: 'none' }}>
-                    {c.city} <span style={{ color: '#a59d8f', fontWeight: 500 }}>{c.count}</span>
+                    style={{ fontSize: 13, fontWeight: 600, color: '#475569', background: '#fff', border: '1px solid rgba(15,23,42,.12)', borderRadius: 999, padding: '4px 10px', textDecoration: 'none' }}>
+                    {c.city} <span style={{ color: '#94A3B8', fontWeight: 500 }}>{c.count}</span>
                   </Link>
                 ))}
               </div>
-              <Link href={`/marketplace?state=${encodeURIComponent(r.state)}`} style={{ marginTop: 'auto', paddingTop: 4, color: '#2f6bff', fontWeight: 600, fontSize: 13.5, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                See {r.count === 1 ? 'the board' : `all ${r.count} boards`} <Ico n="arrow" size={14} color="#2f6bff"/>
+              <Link href={`/marketplace?state=${encodeURIComponent(r.state)}`} style={{ marginTop: 'auto', paddingTop: 4, color: '#1B4F8A', fontWeight: 600, fontSize: 13.5, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                See {r.count === 1 ? 'the board' : `all ${r.count} boards`} <Ico n="arrow" size={14} color="#1B4F8A"/>
               </Link>
             </div>
           ) : (
-            <div key={i} style={{ height: 122, borderRadius: 16, background: '#f3f1ec' }} />
+            <div key={i} style={{ height: 122, borderRadius: 16, background: '#F1F5F9' }} />
           ))}
         </div>
 
-        <p style={{ textAlign: 'center', marginTop: 28, color: '#756e62', fontSize: 14.5 }}>
+        <p style={{ textAlign: 'center', marginTop: 28, color: '#64748B', fontSize: 14.5 }}>
           Own billboards in a city we don&apos;t cover yet?{' '}
-          <Link href="/signup?role=owner" style={{ color: '#1a1712', fontWeight: 600, borderBottom: '1px solid rgba(26,22,15,.25)', textDecoration: 'none' }}>List your locations →</Link>
+          <Link href="/signup?role=owner" style={{ color: '#0F172A', fontWeight: 600, borderBottom: '1px solid rgba(15,23,42,.25)', textDecoration: 'none' }}>List your locations →</Link>
         </p>
       </div>
     </section>
@@ -1255,17 +1166,17 @@ function BoardsByState() {
 function PricingFaqSection() {
   const [ref, inView] = useInView();
   return (
-    <section id="prices" style={{ padding: '92px 0', background: '#f6f4ef' }}>
+    <section id="prices" style={{ padding: '92px 0', background: '#F8FAFC' }}>
       <div className="lp-wrap" style={{ maxWidth: 880 }}>
         <div ref={ref} className={`lp-section-head${inView ? ' lp-in' : ''}`}>
           <span className="lp-eyebrow">Prices</span>
           <h2>What does a billboard cost?</h2>
           <p>Media owners set their own prices. Here&apos;s what to expect, and what else to budget for.</p>
         </div>
-        <PricingFaqList faqs={pricingFaqs()} ink="#1a1712" muted="#756e62" line="rgba(26,22,15,.12)" accent="#2f6bff" />
-        <p style={{ textAlign: 'center', marginTop: 28, color: '#756e62', fontSize: 14.5 }}>
+        <PricingFaqList faqs={pricingFaqs()} ink="#0F172A" muted="#64748B" line="rgba(15,23,42,.12)" accent="#1B4F8A" />
+        <p style={{ textAlign: 'center', marginTop: 28, color: '#64748B', fontSize: 14.5 }}>
           Ready for an exact price?{' '}
-          <Link href="/marketplace" style={{ color: '#1a1712', fontWeight: 600, borderBottom: '1px solid rgba(26,22,15,.25)', textDecoration: 'none' }}>Find a board and request a quote →</Link>
+          <Link href="/marketplace" style={{ color: '#0F172A', fontWeight: 600, borderBottom: '1px solid rgba(15,23,42,.25)', textDecoration: 'none' }}>Find a board and request a quote →</Link>
         </p>
       </div>
     </section>
@@ -1292,19 +1203,19 @@ function FinalCTA() {
         <div className="lp-cta-inner" style={{
           position: 'relative', overflow: 'hidden',
           borderRadius: 24, padding: '70px 56px',
-          background: 'linear-gradient(160deg,#211d16 0%,#14110b 70%)',
+          background: 'linear-gradient(160deg,#0F172A 0%,#1B4F8A 100%)',
           textAlign: 'center',
         }}>
           {/* Glow */}
-          <div style={{ position: 'absolute', top: '50%', left: '50%', width: 600, height: 400, transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle,rgba(47,107,255,.18),transparent 65%)', pointerEvents: 'none' }}/>
+          <div style={{ position: 'absolute', top: '50%', left: '50%', width: 600, height: 400, transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle,rgba(27,79,138,.18),transparent 65%)', pointerEvents: 'none' }}/>
 
           <div style={{ position: 'relative', zIndex: 2 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#5d8cff', background: 'rgba(47,107,255,.12)', border: '1px solid rgba(47,107,255,.25)', padding: '6px 13px', borderRadius: 999, marginBottom: 24 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: 'inherit', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#1B4F8A', background: 'rgba(27,79,138,.12)', border: '1px solid rgba(27,79,138,.25)', padding: '6px 13px', borderRadius: 999, marginBottom: 24 }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2fd27a' }}/>
               Free to start
             </div>
 
-            <h2 style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 800, fontSize: 'clamp(30px,4vw,48px)', letterSpacing: '-.025em', lineHeight: 1.02, color: '#fff', marginBottom: 18 }}>
+            <h2 style={{ fontFamily: 'inherit', fontWeight: 800, fontSize: 'clamp(30px,4vw,48px)', letterSpacing: '-.025em', lineHeight: 1.02, color: '#fff', marginBottom: 18 }}>
               {MVP_MODE ? <>Find your next billboard<br/>today</> : <>Start running outdoor advertising<br/>the modern way</>}
             </h2>
 
@@ -1314,7 +1225,7 @@ function FinalCTA() {
 
             {MVP_MODE ? (
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <Link href="/marketplace" style={{ background: '#2f6bff', color: '#fff', borderRadius: 12, padding: '15px 22px', fontSize: 15, fontWeight: 600, textDecoration: 'none' }}>Explore OOH inventory →</Link>
+                <Link href="/marketplace" style={{ background: '#1B4F8A', color: '#fff', borderRadius: 12, padding: '15px 22px', fontSize: 15, fontWeight: 600, textDecoration: 'none' }}>Explore OOH inventory →</Link>
                 <Link href="/signup?role=owner" style={{ background: 'rgba(255,255,255,.08)', color: '#fff', border: '1px solid rgba(255,255,255,.2)', borderRadius: 12, padding: '15px 22px', fontSize: 15, fontWeight: 600, textDecoration: 'none' }}>List your locations</Link>
               </div>
             ) : sent ? (
@@ -1330,7 +1241,7 @@ function FinalCTA() {
                   required
                   style={{ flex: 1, minWidth: 200, background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.16)', borderRadius: 12, padding: '15px 18px', color: '#fff', fontSize: 15, fontFamily: 'inherit', outline: 'none' }}
                 />
-                <button type="submit" style={{ background: '#2f6bff', color: '#fff', border: 'none', borderRadius: 12, padding: '15px 22px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 22px -8px rgba(47,107,255,.7)', whiteSpace: 'nowrap' }}>
+                <button type="submit" style={{ background: '#1B4F8A', color: '#fff', border: 'none', borderRadius: 12, padding: '15px 22px', fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 22px -8px rgba(27,79,138,.7)', whiteSpace: 'nowrap' }}>
                   Get started →
                 </button>
               </form>
@@ -1353,60 +1264,53 @@ function FinalCTA() {
 
 function Footer() {
   return (
-    <footer style={{ borderTop: '1px solid rgba(26,22,15,.10)', padding: '60px 0 40px', background: '#f6f4ef' }}>
+    <footer style={{ borderTop: '1px solid rgba(15,23,42,.10)', padding: '60px 0 40px', background: '#F8FAFC' }}>
       <div className="lp-wrap">
         <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr 1fr', gap: 40 }} className="lp-foot-grid">
           {/* Brand */}
           <div>
-            <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none', marginBottom: 16 }}>
-              <span style={{ width: 30, height: 30, borderRadius: 8, background: 'linear-gradient(150deg,#2f6bff,#7b5cff)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="2.5" strokeLinecap="round">
-                  <rect x="3" y="4" width="18" height="5" rx="1.5"/><line x1="6" y1="9" x2="6" y2="20"/><line x1="18" y1="9" x2="18" y2="20"/>
-                </svg>
-              </span>
-              <span style={{ fontFamily: 'var(--font-archivo,sans-serif)', fontWeight: 800, fontSize: 17, letterSpacing: '-.01em', color: '#1a1712' }}>OOH</span>
-            </Link>
-            <p style={{ color: '#756e62', fontSize: 14, maxWidth: 280, lineHeight: 1.6 }}>
-              Nigeria&apos;s operating system for out-of-home advertising. List, plan, book and verify — all in one place.
+            <Link href="/" style={{ display: 'inline-flex', textDecoration: 'none', marginBottom: 16 }}><OOHLogo /></Link>
+            <p style={{ color: '#64748B', fontSize: 14, maxWidth: 280, lineHeight: 1.6 }}>
+              Nigeria&apos;s billboard marketplace. Find a board, get a price from its owner, and book it with our team.
             </p>
           </div>
 
           {/* Product */}
           <div>
-            <h6 style={{ fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#756e62', marginBottom: 16, fontWeight: 600 }}>Product</h6>
+            <h6 style={{ fontFamily: 'inherit', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#64748B', marginBottom: 16, fontWeight: 600 }}>Product</h6>
             {['Marketplace','For agencies','For board owners','For brands','Pricing'].map(l => (
-              <a key={l} href="/signup" style={{ display: 'block', color: '#4a443b', fontSize: 14, marginBottom: 11, textDecoration: 'none', transition: 'color .15s' }}
-                onMouseEnter={e => (e.target as HTMLElement).style.color='#1a1712'}
-                onMouseLeave={e => (e.target as HTMLElement).style.color='#4a443b'}>{l}</a>
+              <a key={l} href="/signup" style={{ display: 'block', color: '#475569', fontSize: 14, marginBottom: 11, textDecoration: 'none', transition: 'color .15s' }}
+                onMouseEnter={e => (e.target as HTMLElement).style.color='#0F172A'}
+                onMouseLeave={e => (e.target as HTMLElement).style.color='#475569'}>{l}</a>
             ))}
           </div>
 
           {/* Company */}
           <div>
-            <h6 style={{ fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#756e62', marginBottom: 16, fontWeight: 600 }}>Company</h6>
+            <h6 style={{ fontFamily: 'inherit', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#64748B', marginBottom: 16, fontWeight: 600 }}>Company</h6>
             {['About','Careers','Blog','Contact'].map(l => (
-              <a key={l} href="/signup" style={{ display: 'block', color: '#4a443b', fontSize: 14, marginBottom: 11, textDecoration: 'none', transition: 'color .15s' }}
-                onMouseEnter={e => (e.target as HTMLElement).style.color='#1a1712'}
-                onMouseLeave={e => (e.target as HTMLElement).style.color='#4a443b'}>{l}</a>
+              <a key={l} href="/signup" style={{ display: 'block', color: '#475569', fontSize: 14, marginBottom: 11, textDecoration: 'none', transition: 'color .15s' }}
+                onMouseEnter={e => (e.target as HTMLElement).style.color='#0F172A'}
+                onMouseLeave={e => (e.target as HTMLElement).style.color='#475569'}>{l}</a>
             ))}
           </div>
 
           {/* Resources */}
           <div>
-            <h6 style={{ fontFamily: 'var(--font-geist-mono,monospace)', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#756e62', marginBottom: 16, fontWeight: 600 }}>Resources</h6>
+            <h6 style={{ fontFamily: 'inherit', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#64748B', marginBottom: 16, fontWeight: 600 }}>Resources</h6>
             {[['Billboards by city', '/billboards'], ['Prices explained', '/#prices'], ['Formats guide', '/formats'], ['Glossary', '/glossary']].map(([l, href]) => (
-              <Link key={href} href={href} style={{ display: 'block', color: '#4a443b', fontSize: 14, marginBottom: 11, textDecoration: 'none' }}>{l}</Link>
+              <Link key={href} href={href} style={{ display: 'block', color: '#475569', fontSize: 14, marginBottom: 11, textDecoration: 'none' }}>{l}</Link>
             ))}
             {[...(MVP_MODE ? [] : ['OOH rate guide','City profiles','Help center','API docs'])].map(l => (
-              <a key={l} href="/signup" style={{ display: 'block', color: '#4a443b', fontSize: 14, marginBottom: 11, textDecoration: 'none', transition: 'color .15s' }}
-                onMouseEnter={e => (e.target as HTMLElement).style.color='#1a1712'}
-                onMouseLeave={e => (e.target as HTMLElement).style.color='#4a443b'}>{l}</a>
+              <a key={l} href="/signup" style={{ display: 'block', color: '#475569', fontSize: 14, marginBottom: 11, textDecoration: 'none', transition: 'color .15s' }}
+                onMouseEnter={e => (e.target as HTMLElement).style.color='#0F172A'}
+                onMouseLeave={e => (e.target as HTMLElement).style.color='#475569'}>{l}</a>
             ))}
           </div>
         </div>
 
         {/* Bottom bar */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 48, paddingTop: 24, borderTop: '1px solid rgba(26,22,15,.10)', color: '#756e62', fontSize: 13, flexWrap: 'wrap', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 48, paddingTop: 24, borderTop: '1px solid rgba(15,23,42,.10)', color: '#64748B', fontSize: 13, flexWrap: 'wrap', gap: 16 }}>
           <span>© 2026 OOH Platform. Built for Nigerian out-of-home.</span>
           <div style={{ display: 'flex', gap: 10 }}>
             {[
@@ -1414,9 +1318,9 @@ function Footer() {
               { n: 'linkedin', href: '#' },
               { n: 'instagram', href: '#' },
             ].map(({ n, href }) => (
-              <a key={n} href={href} style={{ width: 34, height: 34, borderRadius: 9, border: '1px solid rgba(26,22,15,.10)', display: 'grid', placeItems: 'center', color: '#4a443b', textDecoration: 'none', transition: 'all .15s' }}
-                onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.background='rgba(26,22,15,.05)'; el.style.color='#1a1712'; }}
-                onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.background=''; el.style.color='#4a443b'; }}>
+              <a key={n} href={href} style={{ width: 34, height: 34, borderRadius: 9, border: '1px solid rgba(15,23,42,.10)', display: 'grid', placeItems: 'center', color: '#475569', textDecoration: 'none', transition: 'all .15s' }}
+                onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.background='rgba(15,23,42,.05)'; el.style.color='#0F172A'; }}
+                onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.background=''; el.style.color='#475569'; }}>
                 <Ico n={n} size={16} color="currentColor"/>
               </a>
             ))}
@@ -1433,7 +1337,6 @@ function Footer() {
 
 export default function LandingPage() {
   const router = useRouter();
-  const [scrolled, setScrolled] = useState(false);
 
   // Redirect authenticated users straight to their dashboard
   useEffect(() => {
@@ -1444,19 +1347,6 @@ export default function LandingPage() {
       });
     });
   }, [router]);
-
-  useEffect(() => {
-    // IntersectionObserver is scroll-container-agnostic — avoids window.scrollY
-    // failing when overflow-x:hidden on the wrapper implicitly sets overflow-y:auto
-    const sentinel = document.getElementById('lp-scroll-sentinel');
-    if (!sentinel) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => setScrolled(!entry.isIntersecting),
-      { threshold: 0, rootMargin: '0px 0px 0px 0px' },
-    );
-    obs.observe(sentinel);
-    return () => obs.disconnect();
-  }, []);
 
   /* Reveal observer */
   useEffect(() => {
@@ -1472,13 +1362,13 @@ export default function LandingPage() {
     <div className="ooh-lp">
       <style>{`
         /* ── Layout ── */
-        .ooh-lp { font-family: var(--font-hanken,"Hanken Grotesk",system-ui,sans-serif); background:#f6f4ef; color:#1a1712; overflow-x:hidden; line-height:1.55; }
+        .ooh-lp { font-family: 'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:#F8FAFC; color:#0F172A; overflow-x:hidden; line-height:1.55; }
         .lp-wrap { width:100%; max-width:1200px; margin:0 auto; padding-inline:40px; }
         .lp-section-head { text-align:center; max-width:660px; margin:0 auto 56px; opacity:0; transform:translateY(22px); transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1); }
         .lp-section-head.lp-in { opacity:1; transform:none; }
-        .lp-eyebrow { font-family:var(--font-geist-mono,monospace); font-size:12px; letter-spacing:.22em; text-transform:uppercase; color:#5d8cff; font-weight:500; }
-        .lp-section-head h2 { font-family:var(--font-archivo,sans-serif); font-weight:800; letter-spacing:-.022em; font-size:clamp(30px,4vw,46px); line-height:1.04; margin-top:16px; text-wrap:balance; color:#1a1712; }
-        .lp-section-head p { margin-top:18px; color:#756e62; font-size:18px; }
+        .lp-eyebrow { font-family:inherit; font-size:12px; letter-spacing:.22em; text-transform:uppercase; color:#1B4F8A; font-weight:500; }
+        .lp-section-head h2 { font-family:inherit; font-weight:800; letter-spacing:-.022em; font-size:clamp(30px,4vw,46px); line-height:1.04; margin-top:16px; text-wrap:balance; color:#0F172A; }
+        .lp-section-head p { margin-top:18px; color:#64748B; font-size:18px; }
 
         /* ── Nav links (hidden on mobile) ── */
         .lp-nav-links { display:flex; align-items:center; gap:4px; }
@@ -1502,7 +1392,7 @@ export default function LandingPage() {
         .lp-price-grid { grid-template-columns:repeat(3,1fr)!important; }
 
         /* ── States grid ── */
-        .lp-city-pill:hover { border-color:#2f6bff!important; color:#2f6bff!important; }
+        .lp-city-pill:hover { border-color:#1B4F8A!important; color:#1B4F8A!important; }
         @media(max-width:980px){ .lp-state-grid{grid-template-columns:repeat(2,1fr)!important} }
         @media(max-width:520px){
           .lp-state-grid{gap:10px!important}
@@ -1554,7 +1444,7 @@ export default function LandingPage() {
 
         /* ── Range thumb ── */
         input[type=range].lp-rng{-webkit-appearance:none;width:100%;height:5px;border-radius:5px;outline:none;cursor:pointer}
-        input[type=range].lp-rng::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;border-radius:50%;background:#2f6bff;border:2px solid #fff;cursor:pointer;box-shadow:0 3px 8px rgba(0,0,0,.2)}
+        input[type=range].lp-rng::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;border-radius:50%;background:#1B4F8A;border:2px solid #fff;cursor:pointer;box-shadow:0 3px 8px rgba(0,0,0,.2)}
 
         /* ── Mobile nav ── */
         .lp-hamburger { display:none; flex-direction:column; justify-content:center; gap:5px; padding:8px; background:none; border:none; cursor:pointer; }
@@ -1564,7 +1454,7 @@ export default function LandingPage() {
         @media(max-width:980px){
           .lp-hero-grid{grid-template-columns:1fr!important;gap:48px}
           .lp-market-shell{grid-template-columns:1fr!important}
-          .lp-market-shell > div:first-child{border-right:none!important;border-bottom:1px solid rgba(26,22,15,.10)}
+          .lp-market-shell > div:first-child{border-right:none!important;border-bottom:1px solid rgba(15,23,42,.10)}
           .lp-nav-links{display:none!important}
           .lp-nav-desktop{display:none!important}
           .lp-hamburger{display:flex!important}
@@ -1585,7 +1475,7 @@ export default function LandingPage() {
           /* Stats bar 2×2 */
           .lp-statsbar-grid{grid-template-columns:1fr 1fr!important}
           .lp-statsbar-grid > div:nth-child(odd){border-left:none!important}
-          .lp-statsbar-grid > div:nth-child(n+3){border-top:1px solid rgba(26,22,15,.10)!important}
+          .lp-statsbar-grid > div:nth-child(n+3){border-top:1px solid rgba(15,23,42,.10)!important}
 
           /* Section heads */
           .lp-section-head{margin-bottom:32px!important}
@@ -1622,7 +1512,7 @@ export default function LandingPage() {
       `}</style>
 
       <ScrollProgress/>
-      <Nav scrolled={scrolled}/>
+      <SiteHeader />
       <Hero/>
       {/* Sentinel: when this pixel leaves the top of the viewport, nav turns opaque */}
       <div id="lp-scroll-sentinel" style={{ height: 1, marginTop: -1, pointerEvents: 'none' }} aria-hidden="true"/>

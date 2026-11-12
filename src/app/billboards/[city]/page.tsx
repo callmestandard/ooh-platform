@@ -10,6 +10,7 @@ import { VerificationBadge } from '@/lib/board-verification';
 import { boardPath, citySlug as toSlug } from '@/lib/public-links';
 import { displayName } from '@/lib/display-name';
 import PricingFaqList, { pricingFaqs, faqJsonLd } from '@/components/PricingFaq';
+import SiteHeader from '@/components/public/SiteHeader';
 import WhatsAppButton from '@/components/WhatsAppButton';
 import SaveButton from '@/components/shortlist/SaveButton';
 import ShortlistTray from '@/components/shortlist/ShortlistTray';
@@ -257,9 +258,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
         .city-board-card { transition: box-shadow 0.18s, transform 0.18s; }
         .city-board-card:hover { box-shadow: 0 16px 40px -12px rgba(27,79,138,0.18) !important; transform: translateY(-2px); }
         .city-cta-btn { transition: background 0.15s, box-shadow 0.15s; }
-        .city-cta-btn:hover { background: #D97706 !important; box-shadow: 0 8px 24px -6px rgba(245,158,11,0.5) !important; }
-        .city-nav-link { transition: color 0.12s; }
-        .city-nav-link:hover { color: #F59E0B !important; }
+        .city-cta-btn:hover { filter: brightness(0.94); }
         .city-link-pill:hover { background: #1B4F8A !important; color: #fff !important; }
         @media (max-width: 768px) {
           .city-hero-h1  { font-size: 1.75rem !important; }
@@ -278,42 +277,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
       `}</style>
 
       {/* ── NAV ──────────────────────────────────────────────────────────── */}
-      <nav style={{
-        position: 'sticky', top: 0, zIndex: 100,
-        background: '#0F172A', borderBottom: '1px solid rgba(255,255,255,0.07)',
-        padding: '0 24px', height: 60,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 7,
-            background: 'linear-gradient(135deg, #1B4F8A, #3B82F6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <span style={{ color: '#fff', fontSize: 14, fontWeight: 800 }}>O</span>
-          </div>
-          <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.9375rem', letterSpacing: '-0.02em' }}>
-            OOH Platform
-          </span>
-        </Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-          <Link href="/billboards" className="city-nav-link city-nav-cities" style={{ color: '#94A3B8', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}>
-            All cities
-          </Link>
-          <Link href="/signup?role=owner" className="city-nav-link city-nav-cities" style={{ color: '#94A3B8', textDecoration: 'none', fontSize: '0.875rem', fontWeight: 500 }}>
-            List your boards
-          </Link>
-          <Link
-            href={campaignUrl}
-            style={{
-              background: '#F59E0B', color: '#fff', textDecoration: 'none',
-              padding: '7px 16px', borderRadius: 8, fontSize: '0.8125rem', fontWeight: 600, whiteSpace: 'nowrap',
-            }}
-          >
-            Find a board
-          </Link>
-        </div>
-      </nav>
+      <SiteHeader active="cities" />
 
       {/* ── HERO ──────────────────────────────────────────────────────────── */}
       <div style={{
@@ -435,9 +399,9 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 className="city-cta-btn"
                 style={{
                   display: 'block', textAlign: 'center', textDecoration: 'none',
-                  background: '#F59E0B', color: '#fff', borderRadius: 10,
+                  background: '#1B4F8A', color: '#fff', borderRadius: 10,
                   padding: '13px 20px', fontSize: '0.9375rem', fontWeight: 700,
-                  boxShadow: '0 8px 20px -6px rgba(245,158,11,0.4)',
+                  boxShadow: '0 8px 20px -8px rgba(27,79,138,0.45)',
                   marginBottom: 10,
                 }}
               >
@@ -624,10 +588,10 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 className="city-cta-btn"
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 8,
-                  background: '#F59E0B', color: '#fff', textDecoration: 'none',
+                  background: '#fff', color: '#1B4F8A', textDecoration: 'none',
                   padding: '15px 32px', borderRadius: 12,
                   fontSize: '1rem', fontWeight: 700,
-                  boxShadow: '0 12px 28px -8px rgba(245,158,11,0.5)',
+                  boxShadow: '0 12px 28px -10px rgba(0,0,0,0.45)',
                 }}
               >
                 Browse boards in {cityName} →
