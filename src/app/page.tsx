@@ -59,7 +59,7 @@ const MVP_ROLES = {
   agencies: {
     label: 'Buyers',
     steps: [
-      { ico: 'search', n: '01', title: 'Find the right locations', body: 'Browse billboards by city and area, with photos, size, format and how recently each listing was verified.', link: 'Explore inventory', href: '/marketplace' },
+      { ico: 'search', n: '01', title: 'Find the right locations', body: 'Browse billboards by city and area, with photos, size, format and how recently each listing was verified.', link: 'Find a board', href: '/marketplace' },
       { ico: 'msg', n: '02', title: 'Request availability and a price', body: 'Pick your dates and send a request. The media owner replies with availability and a quote — and you can negotiate in one conversation.', link: 'Create a buyer account', href: '/signup?role=agency' },
       { ico: 'shield', n: '03', title: 'We complete the booking with you', body: 'Once you accept a quote, our team contacts you and the owner to finalise the booking. No scattered WhatsApp chains.', link: 'Get started', href: '/signup?role=agency' },
     ],
@@ -396,7 +396,7 @@ function Hero() {
           {/* Subhead */}
           <p style={{ marginTop: 22, fontSize: 19, color: '#475569', maxWidth: 480, lineHeight: 1.55 }}>
             {MVP_MODE
-              ? 'Browse locations with photos and verification status, request availability for your dates, and get a price from the media owner. Our team helps you complete the booking.'
+              ? 'See photos, locations and guide prices. Request a board and its owner replies with a quote. Our team completes the booking with you.'
               : 'Billboard owners list space. Agencies plan and book campaigns. Brands track results in real time. One platform — the whole transaction.'}
           </p>
 
@@ -409,7 +409,7 @@ function Hero() {
                 padding: '16px 26px', fontSize: 16, fontWeight: 600, textDecoration: 'none',
                 boxShadow: '0 12px 30px -10px rgba(27,79,138,.6), inset 0 1px 0 rgba(255,255,255,.25)',
               }}>
-                Explore OOH inventory
+                Find a board
                 <Ico n="arrow" size={17} color="#fff" sw={2}/>
               </Link>
               <Link href="/signup?role=owner" style={{
@@ -1225,7 +1225,7 @@ function FinalCTA() {
 
             {MVP_MODE ? (
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-                <Link href="/marketplace" style={{ background: '#1B4F8A', color: '#fff', borderRadius: 12, padding: '15px 22px', fontSize: 15, fontWeight: 600, textDecoration: 'none' }}>Explore OOH inventory →</Link>
+                <Link href="/marketplace" style={{ background: '#1B4F8A', color: '#fff', borderRadius: 12, padding: '15px 22px', fontSize: 15, fontWeight: 600, textDecoration: 'none' }}>Find a board →</Link>
                 <Link href="/signup?role=owner" style={{ background: 'rgba(255,255,255,.08)', color: '#fff', border: '1px solid rgba(255,255,255,.2)', borderRadius: 12, padding: '15px 22px', fontSize: 15, fontWeight: 600, textDecoration: 'none' }}>List your locations</Link>
               </div>
             ) : sent ? (
@@ -1468,7 +1468,10 @@ export default function LandingPage() {
 
           /* Hero */
           .lp-hero-grid{gap:32px!important}
-          .lp-hero-visual{min-height:280px!important}
+          /* The hero picture is decoration; on phones it only pushed the real content down. */
+          .lp-hero-visual{display:none!important}
+          .ooh-lp section{padding-top:44px!important;padding-bottom:44px!important}
+          .ooh-lp section:first-of-type{padding-top:28px!important;padding-bottom:36px!important}
           .lp-hero-chips{display:none!important}
           .lp-hero-board{display:none!important}
 
