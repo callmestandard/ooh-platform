@@ -255,7 +255,8 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
       />
 
       <style>{`
-        .city-board-card { transition: box-shadow 0.18s, transform 0.18s; }
+        .city-board-card { transition: box-shadow 0.18s, transform 0.18s; text-decoration: none; color: inherit; display: block; }
+        .city-board-photo img { position: absolute; inset: 0; }
         .city-board-card:hover { box-shadow: 0 16px 40px -12px rgba(27,79,138,0.18) !important; transform: translateY(-2px); }
         .city-cta-btn { transition: background 0.15s, box-shadow 0.15s; }
         .city-cta-btn:hover { filter: brightness(0.94); }
@@ -269,10 +270,25 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           .city-stats-strip { flex-wrap: wrap !important; gap: 12px !important; }
           .city-stat-item  { min-width: 140px !important; }
           .city-format-table { font-size: 0.8125rem !important; }
-          .city-format-table th, .city-format-table td { padding: 10px 12px !important; }
-        }
-        @media (max-width: 480px) {
-          .city-board-grid { grid-template-columns: 1fr !important; }
+          .city-format-table th, .city-format-table td { padding: 11px 14px !important; }
+          .city-hero { padding: 28px 16px 28px !important; }
+          .city-hero-sub { font-size: 0.9375rem !important; margin-bottom: 22px !important; }
+          .city-stats-strip { display: grid !important; grid-template-columns: 1fr 1fr; gap: 0 !important; }
+          .city-stat-item { min-width: 0 !important; padding: 14px 16px !important; border-left: none !important; }
+          .city-stat-item:nth-child(even) { border-left: 1px solid rgba(255,255,255,0.08) !important; }
+          .city-stat-item:nth-child(n+3) { border-top: 1px solid rgba(255,255,255,0.08); }
+          .city-body { padding: 24px 16px 48px !important; }
+          .city-body section, .city-map-grid { margin-bottom: 40px !important; }
+          .city-cta { padding: 32px 20px !important; }
+          .city-cta h2 { font-size: 1.375rem !important; }
+          .city-board-grid { gap: 10px !important; }
+          .city-board-card { display: flex !important; }
+          .city-board-photo { width: 116px; height: auto !important; min-height: 116px; flex-shrink: 0; }
+          .city-board-photo .city-save { top: 6px !important; left: 6px; right: auto !important; transform: scale(.86); transform-origin: top left; }
+          .city-board-photo .city-format { display: none; }
+          .city-board-body { flex: 1; min-width: 0; padding: 10px 12px 11px !important; display: flex; flex-direction: column; }
+          .city-board-foot { margin-top: auto; }
+          .city-board-go { display: none; }
         }
       `}</style>
 
@@ -280,7 +296,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
       <SiteHeader active="cities" />
 
       {/* ── HERO ──────────────────────────────────────────────────────────── */}
-      <div style={{
+      <div className="city-hero" style={{
         background: 'linear-gradient(160deg, #0F172A 0%, #1B4F8A 100%)',
         padding: '56px 24px 52px',
       }}>
@@ -303,11 +319,11 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
             Billboard &amp; OOH Advertising<br />in {cityName}
           </h1>
 
-          <p style={{
+          <p className="city-hero-sub" style={{
             color: '#94A3B8', fontSize: '1.0625rem', lineHeight: 1.65,
             margin: '0 0 36px', maxWidth: 560,
           }}>
-            {count} billboard{count !== 1 ? 's' : ''} in {cityName}, listed by the media owners who own them. See each board&apos;s photos and location, then request a price and availability from the owner.
+            {count} billboard{count !== 1 ? 's' : ''} from their media owners. See photos and locations, then request a price.
           </p>
 
           {/* Stats strip */}
@@ -348,7 +364,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
 
       {/* ── BODY ──────────────────────────────────────────────────────────── */}
       <div style={{ background: '#F8FAFC', minHeight: '60vh' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '56px 24px 80px' }}>
+        <div className="city-body" style={{ maxWidth: 1100, margin: '0 auto', padding: '56px 24px 80px' }}>
 
           {/* ── Map + Quick CTA ── */}
           <div className="city-map-grid" style={{
@@ -377,22 +393,8 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 Advertise in {cityName}
               </h2>
               <p style={{ color: '#64748B', fontSize: '0.875rem', lineHeight: 1.6, margin: '0 0 20px' }}>
-                {count} board{count !== 1 ? 's' : ''}{' '}available now. Each price is set by the board&apos;s owner: request a board and they reply with a quote.
+                {minRate ? `Guide prices from ${fmtRate(minRate)} a month. ` : ''}Owners set their prices: request a board and they reply with a quote. Our team completes the booking with you.
               </p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-                {[
-                  { icon: '📍', label: `${count} board${count !== 1 ? 's' : ''} with photos and locations` },
-                  { icon: '📐', label: `${formats.length} format${formats.length !== 1 ? 's' : ''}: ${formats.slice(0, 3).map(f => FORMAT_LABELS[f] || f).join(', ')}${formats.length > 3 ? ` +${formats.length - 3} more` : ''}` },
-                  { icon: '💬', label: minRate ? `Guide prices from ${fmtRate(minRate)}/mo; owners confirm the final price` : 'Prices set by owners, quoted on request' },
-                  { icon: '🤝', label: 'Our team completes the booking with you' },
-                ].map(item => (
-                  <div key={item.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                    <span style={{ fontSize: '0.9rem', flexShrink: 0, marginTop: 1 }}>{item.icon}</span>
-                    <span style={{ color: '#475569', fontSize: '0.8125rem', lineHeight: 1.5 }}>{item.label}</span>
-                  </div>
-                ))}
-              </div>
 
               <Link
                 href={campaignUrl}
@@ -420,16 +422,16 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           {formatStats.length > 0 && (
             <section style={{ marginBottom: 72 }}>
               <h2 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#0F172A', margin: '0 0 6px', letterSpacing: '-0.03em' }}>
-                Advertising Formats Available in {cityName}
+                Billboard formats in {cityName}
               </h2>
               <p style={{ color: '#64748B', fontSize: '0.875rem', margin: '0 0 24px', lineHeight: 1.6 }}>
-                {anyRates ? 'Compare formats, counts and rate ranges.' : 'How many of each kind of board you can book here.'}
+                {anyRates ? 'What is listed here, with guide prices per month.' : 'How many of each kind of board you can book here.'}
               </p>
               <div style={{ background: '#fff', borderRadius: 14, overflow: 'hidden', border: '1px solid #E2E8F0', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                 <table className="city-format-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                   <thead>
                     <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                      {(anyRates ? ['Format', 'Boards', 'Typical guide/mo', 'Guide low', 'Guide high'] : ['Format', 'Boards']).map(h => (
+                      {(anyRates ? ['Format', 'Boards', 'Guide price'] : ['Format', 'Boards']).map(h => (
                         <th key={h} style={{ textAlign: 'left', padding: '14px 20px', fontWeight: 600, color: '#475569', fontSize: '0.8125rem', letterSpacing: '0.02em', textTransform: 'uppercase' }}>
                           {h}
                         </th>
@@ -451,9 +453,9 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                           </td>
                           <td style={{ padding: '14px 20px', color: '#0F172A', fontWeight: 600 }}>{row.count}</td>
                           {anyRates && <>
-                            <td style={{ padding: '14px 20px', color: '#0F172A' }}>{fmtRate(row.avg)}</td>
-                            <td style={{ padding: '14px 20px', color: '#475569' }}>{fmtRate(row.min)}</td>
-                            <td style={{ padding: '14px 20px', color: '#475569' }}>{fmtRate(row.max)}</td>
+                            <td style={{ padding: '14px 20px', color: '#0F172A', whiteSpace: 'nowrap' }}>
+                              {row.min && row.max && row.min !== row.max ? `${fmtRate(row.min)} – ${fmtRate(row.max)}` : fmtRate(row.min || row.avg)}
+                            </td>
                           </>}
                         </tr>
                       );
@@ -487,8 +489,9 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 const fc = FORMAT_COLORS[board.format] || { bg: '#F1F5F9', text: '#475569' };
                 const photo = board.photo_urls?.[0];
                 return (
-                  <div
+                  <Link
                     key={board.id}
+                    href={boardPath({ id: board.id, name: board.name, city: cityName })}
                     className="city-board-card"
                     style={{
                       background: '#fff', borderRadius: 14, overflow: 'hidden',
@@ -496,8 +499,8 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                     }}
                   >
                     {/* Photo / mockup */}
-                    <div style={{ height: 160, background: fc.bg, position: 'relative', overflow: 'hidden' }}>
-                      <span style={{ position: 'absolute', top: 10, right: 10, zIndex: 2 }}>
+                    <div className="city-board-photo" style={{ height: 160, background: fc.bg, position: 'relative', overflow: 'hidden' }}>
+                      <span className="city-save" style={{ position: 'absolute', top: 10, right: 10, zIndex: 2 }}>
                         <SaveButton boardId={board.id} name={board.name} />
                       </span>
                       {photo
@@ -525,7 +528,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                         )
                       }
                       {/* Format badge overlay */}
-                      <span style={{
+                      <span className="city-format" style={{
                         position: 'absolute', top: 10, left: 10,
                         background: fc.bg, color: fc.text,
                         fontSize: '0.6875rem', fontWeight: 700,
@@ -537,7 +540,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                     </div>
 
                     {/* Card body */}
-                    <div style={{ padding: '14px 16px' }}>
+                    <div className="city-board-body" style={{ padding: '14px 16px' }}>
                       <h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', margin: '0 0 4px', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                         {displayName(board.name)}
                       </h3>
@@ -546,26 +549,19 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                       </p>
                       <div style={{ marginBottom: 10 }}><VerificationBadge status={board.verification_status} small /></div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div className="city-board-foot" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                         <div>
                           <div style={{ color: '#0F172A', fontWeight: 700, fontSize: '0.9375rem', lineHeight: 1 }}>
                             {board.guide ? guideText(board.guide) : 'Price on request'}
                           </div>
-                          {!!board.guide && <div style={{ color: '#94A3B8', fontSize: '0.6875rem', marginTop: 2 }}>per month · guide</div>}
+                          {!!board.guide && <div style={{ color: '#94A3B8', fontSize: '0.6875rem', marginTop: 3 }}>per month · guide</div>}
                         </div>
-                        <Link
-                          href={boardPath({ id: board.id, name: board.name, city: cityName })}
-                          style={{
-                            background: '#EFF6FF', color: '#1D4ED8', textDecoration: 'none',
-                            padding: '6px 12px', borderRadius: 7, fontSize: '0.75rem', fontWeight: 600,
-                            flexShrink: 0,
-                          }}
-                        >
+                        <span className="city-board-go" style={{ background: '#EFF6FF', color: '#1D4ED8', padding: '6px 12px', borderRadius: 7, fontSize: '0.75rem', fontWeight: 600, flexShrink: 0 }}>
                           View board →
-                        </Link>
+                        </span>
                       </div>
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
             </div>
@@ -576,7 +572,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
             <div style={{
               background: 'linear-gradient(135deg, #0F172A 0%, #1B4F8A 100%)',
               borderRadius: 20, padding: '48px 40px', textAlign: 'center',
-            }}>
+            }} className="city-cta">
               <h2 style={{ color: '#fff', fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 12px' }}>
                 Ready to advertise in {cityName}?
               </h2>
@@ -669,9 +665,6 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 32, marginBottom: 40 }}>
             <div>
               <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 7, background: 'linear-gradient(135deg, #1B4F8A, #3B82F6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <span style={{ color: '#fff', fontSize: 14, fontWeight: 800 }}>O</span>
-                </div>
                 <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.9375rem' }}>OOH Platform</span>
               </Link>
               <p style={{ color: '#64748B', fontSize: '0.8125rem', lineHeight: 1.6, maxWidth: 280, margin: 0 }}>
