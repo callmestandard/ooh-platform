@@ -6,7 +6,10 @@ import Link from 'next/link';
 import { getSession, getCurrentProfile } from '@/lib/auth';
 import { MVP_MODE, roleHome } from '@/lib/mvp';
 import { supabase } from '@/lib/supabase';
-import { citySlug } from '@/lib/public-links';
+import { boardPath, citySlug } from '@/lib/public-links';
+import { fetchGuidePrices, guideText, type GuidePrice } from '@/lib/guide-prices';
+import { boardFormatLabel } from '@/lib/board-formats';
+import { displayName } from '@/lib/display-name';
 import PricingFaqList, { pricingFaqs } from '@/components/PricingFaq';
 import SiteHeader, { OOHLogo } from '@/components/public/SiteHeader';
 import WhatsAppButton from '@/components/WhatsAppButton';
@@ -513,46 +516,87 @@ function Hero() {
             </div>
           </div>
 
-          {/* Featured board card */}
-          <div className="lp-hero-board" style={{
-            position: 'absolute', width: 268, right: -18, bottom: -22, zIndex: 5,
-            background: '#fff', border: '1px solid rgba(15,23,42,.14)',
-            borderRadius: 16, overflow: 'hidden',
-            boxShadow: '0 34px 70px -34px rgba(15,23,42,.28)',
-          }}>
-            <div style={{ height: 124, position: 'relative', background: 'linear-gradient(150deg,#e7ebf2,#dde2ec)' }}>
-              <div style={{ position: 'absolute', inset: 0, opacity: 1, background: 'repeating-linear-gradient(135deg,rgba(15,23,42,.045) 0 10px,transparent 10px 20px)' }}/>
-              <span style={{ position: 'absolute', left: 12, bottom: 10, fontFamily: 'inherit', fontSize: 10, color: 'rgba(15,23,42,.4)', letterSpacing: '.08em' }}>[ board photo ]</span>
-              <div style={{
-                position: 'absolute', top: 11, left: 11,
-                display: 'flex', alignItems: 'center', gap: 6,
-                fontFamily: 'inherit', fontSize: 10, fontWeight: 600,
-                letterSpacing: '.1em', textTransform: 'uppercase',
-                background: 'rgba(47,210,122,.14)', border: '1px solid rgba(47,210,122,.3)', color: '#2fd27a',
-                padding: '4px 8px', borderRadius: 999, backdropFilter: 'blur(4px)',
-              }}>
-                <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#2fd27a', animation: 'lp-blink 1.6s infinite' }}/>
-                Live
-              </div>
-            </div>
-            <div style={{ padding: '13px 14px 15px' }}>
-              <div style={{ fontFamily: 'inherit', fontSize: 10.5, color: '#1B4F8A', letterSpacing: '.1em', textTransform: 'uppercase' }}>Victoria Island · Lagos</div>
-              <h4 style={{ fontFamily: 'inherit', fontWeight: 700, fontSize: 18, marginTop: 5, letterSpacing: '-.01em', color: '#0F172A' }}>Ozumba Gantry</h4>
-              <div style={{ color: '#64748B', fontSize: 12.5, marginTop: 3 }}>60m × 12m Gantry · Illuminated</div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 13, paddingTop: 12, borderTop: '1px solid rgba(15,23,42,.10)' }}>
-                <div>
-                  <small style={{ fontFamily: 'inherit', fontSize: 9.5, color: '#64748B', letterSpacing: '.1em', textTransform: 'uppercase', display: 'block' }}>Rate</small>
-                  <b style={{ fontFamily: 'inherit', fontSize: 19, fontWeight: 800, color: '#0F172A' }}>₦1.2M<span style={{ fontSize: 12, color: '#64748B', fontWeight: 500 }}>/mo</span></b>
-                </div>
-                <Link href="/signup" style={{ background: '#1B4F8A', color: '#fff', borderRadius: 10, padding: '8px 14px', fontSize: 12.5, fontWeight: 700, textDecoration: 'none', boxShadow: '0 6px 16px -6px rgba(27,79,138,.6)' }}>
-                  Book now
-                </Link>
-              </div>
-            </div>
-          </div>
+          <FeaturedBoard />
         </div>
       </div>
     </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FEATURED BOARD (a real listing, shown on the hero map)
+═══════════════════════════════════════════════════════════ */
+
+type HeroBoard = {
+  id: string; name: string; area: string | null; city: string | null; format: string | null;
+  width: number | null; height: number | null; illuminated: boolean | null; photo: string; guide: GuidePrice | null;
+};
+
+function FeaturedBoard() {
+  const [board, setBoard] = useState<HeroBoard | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Verified, available boards with a photo; the first one with a guide price wins.
+      const { data } = await supabase.from('boards')
+        .select('id, name, area, city, format, width, height, illuminated, photo_urls')
+        .eq('status', 'available').eq('verification_status', 'verified')
+        .not('photo_urls', 'is', null).order('created_at', { ascending: true }).limit(40);
+      const rows = ((data ?? []) as (Omit<HeroBoard, 'photo' | 'guide'> & { photo_urls: string[] | null })[])
+        .filter(b => b.photo_urls?.[0] && /^[A-Za-z0-9]/.test(displayName(b.name)));
+      if (!rows.length || cancelled) return;
+      const guides = await fetchGuidePrices(rows.map(b => b.id));
+      const pick = rows.find(b => guides[b.id] && b.area) ?? rows.find(b => guides[b.id]) ?? rows[0];
+      if (!cancelled) setBoard({ ...pick, photo: pick.photo_urls![0], guide: guides[pick.id] ?? null });
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // No card rather than a made-up one.
+  if (!board) return null;
+
+  const spec = [
+    board.width && board.height ? `${board.width}m × ${board.height}m` : null,
+    boardFormatLabel(board.format),
+    board.illuminated ? 'Lit at night' : null,
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <Link href={boardPath(board)} className="lp-hero-board" data-featured-board style={{
+      position: 'absolute', width: 268, right: -18, bottom: -22, zIndex: 5, display: 'block',
+      background: '#fff', border: '1px solid rgba(15,23,42,.14)',
+      borderRadius: 16, overflow: 'hidden', textDecoration: 'none', color: 'inherit',
+      boxShadow: '0 34px 70px -34px rgba(15,23,42,.28)',
+    }}>
+      <div style={{ height: 136, position: 'relative', background: '#E2E8F0' }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={board.photo} alt={displayName(board.name)} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        <span style={{
+          position: 'absolute', top: 10, left: 10, fontSize: 10.5, fontWeight: 700,
+          background: 'rgba(255,255,255,.94)', color: '#1D4ED8', padding: '4px 9px', borderRadius: 999,
+        }}>✓ Verified</span>
+      </div>
+      <div style={{ padding: '13px 14px 15px' }}>
+        <div style={{ fontSize: 10.5, fontWeight: 600, color: '#1B4F8A', letterSpacing: '.08em', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {/* Some imported boards have a whole address as their area; the name already says it. */}
+          {[board.area && board.area.length <= 24 ? board.area : null, board.city].filter(Boolean).join(' · ')}
+        </div>
+        <h4 style={{ fontWeight: 700, fontSize: 16, lineHeight: 1.3, marginTop: 5, letterSpacing: '-.01em', color: '#0F172A', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {displayName(board.name)}
+        </h4>
+        <div style={{ color: '#64748B', fontSize: 12.5, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 13, paddingTop: 12, borderTop: '1px solid rgba(15,23,42,.10)' }}>
+          <div style={{ minWidth: 0 }}>
+            <small style={{ fontSize: 9.5, fontWeight: 600, color: '#64748B', letterSpacing: '.1em', textTransform: 'uppercase', display: 'block' }}>{board.guide ? 'Guide price' : 'Price'}</small>
+            <b style={{ fontSize: board.guide ? 17 : 14, fontWeight: 800, color: '#0F172A', whiteSpace: 'nowrap' }}>
+              {board.guide ? <>{guideText(board.guide)}<span style={{ fontSize: 12, color: '#64748B', fontWeight: 500 }}>/mo</span></> : 'On request'}
+            </b>
+          </div>
+          <span style={{ background: '#1B4F8A', color: '#fff', borderRadius: 10, padding: '8px 13px', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>View board</span>
+        </div>
+      </div>
+    </Link>
   );
 }
 
