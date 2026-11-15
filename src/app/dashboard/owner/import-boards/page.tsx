@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui/Toast';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import OwnerPicker, { type OwnerAccount, type OwnerChoice } from '@/components/admin/OwnerPicker';
 import { readDeck } from '@/lib/deck-import/read';
-import { extractBoard, deckCity, findContact, DECK_COLUMNS } from '@/lib/deck-import/extract';
+import { extractBoard, deckCity, findContact, deckBoilerplate, withoutBoilerplate, DECK_COLUMNS } from '@/lib/deck-import/extract';
 import SavedContacts from '@/components/admin/SavedContacts';
 import PhotoCropper from '@/components/admin/PhotoCropper';
 import PhotoReview, { type ReviewItem } from '@/components/admin/PhotoReview';
@@ -522,8 +522,10 @@ export default function ImportBoardsPage() {
       const photos: Record<string, { blob: Blob; url: string }> = {};
       const out: Record<string, unknown>[] = [];
       const skipped: number[] = [];
+      // Lines repeated on most slides (a tagline, "SINCE 1976") are not board details.
+      const boilerplate = deckBoilerplate(slides.map(sl => sl.lines));
       for (const sl of slides) {
-        const board = extractBoard(sl.lines);
+        const board = extractBoard(withoutBoilerplate(sl.lines, boilerplate));
         if (!board) { skipped.push(sl.index); continue; }
         if (!board.City && fallback) { board.City = fallback.city; if (!board.State) board.State = fallback.state; }
         const key = sl.image ? `slide-${sl.index}` : '';

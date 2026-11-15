@@ -78,7 +78,7 @@ if (!q2.some(x => /^Iwo Road$/i.test(x)) || !q2.some(x => /Central Motor Park/i.
 // Slide shapes from a real owner deck: format tag as the first line, GPS on the title line, no type at all.
 const shapeCases: [string[], Partial<Record<string, string>>][] = [
   [['(GANTRY)', 'ALONG IKORODU ROAD BY ANTHONY FTT OJOTA', 'SIZE: 40FT X 10FT'], { 'Board Name': 'ALONG IKORODU ROAD BY ANTHONY FTT OJOTA', Format: 'gantry', City: 'Lagos' }],
-  [['(EYE CATCHER)', 'OPPOSITE STADIUM ALONG AYETORO ROAD, OSOGBO.', 'SIZE: 10FT X 20FT'], { 'Board Name': 'OPPOSITE STADIUM ALONG AYETORO ROAD, OSOGBO.', Format: 'billboard', City: 'Osogbo' }],
+  [['(EYE CATCHER)', 'OPPOSITE STADIUM ALONG AYETORO ROAD, OSOGBO.', 'SIZE: 10FT X 20FT'], { 'Board Name': 'OPPOSITE STADIUM ALONG AYETORO ROAD, OSOGBO', Format: 'billboard', City: 'Osogbo' }],
   [['ALONG PEN-CINEMA/OGBA ROAD BY PYTHAGORAS COLLEGE FTT OGBA/GUINNES, OBA AKRAN 3°20\'01.4"', 'SIZE: 48FT X 16FT'], { 'Board Name': 'ALONG PEN-CINEMA/OGBA ROAD BY PYTHAGORAS COLLEGE FTT OGBA/GUINNES, OBA AKRAN', City: 'Lagos' }],
   [['OKE FIA ALONG FREEDOM PARK ROAD FACING TRAFFIC FROM OKE FIA UNDER BRIDGE, OSHOGBO', 'SIZE: 40FT X 20FT'], { City: 'Osogbo', State: 'Osun' }],
   [['(PORTRAIT)', 'ILESHA GARAGE ROUNDABOUT , OSOGBO (FACE 2)', 'SIZE: 20FT X 40FT'], { Format: 'billboard', City: 'Osogbo' }],

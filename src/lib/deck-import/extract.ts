@@ -13,7 +13,7 @@ export const DECK_COLUMNS = [
 ] as const;
 export type DeckRow = Record<(typeof DECK_COLUMNS)[number], string>;
 
-type Field = 'name' | 'address' | 'city' | 'area' | 'state' | 'size' | 'format' | 'illum' | 'rate' | 'gps' | 'lat' | 'lng' | 'faces' | 'width' | 'height';
+type Field = 'name' | 'address' | 'city' | 'area' | 'state' | 'size' | 'format' | 'illum' | 'rate' | 'rate_annual' | 'gps' | 'lat' | 'lng' | 'faces' | 'width' | 'height';
 
 // Words owners use as labels, checked in order (longer phrases first).
 const LABELS: [RegExp, Field][] = [
@@ -27,7 +27,8 @@ const LABELS: [RegExp, Field][] = [
   [/^(height|h|length)$/, 'height'],
   [/^(type|format|structure|structure type|media type|board type|media|medium|product|asset type|category)$/, 'format'],
   [/^(illumination|illuminated|lighting|light|lit|power)$/, 'illum'],
-  [/^(rate|rates|price|pricing|cost|rental|rent|amount|monthly rate|rate per month|monthly rental|media rate|media cost|tariff|fee|charge|monthly fee)(\s*\(.*\))?$/, 'rate'],
+  [/^((annual )+(rate|rental|rent|cost|fee|charge)?|(yearly|per annum)( rate| rental| cost)?|(cost|rate|rental|price|fee) (per|a|\/) ?(annum|year)|(rate|cost|rental|price) ?\(? ?(annual|yearly|per annum|pa) ?\)?)$/, 'rate_annual'],
+  [/^(rate|rates|price|pricing|cost|rental|rent|amount|monthly rate|rate per month|cost per month|monthly cost|monthly rental|monthly rent|media rate|media cost|tariff|fee|charge|monthly fee)(\s*\(.*\))?$/, 'rate'],
   [/^(faces?|no\.? of faces|number of faces|sides?|no\.? of sides)$/, 'faces'],
   [/^(city|town)$/, 'city'],
   [/^(state)$/, 'state'],
@@ -69,10 +70,12 @@ const CITIES: [RegExp, string, string][] = [
   [/\bbauchi\b/i, 'Bauchi', 'Bauchi'],
   [/\bminna\b/i, 'Minna', 'Niger'],
   [/\bsagamu|shagamu\b/i, 'Sagamu', 'Ogun'],
-  [/\b(sango[\s-]?)?ota\b/i, 'Ota', 'Ogun'],
+  [/\b(sango[\s-]?)?ott?a\b/i, 'Ota', 'Ogun'],
+  [/\bgbongan\b/i, 'Gbongan', 'Osun'],
+  [/\b(magboro|mowe|ibafo)\b/i, 'Mowe', 'Ogun'],
   [/\bijebu[\s-]?ode\b/i, 'Ijebu Ode', 'Ogun'],
   [/\bogbomo(so|sho)\b/i, 'Ogbomoso', 'Oyo'],
-  [/\bile[\s-]?ife\b/i, 'Ile-Ife', 'Osun'],
+  [/\bile\s*-?\s*ife\b/i, 'Ile-Ife', 'Osun'],
   [/\bzaria\b/i, 'Zaria', 'Kaduna'],
 ];
 // Intercity roads name two cities ("Lagos Ibadan Expressway"); they say nothing
@@ -90,6 +93,14 @@ function areaHit(text: string): { area: string; city: string; state: string } | 
       if (new RegExp(`\\b${a.replace(/[-]/g, '[-\\s]?').replace(/ /g, '\\s+')}\\b`, 'i').test(text)) return { area: a.replace('3rd Mainland', 'Third Mainland'), city, state };
     }
   }
+  return null;
+}
+
+/** The town an address ends with ("…, along Lagos to Benin Expressway, Benin City" is in Benin City). */
+function cityAtEnd(address: string): { city: string; state: string } | null {
+  const last = address.split(/[,;]/).map(p => p.trim()).filter(Boolean).pop();
+  if (!last || last.length > 40) return null;
+  for (const [re, city, state] of CITIES) if (re.test(last)) return { city, state };
   return null;
 }
 
@@ -153,6 +164,38 @@ export function findRate(text: string, labelled = false): number | null {
   return best === null ? null : Math.round(best);
 }
 
+const MONEY = String.raw`(?:₦|NGN|N)?[ ]*\d[\d,.]*(?:[ ]?(?:million|mil|mn|m|k)\b)?`;
+const ANNUAL_BEFORE = new RegExp(String.raw`(?:(?:annual\s+)+(?:rate|rental|rent|cost|fee|charge)?|(?:cost|rate|rental|price|fee)\s+per\s+(?:annum|year)|per\s+annum|yearly(?:\s+(?:rate|rental|cost))?)\s*[:=–-]?\s*(${MONEY})`, 'gi');
+const MONTHLY_BEFORE = new RegExp(String.raw`(?:monthly(?:\s+(?:rate|rental|rent|cost|fee|charge))?|(?:cost|rate|rental|price|fee)\s+per\s+month|per\s+month)\s*[:=–-]?\s*(${MONEY})`, 'gi');
+const ANNUAL_AFTER = new RegExp(String.raw`(${MONEY})\s*(?:\/\s*face\.?\s*)?(?:per\s+(?:annum|year)|\/\s*(?:annum|year|yr)|p\.?a\.?\b|annually|yearly)`, 'gi');
+const MONTHLY_AFTER = new RegExp(String.raw`(${MONEY})\s*(?:\/\s*face\.?\s*)?(?:per\s+month|\/\s*mo(?:nth)?\b|monthly|a\s+month|p\.?m\.?\b)`, 'gi');
+
+/**
+ * Prices a slide gives per month and per year, kept apart. Decks often show
+ * both ("Annual Rate: N8,000,000 · Monthly Rental: N750,000"); the yearly
+ * figure must never be saved as the monthly rate.
+ */
+export function findRates(text: string): { monthly: number | null; annual: number | null } {
+  const first = (res: RegExp[]) => {
+    for (const re of res) {
+      for (const m of text.matchAll(re)) {
+        const v = findRate(m[1], true);
+        if (v) return v;
+      }
+    }
+    return null;
+  };
+  return { monthly: first([MONTHLY_BEFORE, MONTHLY_AFTER]), annual: first([ANNUAL_BEFORE, ANNUAL_AFTER]) };
+}
+
+/** True when text reads like a price or a field label, not a place (so it can't be a board's name). */
+export function looksLikePriceOrLabel(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (/^(annual|yearly|monthly|cost|rate|rates|price|rental|rent|size|dimension|fee|amount|tariff|vat|production|printing|available|contact|tel|phone|email)\b/i.test(t)) return true;
+  return /(?:₦|\bNGN\b|\bN)\s?\d[\d,.]{4,}/.test(t) && !/\b(road|rd|street|way|avenue|bridge|junction|roundabout|market|along|opposite|express)\b/i.test(t);
+}
+
 /** First GPS pair anywhere in the text. */
 export function findGps(text: string): { lat: number; lng: number } | null {
   const whole = parseCoordinates(text);
@@ -181,7 +224,10 @@ function splitLabel(line: string): [Field, string] | null {
   return null;
 }
 
-const NOT_A_TITLE = /^(size|rate|price|gps|location|type|format|illumination|faces?|available|contact|tel|phone|email|www\.|http)/i;
+const NOT_A_TITLE = /^(size|rate|price|gps|location|type|format|illumination|faces?|available|contact|tel|phone|email|www\.|http|annual|yearly|monthly|cost|rental|rent|since|vacant|[rl]h[ds]$)/i;
+// Words that show a line is where the board stands.
+const PLACE_WORDS = /\b(along|road|rd|street|str|avenue|ave|way|express(way)?|exp|bridge|junction|jct|roundabout|round about|market|by|opp|opposite|beside|near|inside|in front of|adjacent|ftt|ftf|lftt|facing|bus ?stop|b\/stop|estate|toll ?gate|garage|motor park|flyover|interchange|close|crescent|drive|airport|stadium|mall|plaza)\b/i;
+const CONTINUES = /^(by|opp\.?|opposite|beside|near|ftt|ftf|facing|off|after|before|adjacent|at|,)\b/i;
 // A line that only names the board type, e.g. "(GANTRY)", "EYE CATCHER", "(PORTRAIT)".
 const FORMAT_TAG = /^\s*[([]?\s*(led|digital|unipole|uni-?pole|gantry|billboard|eye[\s-]?catcher|portrait|landscape|bridge panel|wall drape|rooftop|roof top|super 48|48 sheet|96 sheet|mega board|lamp[\s-]?post|street pole)s?\s*(board)?\s*[)\]]?\s*$/i;
 
@@ -217,7 +263,13 @@ export function extractBoard(rawLines: string[]): DeckRow | null {
   const height = got.height ? parseFloat(got.height) : size?.height ?? null;
   const format = findFormat(got.format ?? '') || findFormat(text);
   const illum = findIlluminated(got.illum ?? '') || (got.illum ? '' : findIlluminated(text));
-  const rate = findRate(got.rate ?? '', true) ?? findRate(text);
+  // Monthly price: a monthly figure if the slide gives one, else a yearly
+  // figure divided by 12, else whatever single price is on the slide.
+  const both = findRates(text);
+  const annual = both.annual ?? (got.rate_annual ? findRate(got.rate_annual, true) : null);
+  const rate = both.monthly
+    ?? (annual ? Math.round(annual / 12 / 1000) * 1000 : null)
+    ?? findRate(got.rate ?? '', true) ?? findRate(text);
   let gps = got.gps ? findGps(got.gps) : null;
   if (!gps && got.lat && got.lng) gps = parseCoordinates(`${got.lat}, ${got.lng}`);
   gps = gps ?? findGps(text);
@@ -225,9 +277,24 @@ export function extractBoard(rawLines: string[]): DeckRow | null {
 
   // Title: the first line that isn't a label, a number-only line, or just a
   // format tag like "(GANTRY)" / "(EYE CATCHER)". GPS stuck on the end is cut off.
-  const title = cleanTitle(lines.find(l => !splitLabel(l) && !NOT_A_TITLE.test(l) && !FORMAT_TAG.test(l) && /[a-z]{3,}/i.test(cleanTitle(l)) && !findSize(l) && l.length >= 6) ?? '');
+  // Among those, the line that reads most like a place wins (decks often put
+  // the size and price above the location, or a company tagline on every slide).
+  const usable = (l: string) => !splitLabel(l) && !NOT_A_TITLE.test(l) && !FORMAT_TAG.test(l) && /[a-z]{3,}/i.test(cleanTitle(l)) && !findSize(l) && l.length >= 6 && !looksLikePriceOrLabel(l);
+  const placeScore = (l: string) => (PLACE_WORDS.test(l) ? 3 : 0) + (findCity(l) ? 2 : 0) + (l.length >= 25 ? 1 : 0);
+  // An address split over two lines is read as one:
+  // "Along Oba Akran Road" / "by Guinness FTT Agege, Lagos."
+  const candidates: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!usable(lines[i])) continue;
+    const next = lines[i + 1];
+    const joins = next && usable(next) && !/[.!?]$/.test(lines[i]) && `${lines[i]} ${next}`.length <= 220
+      && (CONTINUES.test(next) || /^[a-z]/.test(next) || (PLACE_WORDS.test(lines[i]) && /[.]$/.test(next)));
+    if (joins) { candidates.push(`${lines[i]} ${next}`); i++; } else candidates.push(lines[i]);
+  }
+  const top = candidates.reduce<string | null>((best, c) => (best === null || placeScore(c) > placeScore(best) ? c : best), null);
+  const title = cleanTitle(top ?? '').replace(/[\s.]+$/, '');
   const address = tidy(got.address ?? '') || title;
-  const where = findCity(got.city ?? '') ?? findCity(`${address}\n${text}`);
+  const where = findCity(got.city ?? '') ?? cityAtEnd(address) ?? findCity(`${address}\n${text}`);
   const area = tidy(got.area ?? '') || areaHit(`${address}\n${text}`)?.area || '';
 
   const looksLikeBoard = !!(size || gps || rate || got.address || got.size || got.format || (format && address));
@@ -237,7 +304,7 @@ export function extractBoard(rawLines: string[]): DeckRow | null {
   return {
     'Board Name': name.slice(0, 160),
     'Address': address.slice(0, 300),
-    'City': tidy(got.city ?? '') || where?.city || '',
+    'City': where?.city || tidy(got.city ?? ''),
     'Area': area.slice(0, 80),
     'State': tidy(got.state ?? '') || where?.state || '',
     'Format': format,
@@ -249,6 +316,36 @@ export function extractBoard(rawLines: string[]): DeckRow | null {
     'Longitude': gps ? gps.lng.toFixed(6) : '',
     'Faces': faces,
   };
+}
+
+/**
+ * Lines that repeat across a deck (a tagline, "…SINCE 1976", "RHD"/"LHD"
+ * arrows) say nothing about one board. Returns them so each slide can be
+ * read without them. Format words ("Unipole", "Portrait") and labelled lines
+ * are kept even when they repeat.
+ */
+export function deckBoilerplate(slides: string[][]): Set<string> {
+  const key = (l: string) => tidy(l).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const counts = new Map<string, number>();
+  for (const lines of slides) {
+    for (const k of new Set(lines.map(key))) if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const min = Math.max(3, Math.ceil(slides.length * 0.25));
+  const out = new Set<string>();
+  for (const lines of slides) {
+    for (const l of lines) {
+      const k = key(l);
+      if ((counts.get(k) ?? 0) < min || out.has(k)) continue;
+      if (splitLabel(tidy(l)) || findFormat(l) || findSize(l) || findCity(l)) continue;
+      out.add(k);
+    }
+  }
+  return out;
+}
+
+/** A slide's lines without the deck's repeated lines. */
+export function withoutBoilerplate(lines: string[], boilerplate: Set<string>): string[] {
+  return lines.filter(l => !boilerplate.has(tidy(l).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()));
 }
 
 /**
