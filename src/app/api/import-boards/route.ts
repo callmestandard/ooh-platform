@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { ownerContactKey, cleanContact } from '@/lib/owner-contacts';
 import { requireAuth, unauthorized } from '@/lib/require-auth';
+import { isCityCentrePin } from '@/lib/import-match';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,17 +48,28 @@ type AdminImport = {
   verification: 'pending' | 'verified';
 };
 
+/** A re-uploaded board that replaces the details of one already listed. */
+type UpdateRow = { id: string; row: InsertRow };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function POST(req: NextRequest) {
   const user = await requireAuth(req);
   if (!user) return unauthorized();
 
   try {
-    const { rows, admin } = (await req.json()) as { rows: InsertRow[]; admin?: AdminImport };
-    if (!Array.isArray(rows) || rows.length === 0) {
+    const { rows: sent, admin, updates: sentUpdates } = (await req.json()) as { rows?: InsertRow[]; admin?: AdminImport; updates?: UpdateRow[] };
+    const rows = Array.isArray(sent) ? sent : [];
+    const updates = Array.isArray(sentUpdates) ? sentUpdates.filter(u => u && UUID.test(String(u.id)) && u.row) : [];
+    if (rows.length === 0 && updates.length === 0) {
       return NextResponse.json({ error: 'No rows provided' }, { status: 400 });
     }
 
-    if (admin) return adminImport(user.id, rows, admin);
+    if (admin) {
+      const added = rows.length ? await adminImport(user.id, rows, admin) : NextResponse.json({ inserted: 0, ids: [] });
+      if (!updates.length || !added.ok) return added;
+      const res = await updateBoards(user.id, updates, { admin });
+      return NextResponse.json({ ...(await added.json()), ...res }, { status: res.error && !res.updated ? 500 : 200 });
+    }
 
     // Stamp ownership from the auth session — never trust a client-sent owner_id.
     // A marketer or owner admin imports on behalf of their owner company
@@ -70,6 +82,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Only board owners and their teams can import boards' }, { status: 403 });
     }
     const { data: isAdmin } = ownerId === user.id ? { data: true } : await supabaseAdmin.rpc('is_owner_admin', { p_owner_id: ownerId, p_uid: user.id });
+    const updated = updates.length ? await updateBoards(user.id, updates, { ownerId, ownerAdmin: !!isAdmin }) : { updated: 0 };
+    if (!rows.length) return NextResponse.json({ inserted: 0, ...updated }, { status: updated.error && !updated.updated ? 500 : 200 });
     // Boards only show as "Partner verified" once our team has approved the
     // owner (migration 050). Before that, or if the check fails, they start pending.
     const { data: approval } = await supabaseAdmin.from('owner_approvals').select('owner_id').eq('owner_id', ownerId).maybeSingle();
@@ -104,10 +118,10 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabaseAdmin.from('boards').insert(payload).select('id');
     if (error) {
       console.error('[import-boards]', error);
-      return NextResponse.json({ inserted: 0, error: error.message }, { status: 500 });
+      return NextResponse.json({ inserted: 0, ...updated, error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ inserted: data?.length ?? 0 });
+    return NextResponse.json({ inserted: data?.length ?? 0, ...updated });
   } catch (err) {
     console.error('[import-boards]', err);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
@@ -209,4 +223,62 @@ async function adminImport(uid: string, rows: InsertRow[], admin: AdminImport) {
     }
   }
   return NextResponse.json({ inserted: ids.length, ids });
+}
+
+/**
+ * Re-upload: replaces the details of boards already listed. An owner's team
+ * may only update their own company's boards (a marketer only the boards
+ * assigned to them); our team may update any. Status, owner and verification
+ * are left as they are. A pin is replaced by the new one; with no new pin, a
+ * pin that was only the city centre is removed rather than kept as if real.
+ */
+async function updateBoards(
+  uid: string,
+  updates: UpdateRow[],
+  who: { admin: AdminImport } | { ownerId: string; ownerAdmin: boolean },
+): Promise<{ updated: number; updateFailed?: string[]; error?: string }> {
+  if ('admin' in who) {
+    const { data: me } = await supabaseAdmin.from('profiles').select('role').eq('id', uid).maybeSingle();
+    if ((me as { role?: string } | null)?.role !== 'admin') return { updated: 0, error: 'Only admins can update boards on behalf of others' };
+  }
+  const ids = [...new Set(updates.map(u => u.id))];
+  const { data: found, error } = await supabaseAdmin.from('boards')
+    .select('id, owner_id, assigned_marketer_id, latitude, longitude, city, photo_urls').in('id', ids);
+  if (error) return { updated: 0, error: error.message };
+  type Found = { id: string; owner_id: string | null; assigned_marketer_id: string | null; latitude: number | null; longitude: number | null; city: string | null; photo_urls: string[] | null };
+  const boards = new Map(((found ?? []) as Found[]).map(b => [b.id, b]));
+  const failed: string[] = [];
+  let updated = 0;
+  const source = 'admin' in who ? String(who.admin.source ?? '').trim().slice(0, 200) : '';
+  const ownerName = 'admin' in who && !who.admin.ownerId ? String(who.admin.ownerName ?? '').trim().slice(0, 200) : '';
+
+  for (const { id, row } of updates) {
+    const b = boards.get(id);
+    const allowed = b && ('admin' in who || (b.owner_id === who.ownerId && (who.ownerAdmin || b.assigned_marketer_id === uid)));
+    if (!b || !allowed) { failed.push(id); continue; }
+    const f = boardFields(row);
+    const newPin = f.latitude != null && f.longitude != null;
+    const oldPinFake = isCityCentrePin(b.latitude, b.longitude, b.city);
+    // Photos the owner added from their link stay; the old import's photo is replaced.
+    const keptPhotos = (b.photo_urls ?? []).filter(u => u.includes('/board-photos/owner-link/'));
+    const patch: Record<string, unknown> = {
+      name: f.name, address: f.address, city: f.city, area: f.area, state: f.state, format: f.format,
+      width: f.width, height: f.height,
+      ...(f.asking_rate ? { asking_rate: f.asking_rate } : {}),
+      ...(f.notes ? { notes: f.notes } : {}),
+      ...(f.illuminated !== null ? { illuminated: f.illuminated } : {}),
+      ...(row.face_count ? { face_count: f.face_count } : {}),
+      ...(f.contact_name || f.contact_phone ? { contact_name: f.contact_name, contact_phone: f.contact_phone } : {}),
+      ...(newPin ? { latitude: f.latitude, longitude: f.longitude } : oldPinFake ? { latitude: null, longitude: null } : {}),
+      ...(f.photo_urls ? { photo_urls: [...f.photo_urls, ...keptPhotos].slice(0, 5) } : {}),
+      ...(source ? { source } : {}),
+    };
+    const { error: upError } = await supabaseAdmin.from('boards').update(patch).eq('id', id);
+    if (upError) { console.error('[import-boards update]', upError); failed.push(id); continue; }
+    updated++;
+    if (ownerName) {
+      await supabaseAdmin.from('board_owner_names').upsert({ board_id: id, owner_name: ownerName, updated_by: uid, updated_at: new Date().toISOString() });
+    }
+  }
+  return failed.length ? { updated, updateFailed: failed, error: `${failed.length} board${failed.length === 1 ? '' : 's'} could not be updated` } : { updated };
 }

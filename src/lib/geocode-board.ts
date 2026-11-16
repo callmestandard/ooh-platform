@@ -8,7 +8,8 @@
 // board's city is thrown away; if nothing fits, the pin goes to the area or
 // city centre and is marked as a rough guess.
 
-export type GeoHit = { lat: number; lng: number; label: string; confidence: 'high' | 'low' };
+/** kind: 'place' is a street-level match; 'area' and 'city' only say roughly where, never the board's spot. */
+export type GeoHit = { lat: number; lng: number; label: string; confidence: 'high' | 'low'; kind: 'place' | 'area' | 'city' };
 
 const CENTRES: Record<string, [number, number]> = {
   'Lagos': [6.5244, 3.3792], 'Abuja': [9.0765, 7.3986], 'Port Harcourt': [4.8156, 7.0498], 'Ibadan': [7.3775, 3.947],
@@ -188,12 +189,12 @@ export async function geocodeBoard(b: { address: string; name?: string; area?: s
         if (BROAD.has(p.osm_value ?? '') || BROAD.has(p.type ?? '')) {
           // A district or town with the asked name: a fallback that beats the city centre.
           if (!district && centre && words(p.name ?? '').some(n => asked.some(w => sameWord(w, n)))) {
-            district = { lat, lng, label: `${p.name} (area)`, confidence: 'low' };
+            district = { lat, lng, label: `${p.name} (area)`, confidence: 'low', kind: 'area' };
           }
           continue;
         }
         const s = score(asked, kind, `${p.name ?? ''} ${p.street ?? ''}`, p.osm_value ?? '', p.name ?? '');
-        if (s > (best?.s ?? 0)) best = { lat, lng, s, label: [p.name, p.street, p.district ?? p.locality, p.city].filter(Boolean).join(', '), confidence: 'high' };
+        if (s > (best?.s ?? 0)) best = { lat, lng, s, label: [p.name, p.street, p.district ?? p.locality, p.city].filter(Boolean).join(', '), confidence: 'high', kind: 'place' };
       }
     } catch { /* try Mapbox */ }
     if (!best && mapboxToken) {
@@ -202,7 +203,7 @@ export async function geocodeBoard(b: { address: string; name?: string; area?: s
           const [lng, lat] = f.center;
           if (!near([lat, lng]) || !(f.place_type ?? []).some(t => t === 'address' || t === 'poi')) continue;
           const s = score(asked, kind, f.text ?? '', '');
-          if (s > (best?.s ?? 0) && Number(f.relevance) >= 0.7) best = { lat, lng, s, label: f.place_name ?? q, confidence: 'high' };
+          if (s > (best?.s ?? 0) && Number(f.relevance) >= 0.7) best = { lat, lng, s, label: f.place_name ?? q, confidence: 'high', kind: 'place' };
         }
       } catch { /* fall through */ }
     }
@@ -214,10 +215,10 @@ export async function geocodeBoard(b: { address: string; name?: string; area?: s
       // or a match without a known city, is only a rough guess.
       // Good only for the main landmark, or when two or more words agree.
       const good = centre && q !== area && ((tried === 1 && best.s >= 12) || best.s >= 20);
-      return { ...hit, confidence: good ? 'high' : 'low' };
+      return { ...hit, confidence: good ? 'high' : 'low', kind: 'place' };
     }
   }
   if (district) return district;
-  if (centre) return { lat: centre[0], lng: centre[1], label: `${b.city} (city centre)`, confidence: 'low' };
+  if (centre) return { lat: centre[0], lng: centre[1], label: `${b.city} (city centre)`, confidence: 'low', kind: 'city' };
   return null;
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import OwnerApprovalNotice from '@/components/owner/OwnerApprovalNotice';
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { Fragment, useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
@@ -15,6 +15,7 @@ import PhotoCropper from '@/components/admin/PhotoCropper';
 import PhotoReview, { type ReviewItem } from '@/components/admin/PhotoReview';
 import { ownerContactKey } from '@/lib/owner-contacts';
 import { geocodeBoard } from '@/lib/geocode-board';
+import { findMatches, photoPrint, type Candidate, type Match } from '@/lib/import-match';
 
 const PreviewMap = dynamic(() => import('./PreviewMap'), {
   ssr: false,
@@ -67,9 +68,17 @@ type ImportRow = {
   duplicate: boolean;
   duplicate_of: string;
   selected: boolean;
+  /** A board already on the platform that looks like this one. */
+  match: Match | null;
+  /** new: add it · update: replace the listed board's details · skip: don't add. */
+  action: 'new' | 'update' | 'skip';
 };
 
-type ExistingBoard = { id: string; name: string; latitude: number | null; longitude: number | null };
+/** Runs fn over items, n at a time. */
+async function eachLimit<T>(items: T[], n: number, fn: (t: T) => Promise<void>) {
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) await fn(items[i++]); }));
+}
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -179,15 +188,6 @@ function normalizeStr(s: string): string {
   return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '').trim();
 }
 
-function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6_371_000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 /**
  * Platform fields a header could mean, best guess first. An exact match on a
  * hint wins; otherwise a hint must appear as a whole word in the header (so
@@ -225,7 +225,6 @@ function buildAutoMap(headers: string[]): Record<string, string> {
 function validateRows(
   rawRows: Record<string, unknown>[],
   colMap: Record<string, string>,
-  existing: ExistingBoard[],
 ): ImportRow[] {
   const get = (row: Record<string, unknown>, field: string): string => {
     const h = colMap[field];
@@ -298,22 +297,6 @@ function validateRows(
       }
     }
 
-    // Dedup against existing boards
-    if (!duplicate && normName) {
-      const match = existing.find(b => {
-        if (normalizeStr(b.name) !== normName) return false;
-        if (latitude && longitude && b.latitude && b.longitude) {
-          return haversine(latitude, longitude, b.latitude, b.longitude) < 100;
-        }
-        return true; // same name, no coords → flag
-      });
-      if (match) {
-        duplicate = true;
-        duplicate_of = `Existing board "${match.name}"`;
-        issues.push('Possible duplicate of existing board');
-      }
-    }
-
     // Rows that cannot be imported as they stand. An unknown format is one of
     // them: it is never guessed — the owner picks the right one in the table.
     const hasHardMissing = !name || !city || !format;
@@ -350,6 +333,8 @@ function validateRows(
       duplicate,
       duplicate_of,
       selected: !hasHardMissing,
+      match: null,
+      action: 'new',
     };
   });
 }
@@ -410,12 +395,14 @@ export default function ImportBoardsPage() {
   const [truncated, setTruncated] = useState(false);
   const [colMap, setColMap] = useState<Record<string, string>>({});
   const [rows, setRows] = useState<ImportRow[]>([]);
-  const [existingBoards, setExistingBoards] = useState<ExistingBoard[]>([]);
+  // Boards already listed: being checked, and how many of an earlier upload this file doesn't include.
+  const [matching, setMatching] = useState(false);
+  const [leftover, setLeftover] = useState(0);
   const [geocodingDone, setGeocodingDone] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishProgress, setPublishProgress] = useState(0);
-  const [publishResult, setPublishResult] = useState<{ inserted: number; skipped: ImportRow[] } | null>(null);
+  const [publishResult, setPublishResult] = useState<{ inserted: number; updated: number; skipped: ImportRow[] } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editField, setEditField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -465,6 +452,9 @@ export default function ImportBoardsPage() {
   const [adminOwner, setAdminOwner] = useState<OwnerChoice>({ ownerId: null, ownerName: '' });
   const [adminSource, setAdminSource] = useState('');
   const [adminVerification, setAdminVerification] = useState<'pending' | 'verified'>('pending');
+  // Re-uploading a deck imported before: its boards are updated, not added again.
+  const [sources, setSources] = useState<{ source: string; count: number }[]>([]);
+  const [replaceSource, setReplaceSource] = useState('');
 
   // Load owner's existing boards for dedup
   useEffect(() => {
@@ -483,22 +473,21 @@ export default function ImportBoardsPage() {
       supabase.rpc('owner_company_of', { p_uid: uid }).then(({ data: company }) => {
         const ownerId = (company as string | null) ?? uid;
         setOwnerCompanyId(ownerId);
-        supabase.from('boards')
-          .select('id, name, latitude, longitude')
-          .eq('owner_id', ownerId)
-          .then(({ data }) => setExistingBoards((data as ExistingBoard[]) || []));
         supabase.from('owner_import_mappings').select('mapping').eq('owner_id', ownerId).maybeSingle()
           .then(({ data }) => setSavedMap(((data as { mapping?: Record<string, string> } | null)?.mapping) ?? {}));
       });
     });
   }, []);
 
-  // Admin mode: check duplicates against the chosen owner's boards, or unclaimed ones.
+  // Admin mode: earlier uploads for the chosen owner (or unclaimed boards), so a re-upload can replace one.
   useEffect(() => {
     if (!adminMode) return;
-    const q = supabase.from('boards').select('id, name, latitude, longitude');
-    (adminOwner.ownerId ? q.eq('owner_id', adminOwner.ownerId) : q.is('owner_id', null))
-      .then(({ data }) => setExistingBoards((data as ExistingBoard[]) || []));
+    const q = supabase.from('boards').select('source').not('source', 'is', null).limit(5000);
+    (adminOwner.ownerId ? q.eq('owner_id', adminOwner.ownerId) : q.is('owner_id', null)).then(({ data }) => {
+      const counts = new Map<string, number>();
+      for (const r of (data as { source: string }[]) ?? []) counts.set(r.source, (counts.get(r.source) ?? 0) + 1);
+      setSources([...counts].map(([source, count]) => ({ source, count })).sort((a, b) => b.count - a.count));
+    });
   }, [adminMode, adminOwner.ownerId]);
 
   // ── File upload & parse ─────────────────────────────────────────────────
@@ -546,6 +535,11 @@ export default function ImportBoardsPage() {
       setUsedSavedMap(false);
       setColMap(DECK_COLUMN_MAP);
       if (adminMode && !adminSource.trim()) setAdminSource(`${file.name.replace(/\.[^.]+$/, '')} (deck)`.slice(0, 200));
+      if (adminMode && !replaceSource) {
+        const first = (t: string) => t.toLowerCase().match(/[a-z0-9]+/)?.[0] ?? '';
+        const same = sources.find(x => first(x.source) && first(x.source) === first(file.name));
+        if (same) setReplaceSource(same.source);
+      }
     } catch (e) {
       toastError(e instanceof Error ? e.message : 'Could not read that deck');
     } finally {
@@ -617,13 +611,51 @@ export default function ImportBoardsPage() {
       supabase.from('owner_import_mappings').upsert({ owner_id: ownerCompanyId, mapping, updated_at: new Date().toISOString() })
         .then(({ error }) => { if (!error) setSavedMap(mapping); });
     }
-    const validated = validateRows(rawRows, colMap, existingBoards);
+    const validated = validateRows(rawRows, colMap);
     setRows(validated);
     setStep(3);
     setGeocodingDone(false);
     geocodeAbort.current = false;
-    // Start geocoding in background
-    runGeocode(validated);
+    // Look for boards already listed, then find pins in the background.
+    runMatching(validated).finally(() => runGeocode(validated));
+  }
+
+  // ── Boards already listed ───────────────────────────────────────────────
+
+  async function runMatching(initial: ImportRow[]) {
+    setMatching(true);
+    setLeftover(0);
+    try {
+      const { data } = await supabase.from('boards')
+        .select(`id, name, address, city, format, width, height, latitude, longitude, photo_urls, owner_id${adminMode ? ', source' : ''}`)
+        .limit(5000);
+      const candidates = (data ?? []) as unknown as Candidate[];
+      if (!candidates.length) return;
+      const canUpdate = (c: Candidate) => adminMode || (!!ownerCompanyId && c.owner_id === ownerCompanyId);
+      const previous = adminMode && replaceSource
+        ? new Set(candidates.filter(c => c.source === replaceSource && (adminOwner.ownerId ? c.owner_id === adminOwner.ownerId : !c.owner_id)).map(c => c.id))
+        : undefined;
+      // Photo fingerprints: this file's photos, and listed boards that could be the same ones.
+      const cities = new Set(initial.map(r => r.city.trim().toLowerCase()).filter(Boolean));
+      const prints = new Map<string, string>();
+      const toPrint = candidates.filter(c => c.photo_urls?.[0] && (previous?.has(c.id) || (canUpdate(c) && cities.has((c.city ?? '').trim().toLowerCase())))).slice(0, 400);
+      await eachLimit(toPrint, 6, async c => { const fp = await photoPrint(c.photo_urls![0]); if (fp) prints.set(c.id, fp); });
+      const rowPrints = new Map<string, string>();
+      await eachLimit(initial.filter(r => r.photo_key && deckPhotos[r.photo_key]), 6, async r => {
+        const fp = await photoPrint(deckPhotos[r.photo_key].blob); if (fp) rowPrints.set(r._id, fp);
+      });
+      const usable = initial.filter(r => r.status !== 'skip');
+      const found = findMatches(usable.map(r => ({ ...r, print: rowPrints.get(r._id) ?? null })), candidates, { prints, canUpdate, previous });
+      if (previous) setLeftover([...previous].filter(id => ![...found.values()].some(m => m.id === id)).length);
+      setRows(prev => prev.map(r => {
+        const m = found.get(r._id);
+        return m ? { ...r, match: m, action: m.canUpdate ? 'update' : 'skip' } : r;
+      }));
+    } catch {
+      toastError('Could not check for boards already listed. Each board will be added as new.');
+    } finally {
+      setMatching(false);
+    }
   }
 
   // ── Geocoding ───────────────────────────────────────────────────────────
@@ -647,7 +679,14 @@ export default function ImportBoardsPage() {
       try {
         // Landmarks, junctions and markets from the address, searched near the board's city.
         const hit = await geocodeBoard({ address: row.address || row.name, name: row.name, area: row.area, city: row.city, state: row.state }, token);
-        if (hit) {
+        if (hit && hit.kind !== 'place') {
+          // Only the area or the city was found: that is not where the board stands.
+          setRows(prev => prev.map(r => r._id === row._id ? {
+            ...r, geocoding: false, geocode_confidence: 'failed',
+            issues: [...r.issues, `No exact spot found (only ${hit.kind === 'city' ? 'the city' : `the area, ${hit.label.replace(/ \(area\)$/, '')}`}). Imports without a pin — add GPS or set the pin later`],
+            status: r.status === 'ready' ? 'warning' : r.status,
+          } : r));
+        } else if (hit) {
           const note = hit.confidence === 'high'
             ? `Pin placed at "${hit.label}" from the address (no GPS given). Check it on the map`
             : `Pin is a rough guess ("${hit.label}"). Drag it to the right spot on the map`;
@@ -717,22 +756,39 @@ export default function ImportBoardsPage() {
     setPublishProgress(0);
 
     // A row is only sent if its format is one the platform knows — never defaulted.
-    const importable = (r: ImportRow) => r.selected && r.status !== 'skip' && !!normalizeFormat(r.format);
+    const importable = (r: ImportRow) => r.selected && r.status !== 'skip' && r.action !== 'skip' && !!normalizeFormat(r.format);
     const selected = rows.filter(importable);
-    const skipped: ImportRow[] = rows.filter(r => !importable(r)).map(r => (r.issues.length ? r : { ...r, issues: ['Deselected by you'] }));
+    const skipped: ImportRow[] = rows.filter(r => !importable(r)).map(r => (
+      r.selected && r.status !== 'skip' && r.action === 'skip' && r.match ? { ...r, issues: [`Not added: already listed as "${r.match.name}"`, ...r.issues] }
+        : r.issues.length ? r : { ...r, issues: ['Deselected by you'] }));
     const BATCH = 50;
     let inserted = 0;
+    let updated = 0;
 
     for (let i = 0; i < selected.length; i += BATCH) {
-      const batchRows = selected.slice(i, i + BATCH);
+      let batchRows = selected.slice(i, i + BATCH);
       // Deck photos upload now, just before their boards are saved.
+      // Three at a time with retries: sending 50 at once on a weak connection
+      // lost most photos, and those boards went live with no picture.
       const photoUrl: Record<string, string> = {};
-      await Promise.all(batchRows.filter(r => r.photo_key && deckPhotos[r.photo_key]).map(async r => {
-        const path = `boards/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-        const { data: up } = await supabase.storage.from('board-photos').upload(path, deckPhotos[r.photo_key].blob, { contentType: 'image/jpeg', cacheControl: '3600', upsert: false });
-        if (up) photoUrl[r._id] = supabase.storage.from('board-photos').getPublicUrl(up.path).data.publicUrl;
-      }));
-      const batch = batchRows.map(r => ({
+      const withPhoto = batchRows.filter(r => r.photo_key && deckPhotos[r.photo_key]);
+      await eachLimit(withPhoto, 3, async r => {
+        for (let attempt = 0; attempt < 4 && !photoUrl[r._id]; attempt++) {
+          if (attempt) await new Promise(res => setTimeout(res, 800 * 2 ** attempt));
+          const path = `boards/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+          const { data: up } = await supabase.storage.from('board-photos').upload(path, deckPhotos[r.photo_key].blob, { contentType: 'image/jpeg', cacheControl: '3600', upsert: false });
+          if (up) photoUrl[r._id] = supabase.storage.from('board-photos').getPublicUrl(up.path).data.publicUrl;
+        }
+      });
+      // A board whose photo would not upload is held back, not published blank.
+      const photoFailed = withPhoto.filter(r => !photoUrl[r._id]);
+      if (photoFailed.length) {
+        skipped.push(...photoFailed.map(r => ({ ...r, issues: ['Not saved — its photo did not upload (weak connection). Import this board again', ...r.issues] })));
+        const failedIds = new Set(photoFailed.map(r => r._id));
+        batchRows = batchRows.filter(r => !failedIds.has(r._id));
+        if (!batchRows.length) { setPublishProgress(Math.round(((i + Math.min(BATCH, selected.length - i)) / selected.length) * 100)); continue; }
+      }
+      const toPayload = (r: ImportRow) => ({
         name: r.name,
         address: r.address,
         city: r.city,
@@ -750,7 +806,10 @@ export default function ImportBoardsPage() {
         contact_name: r.contact_name || importContactName.trim() || null,
         contact_phone: r.contact_phone || importContactPhone.trim() || null,
         ...(photoUrl[r._id] ? { photo_urls: [photoUrl[r._id]] } : {}),
-      }));
+      });
+      const isUpdate = (r: ImportRow) => r.action === 'update' && !!r.match;
+      const batch = batchRows.filter(r => !isUpdate(r)).map(toPayload);
+      const updates = batchRows.filter(isUpdate).map(r => ({ id: r.match!.id, row: toPayload(r) }));
 
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -761,13 +820,16 @@ export default function ImportBoardsPage() {
             ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
           },
           body: JSON.stringify(adminMode
-            ? { rows: batch, admin: { ownerId: adminOwner.ownerId, ownerName: adminOwner.ownerId ? null : adminOwner.ownerName.trim() || null, source: adminSource.trim(), verification: adminVerification } }
-            : { rows: batch }),
+            ? { rows: batch, updates, admin: { ownerId: adminOwner.ownerId, ownerName: adminOwner.ownerId ? null : adminOwner.ownerName.trim() || null, source: adminSource.trim(), verification: adminVerification } }
+            : { rows: batch, updates }),
         });
         const data = await res.json();
         inserted += data.inserted ?? 0;
+        updated += data.updated ?? 0;
         // A rejected batch is reported row by row, not swallowed.
-        if (!res.ok || !data.inserted) skipped.push(...batchRows.map(r => ({ ...r, issues: [...r.issues, `Not saved — ${data.error ?? 'the server rejected this batch'}`] })));
+        const failedIds = new Set<string>(data.updateFailed ?? []);
+        const notSaved = (r: ImportRow) => !res.ok || (isUpdate(r) ? failedIds.has(r.match!.id) : batch.length > 0 && !data.inserted);
+        skipped.push(...batchRows.filter(notSaved).map(r => ({ ...r, issues: [...r.issues, `Not saved — ${data.error ?? 'the server rejected this batch'}`] })));
       } catch {
         skipped.push(...batchRows.map(r => ({ ...r, issues: [...r.issues, 'Not saved — connection problem, try importing these rows again'] })));
       }
@@ -775,9 +837,9 @@ export default function ImportBoardsPage() {
       setPublishProgress(Math.round(((i + Math.min(BATCH, selected.length - i)) / selected.length) * 100));
     }
 
-    setPublishResult({ inserted, skipped });
+    setPublishResult({ inserted, updated, skipped });
     setPublishing(false);
-    toastSuccess(`${inserted} boards published successfully`);
+    toastSuccess([inserted ? `${inserted} added` : '', updated ? `${updated} updated` : ''].filter(Boolean).join(' · ') || 'Nothing was saved');
   }
 
   function downloadSkipReport() {
@@ -816,7 +878,11 @@ export default function ImportBoardsPage() {
   const uncheckedPhotos = reviewItems.filter(it => it.included && !approvedPhotos.has(it.id)).length;
   const includedPhotos = reviewItems.filter(it => it.included).length;
   const skipCount    = rows.filter(r => r.status === 'skip').length;
-  const selectedCount = rows.filter(r => r.selected && r.status !== 'skip').length;
+  const selectedCount = rows.filter(r => r.selected && r.status !== 'skip' && r.action !== 'skip').length;
+  const updateCount = rows.filter(r => r.selected && r.status !== 'skip' && r.action === 'update').length;
+  const notAddedCount = rows.filter(r => r.selected && r.status !== 'skip' && r.action === 'skip' && r.match).length;
+  const addCount = selectedCount - updateCount;
+  const publishLabel = updateCount ? [addCount ? `add ${addCount}` : '', `update ${updateCount}`].filter(Boolean).join(', ') : `${selectedCount} boards`;
   const geocodingCount = rows.filter(r => r.geocoding).length;
   const geocodedCount  = rows.filter(r => r.geocoded).length;
   const needsGeocode   = rows.filter(r => r.selected && !r.latitude && !r.longitude).length;
@@ -903,6 +969,17 @@ export default function ImportBoardsPage() {
                 <option value="verified">Verified by our team</option>
               </select>
             </label>
+            {sources.length > 0 && (
+              <label data-replace-source style={{ gridColumn: '1 / -1', fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                Uploaded before?
+                <select value={replaceSource} onChange={e => setReplaceSource(e.target.value)} disabled={step > 1}
+                  style={{ padding: '8px 10px', border: '1px solid #E2E8F0', borderRadius: 8, fontFamily: 'inherit', fontSize: '0.8125rem', background: '#fff' }}>
+                  <option value="">No, these are new boards</option>
+                  {sources.map(x => <option key={x.source} value={x.source}>Yes, update the {x.count} boards from “{x.source}”</option>)}
+                </select>
+                <span style={{ fontWeight: 400, color: '#94A3B8', fontSize: '0.6875rem' }}>Boards already listed are found by photo, pin and name, and updated instead of added twice.</span>
+              </label>
+            )}
             <div data-import-contact style={{ gridColumn: '1 / -1', borderTop: '1px solid #E2E8F0', paddingTop: 12, marginTop: 2 }}>
               <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', margin: '0 0 8px' }}>Sales contact for these boards</p>
               <SavedContacts
@@ -1122,6 +1199,24 @@ export default function ImportBoardsPage() {
                 <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>{s.label}</span>
               </div>
             ))}
+            {matching && (
+              <div data-matching style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: '#EFF6FF' }}>
+                <div style={{ width: 12, height: 12, border: '2px solid #BFDBFE', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                <span style={{ fontSize: '0.8125rem', color: '#1B4F8A' }}>Checking boards already listed…</span>
+              </div>
+            )}
+            {!matching && updateCount > 0 && (
+              <div data-update-count style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: '#EFF6FF' }}>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#1B4F8A' }}>{updateCount}</span>
+                <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>will update listed boards</span>
+              </div>
+            )}
+            {!matching && notAddedCount > 0 && (
+              <div data-not-added style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: '#FFFBEB' }}>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#B45309' }}>{notAddedCount}</span>
+                <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>already listed — not added unless you continue</span>
+              </div>
+            )}
             {geocodingCount > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: '#EFF6FF' }}>
                 <div style={{ width: 12, height: 12, border: '2px solid #BFDBFE', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
@@ -1134,6 +1229,12 @@ export default function ImportBoardsPage() {
               </div>
             )}
           </div>
+
+          {!matching && leftover > 0 && (
+            <p data-leftover style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 12px' }}>
+              {leftover} board{leftover === 1 ? '' : 's'} from “{replaceSource}” {leftover === 1 ? 'was' : 'were'} not found in this file. {leftover === 1 ? 'It stays' : 'They stay'} as {leftover === 1 ? 'it is' : 'they are'}.
+            </p>
+          )}
 
           {deckMode && reviewItems.length > 0 && (
             <div data-photo-check style={{ ...cardStyle, marginBottom: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', borderColor: uncheckedPhotos ? '#DDD6FE' : '#A7F3D0', background: uncheckedPhotos ? '#FAF5FF' : '#F0FDF4' }}>
@@ -1198,11 +1299,15 @@ export default function ImportBoardsPage() {
                 </thead>
                 <tbody>
                   {rows.map(row => {
+                    const m = row.status !== 'skip' ? row.match : null;
+                    const choices: [ImportRow['action'], string][] = m?.canUpdate
+                      ? [['update', 'Update it'], ['new', 'Add as new'], ['skip', 'Don’t add']]
+                      : [['new', 'Continue'], ['skip', 'Don’t continue']];
                     const statusColor = row.status === 'ready' ? '#10B981' : row.status === 'warning' ? '#D97706' : '#EF4444';
                     const isEditing = editingId === row._id;
                     return (
+                      <Fragment key={row._id}>
                       <tr
-                        key={row._id}
                         className="imp-row"
                         style={{
                           borderBottom: '1px solid #F1F5F9',
@@ -1314,6 +1419,35 @@ export default function ImportBoardsPage() {
                           ) : '—'}
                         </td>
                       </tr>
+                      {m && (
+                        <tr data-match-row style={{ background: m.canUpdate ? '#F5F9FF' : '#FFFBEB', borderBottom: '1px solid #F1F5F9', opacity: row.selected ? 1 : 0.5 }}>
+                          <td colSpan={deckMode ? 9 : 8} style={{ padding: '2px 12px 10px 56px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                              {m.photo && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={m.photo} alt="" style={{ width: 40, height: 28, objectFit: 'cover', borderRadius: 4, border: '1px solid #E2E8F0', flexShrink: 0 }} />
+                              )}
+                              <span style={{ flex: '1 1 220px', minWidth: 0, fontSize: '0.75rem', color: '#334155', lineHeight: 1.4 }}>
+                                <strong style={{ color: m.canUpdate ? '#1B4F8A' : '#B45309' }}>{m.canUpdate ? 'Already listed' : 'Listed by someone else'}</strong>
+                                {' '}“{m.name.length > 60 ? `${m.name.slice(0, 60)}…` : m.name}”{m.city ? `, ${m.city}` : ''}
+                                <span style={{ color: '#94A3B8' }}> · {m.why}</span>
+                              </span>
+                              <div role="group" aria-label="What to do with this board" style={{ display: 'inline-flex', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: 2, flexShrink: 0 }}>
+                                {choices.map(([value, label]) => (
+                                  <button key={value} type="button" data-choice={value} aria-pressed={row.action === value}
+                                    onClick={() => setRows(prev => prev.map(r => r._id === row._id ? { ...r, action: value } : r))}
+                                    style={{ padding: '4px 10px', border: 'none', borderRadius: 6, fontFamily: 'inherit', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+                                      background: row.action === value ? (value === 'skip' ? '#475569' : '#1B4F8A') : 'transparent',
+                                      color: row.action === value ? '#fff' : '#475569' }}>
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -1375,20 +1509,20 @@ export default function ImportBoardsPage() {
                     Ready to publish {selectedCount} boards
                   </p>
                   <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0 }}>
-                    {readyCount + warningCount} will be inserted · {skipCount} will be skipped · status set to "available"
+                    {addCount} new{updateCount ? ` · ${updateCount} update listed boards` : ''}{notAddedCount ? ` · ${notAddedCount} already listed, not added` : ''}{skipCount ? ` · ${skipCount} skipped` : ''}
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button style={btnSecondary} onClick={() => setStep(3)}>← Review</button>
                   <button style={{ ...btnPrimary, background: '#0D6B3E' }} disabled={publishing} onClick={() => setShowConfirm(true)}>
-                    {publishing ? 'Publishing…' : `Publish ${selectedCount} boards →`}
+                    {publishing ? 'Publishing…' : updateCount ? `Publish: ${publishLabel} →` : `Publish ${selectedCount} boards →`}
                   </button>
                 </div>
               </div>
               {publishing && (
                 <div style={{ marginTop: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: '0.8125rem', color: '#64748B' }}>
-                    <span>Inserting boards…</span>
+                    <span>Saving boards…</span>
                     <span>{publishProgress}%</span>
                   </div>
                   <div style={{ height: 8, background: '#E2E8F0', borderRadius: 4, overflow: 'hidden' }}>
@@ -1408,7 +1542,7 @@ export default function ImportBoardsPage() {
                 </div>
                 <div>
                   <p style={{ fontWeight: 700, color: '#065F46', margin: '0 0 2px' }}>
-                    {publishResult.inserted} boards published!
+                    {[publishResult.inserted ? `${publishResult.inserted} boards added` : '', publishResult.updated ? `${publishResult.updated} updated` : ''].filter(Boolean).join(' · ') || 'No boards saved'}
                   </p>
                   <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0 }}>
                     {publishResult.skipped.length > 0
@@ -1416,7 +1550,7 @@ export default function ImportBoardsPage() {
                       : 'All selected boards were imported successfully.'}
                   </p>
                   <p data-import-summary style={{ fontSize: '0.8125rem', color: '#334155', margin: '6px 0 0', fontWeight: 600 }}>
-                    {rows.length} rows in the file · {publishResult.inserted} imported
+                    {rows.length} rows in the file · {publishResult.inserted + publishResult.updated} saved
                     {' '}({rows.filter(r => r.status === 'warning' && !publishResult.skipped.some(s => s._id === r._id)).length} of them flagged for review)
                     {' '}· {publishResult.skipped.length} skipped
                   </p>
@@ -1477,11 +1611,11 @@ export default function ImportBoardsPage() {
       {/* Confirm dialog */}
       <ConfirmDialog
         open={showConfirm}
-        title={`Publish ${selectedCount} boards?`}
+        title={updateCount ? `Publish: ${publishLabel}?` : `Publish ${selectedCount} boards?`}
         description={adminMode
-          ? `This will add ${selectedCount} boards ${adminOwner.ownerId ? `for ${owners.find(o => o.id === adminOwner.ownerId)?.label ?? 'the chosen owner'}` : adminOwner.ownerName.trim() ? `as unclaimed (owner: ${adminOwner.ownerName.trim()})` : 'as unclaimed'} (source: ${adminSource.trim()}). Buyers can see them immediately. ${skipCount > 0 ? `${skipCount} invalid rows will be skipped.` : ''}`
-          : `This will add ${selectedCount} boards to your inventory with status "available". Agencies can see them immediately. ${skipCount > 0 ? `${skipCount} invalid rows will be skipped.` : ''}`}
-        confirmLabel={`Publish ${selectedCount} boards`}
+          ? `This will add ${addCount} boards${updateCount ? ` and replace the details of ${updateCount} listed boards` : ''} ${adminOwner.ownerId ? `for ${owners.find(o => o.id === adminOwner.ownerId)?.label ?? 'the chosen owner'}` : adminOwner.ownerName.trim() ? `as unclaimed (owner: ${adminOwner.ownerName.trim()})` : 'as unclaimed'} (source: ${adminSource.trim()}). Buyers can see them immediately. ${skipCount > 0 ? `${skipCount} invalid rows will be skipped.` : ''}`
+          : `This will add ${addCount} boards to your inventory${updateCount ? ` and replace the details of ${updateCount} of your listed boards` : ''}. Agencies can see them immediately. ${skipCount > 0 ? `${skipCount} invalid rows will be skipped.` : ''}`}
+        confirmLabel={updateCount ? 'Publish' : `Publish ${selectedCount} boards`}
         loading={publishing}
         onConfirm={() => { setShowConfirm(false); publish(); }}
         onCancel={() => setShowConfirm(false)}
