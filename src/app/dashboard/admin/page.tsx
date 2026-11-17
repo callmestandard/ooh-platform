@@ -18,6 +18,9 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FunnelPanel from '@/components/admin/FunnelPanel';
 import InventoryDatabase from '@/components/admin/InventoryDatabase';
 import { fetchGuidePrices, guideText, type GuidePrice } from '@/lib/guide-prices';
+import { pairKey } from '@/lib/board-duplicates';
+
+const BOARD_COLUMNS = 'id, name, address, city, area, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at, verification_status, last_verified_at, source, photo_urls, latitude, longitude, width, height';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -307,7 +310,7 @@ function AdminContent() {
   async function fetchAll() {
     try {
       const [bRes, bookRes, campRes, compRes, profRes, actRes, disputedRes, payoutsRes] = await Promise.all([
-        supabase.from('boards').select('id, name, address, city, area, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at, verification_status, last_verified_at, source, photo_urls, latitude, longitude, width, height').order('created_at', { ascending: false }).limit(500),
+        supabase.from('boards').select(BOARD_COLUMNS).order('created_at', { ascending: false }).limit(1000),
         supabase.from('bookings').select('id, status, offered_rate, agreed_rate, start_date, end_date, duration_months, created_at, boards(name, city, format), campaigns(name, client_name)').order('created_at', { ascending: false }).limit(200),
         supabase.from('campaigns').select('id, name, client_name, status, total_budget, start_date, end_date, agency_id, created_at').order('created_at', { ascending: false }).limit(100),
         supabase.from('compliance_checks').select('id, booking_id, status, submitted_at, photo_url, notes').order('submitted_at', { ascending: false }).limit(100),
@@ -371,6 +374,44 @@ function AdminContent() {
     const fresh = await fetchGuidePrices(ids);
     setGuides(prev => { const n = { ...prev }; ids.forEach(id => { if (fresh[id]) n[id] = fresh[id]; else delete n[id]; }); return n; });
     showToast(hide ? `Guide price hidden on ${ids.length} board${ids.length > 1 ? 's' : ''}` : `Guide price shown on ${ids.length} board${ids.length > 1 ? 's' : ''}`, 'success');
+  }
+
+  // Possible duplicates (migration 057): pairs marked "not duplicates", and merging.
+  const [dupDismissed, setDupDismissed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    supabase.from('board_duplicate_dismissals').select('board_a, board_b').then(({ data, error }) => {
+      if (error) { console.error('[admin] duplicate dismissals fetch failed:', error.message); return; }
+      setDupDismissed(new Set(((data as { board_a: string; board_b: string }[]) || []).map(r => pairKey(r.board_a, r.board_b))));
+    });
+  }, []);
+
+  async function dismissDuplicates(list: Board[]) {
+    const rows: { board_a: string; board_b: string }[] = [];
+    list.forEach((a, i) => list.slice(i + 1).forEach(b => {
+      const [x, y] = a.id < b.id ? [a.id, b.id] : [b.id, a.id];
+      rows.push({ board_a: x, board_b: y });
+    }));
+    const { error } = await supabase.from('board_duplicate_dismissals').upsert(rows, { onConflict: 'board_a,board_b', ignoreDuplicates: true });
+    if (error) {
+      showToast(/does not exist|schema cache/i.test(error.message) ? 'Run database update 057 first' : `Could not save: ${error.message}`, 'error');
+      return;
+    }
+    setDupDismissed(prev => { const n = new Set(prev); rows.forEach(r => n.add(pairKey(r.board_a, r.board_b))); return n; });
+    showToast('Marked as different boards', 'success');
+  }
+
+  async function mergeBoards(keep: Board, drop: Board[]): Promise<boolean> {
+    const { error } = await supabase.rpc('admin_merge_boards', { p_keep: keep.id, p_drop: drop.map(b => b.id) });
+    if (error) {
+      showToast(/could not find the function|does not exist/i.test(error.message) ? 'Run database update 057 first' : `Could not merge: ${error.message}`, 'error');
+      return false;
+    }
+    const { data } = await supabase.from('boards').select(BOARD_COLUMNS).eq('id', keep.id).single();
+    const fresh = data ? (await attachVisibleRates([data as Board]))[0] : null;
+    const gone = new Set(drop.map(b => b.id));
+    setBoards(prev => prev.filter(b => !gone.has(b.id)).map(b => (b.id === keep.id && fresh ? fresh : b)));
+    showToast(`Merged into “${keep.name.slice(0, 60)}”`, 'success');
+    return true;
   }
 
   // Owners our team has checked (migration 050). Their boards show as Partner verified.
@@ -945,6 +986,9 @@ function AdminContent() {
           onDelete={board => setDeleteBoard(board as Board)}
           guideOf={board => ({ text: guides[board.id] ? guideText(guides[board.id]) : null, hidden: guideHidden.has(board.id) })}
           onGuideHidden={(list, hide) => setGuidePriceHidden(list as Board[], hide)}
+          dismissedPairs={dupDismissed}
+          onMerge={(keep, drop) => mergeBoards(keep as Board, drop as Board[])}
+          onDismissDuplicates={list => dismissDuplicates(list as Board[])}
         />
       )}
 

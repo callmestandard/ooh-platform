@@ -16,6 +16,7 @@ import { formatNaira } from '@/lib/utils';
 import { boardPath } from '@/lib/public-links';
 import { displayName } from '@/lib/display-name';
 import type { MapBoard } from '@/app/marketplace/MarketplaceMap';
+import { findDuplicateGroups, type DupGroup } from '@/lib/board-duplicates';
 
 const MarketplaceMap = dynamic(() => import('@/app/marketplace/MarketplaceMap'), {
   ssr: false,
@@ -60,6 +61,11 @@ type Props = {
   /** What buyers see as the price: a guide range, hidden by us, or nothing to show. */
   guideOf?: (b: InvBoard) => { text: string | null; hidden: boolean };
   onGuideHidden?: (boards: InvBoard[], hide: boolean) => Promise<void> | void;
+  /** Pairs marked "not duplicates" (keys from pairKey). */
+  dismissedPairs?: Set<string>;
+  /** Folds the other boards into keep. Resolves true when done. */
+  onMerge?: (keep: InvBoard, drop: InvBoard[]) => Promise<boolean>;
+  onDismissDuplicates?: (boards: InvBoard[]) => Promise<void> | void;
 };
 
 // ── Options ────────────────────────────────────────────────────────────────
@@ -74,13 +80,14 @@ const STATUSES: InvStatus[] = ['available', 'booked', 'unavailable', 'decommissi
 const VERIFICATIONS: VerificationStatus[] = ['pending', 'verified', 'partner_verified'];
 const VER_DOT: Record<VerificationStatus, string> = { pending: '#A1A1AA', verified: '#2563EB', partner_verified: '#059669' };
 
-type Issue = 'photo' | 'pin' | 'rate' | 'owner' | 'pending';
+type Issue = 'photo' | 'pin' | 'rate' | 'owner' | 'pending' | 'dupes';
 const ISSUES: { key: Issue; label: string; done: string; hint: string }[] = [
   { key: 'photo',   label: 'No photo',      done: 'All have photos',  hint: 'Buyers skip boards without a photo' },
   { key: 'pin',     label: 'No map pin',    done: 'All pinned',       hint: 'Not shown on the map' },
   { key: 'rate',    label: 'No rate',       done: 'All priced',       hint: 'Buyers see “Request quote”' },
   { key: 'owner',   label: 'Owner unknown', done: 'All owners known', hint: 'No owner account or name' },
   { key: 'pending', label: 'Not verified',  done: 'All verified',     hint: 'Owner hasn’t confirmed yet' },
+  { key: 'dupes',   label: 'Duplicates',    done: 'No duplicates',    hint: 'Possible duplicates: same photo, pin or name as another board' },
 ];
 
 type View = 'table' | 'gallery' | 'board' | 'map';
@@ -125,6 +132,7 @@ function hasIssue(b: InvBoard, issue: Issue, ownerOf: Props['ownerOf']): boolean
     case 'rate': return !b.asking_rate;
     case 'owner': return !b.owner_id && !ownerOf(b).name;
     case 'pending': return verificationOf(b) === 'pending';
+    case 'dupes': return false; // worked out across boards, in the component
   }
 }
 
@@ -317,10 +325,107 @@ function Thumb({ b, size = 'sm', onAdd }: { b: InvBoard; size?: 'sm' | 'card'; o
   );
 }
 
+// ── Duplicates review ──────────────────────────────────────────────────────
+
+function DupReview({ groups, byId, keepPick, busy, onPick, onOpen, rateText, canMerge, onMerge, onDismiss }: {
+  groups: DupGroup[];
+  byId: Map<string, InvBoard>;
+  keepPick: { group: string; id: string } | null;
+  busy: string | null;
+  onPick: (p: { group: string; id: string } | null) => void;
+  onOpen: (id: string) => void;
+  rateText: (b: InvBoard) => React.ReactNode;
+  canMerge: boolean;
+  onMerge: (group: string, keep: InvBoard, drop: InvBoard[]) => void;
+  onDismiss?: (group: string, boards: InvBoard[]) => void;
+}) {
+  if (!groups.length) {
+    return (
+      <div className="invdb-empty">
+        <p className="invdb-empty-title">No possible duplicates</p>
+        <p className="invdb-muted">Every board looks like its own listing.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="invdb-dups">
+      <p className="invdb-dups-intro">
+        These boards share a photo, a pin or a name. Keep the best listing of each board: the others are folded into it
+        (their photos, bookings and requests move over) and then removed. If they are different boards, mark them “Not duplicates”.
+      </p>
+      {groups.map(g => {
+        const key = g.ids.join('|');
+        const members = g.ids.map(id => byId.get(id)).filter((b): b is InvBoard => !!b);
+        const keep = keepPick?.group === key ? members.find(b => b.id === keepPick.id) ?? null : null;
+        const others = keep ? members.filter(b => b.id !== keep.id) : [];
+        const saving = busy === key;
+        return (
+          <article key={key} className="invdb-dup" aria-busy={saving}>
+            <header className="invdb-dup-head">
+              <span className="invdb-dup-why">{g.why}</span>
+              <span className="invdb-muted">{members.length} boards</span>
+              {onDismiss && (
+                <button type="button" className="invdb-btn invdb-dup-dismiss" disabled={saving} onClick={() => onDismiss(key, members)}>
+                  Not duplicates
+                </button>
+              )}
+            </header>
+            <div className="invdb-dup-grid">
+              {members.map(b => {
+                const picked = keep?.id === b.id;
+                return (
+                  <div key={b.id} className={`invdb-dup-board${picked ? ' is-keep' : keep ? ' is-drop' : ''}`}>
+                    <button type="button" className="invdb-dup-photo" onClick={() => onOpen(b.id)} aria-label={`Open ${b.name}`}>
+                      <Thumb b={b} size="card" />
+                      {picked && <span className="invdb-dup-badge is-keep">Keep</span>}
+                      {keep && !picked && <span className="invdb-dup-badge">Merge in</span>}
+                    </button>
+                    <div className="invdb-dup-body">
+                      <button type="button" className="invdb-dup-name" onClick={() => onOpen(b.id)} title={b.name}>{displayName(b.name)}</button>
+                      <dl className="invdb-dup-facts">
+                        <div><dt>Place</dt><dd>{placeText(b)}</dd></div>
+                        <div><dt>Board</dt><dd>{boardFormatLabel(b.format)}{b.width && b.height ? ` · ${b.width}×${b.height} m` : ''}</dd></div>
+                        <div><dt>Rate</dt><dd>{rateText(b)}</dd></div>
+                        <div><dt>Pin</dt><dd>{b.latitude != null && b.longitude != null ? 'On the map' : <span className="invdb-warn">No pin</span>}</dd></div>
+                        <div><dt>Photos</dt><dd>{b.photo_urls?.length ?? 0}</dd></div>
+                        <div><dt>Source</dt><dd title={b.source ?? 'Manual'}>{shortSource(b.source)} · {timeAgo(b.created_at)}</dd></div>
+                      </dl>
+                      {canMerge && (
+                        <button type="button" className={`invdb-btn${picked ? ' is-primary' : ''} invdb-dup-keep`} disabled={saving}
+                          onClick={() => onPick(picked ? null : { group: key, id: b.id })} aria-pressed={picked}>
+                          {picked ? 'Keeping this one' : 'Keep this one'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {keep && (
+              <div className="invdb-dup-confirm" role="group" aria-label="Confirm merge">
+                <p>
+                  Keep <strong>{displayName(keep.name)}</strong>. {others.length === 1 ? 'The other listing is' : `The other ${others.length} listings are`} removed;
+                  {' '}their photos, bookings and requests move to it, and its blank details are filled from them.
+                </p>
+                <div className="invdb-dup-actions">
+                  <button type="button" className="invdb-btn" disabled={saving} onClick={() => onPick(null)}>Cancel</button>
+                  <button type="button" className="invdb-btn is-primary" disabled={saving} onClick={() => onMerge(key, keep, others)}>
+                    {saving ? 'Merging…' : `Merge ${others.length + 1} into one`}
+                  </button>
+                </div>
+              </div>
+            )}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────
 
 export default function InventoryDatabase(props: Props) {
-  const { boards, ownerOf, brandOf, onStatus, onVerification, onEditDetails, onEditPhotos, onMovePin, onDelete, guideOf, onGuideHidden } = props;
+  const { boards, ownerOf, brandOf, onStatus, onVerification, onEditDetails, onEditPhotos, onMovePin, onDelete, guideOf, onGuideHidden, dismissedPairs, onMerge, onDismissDuplicates } = props;
 
   const [prefs] = useState(readPrefs);
   const [view, setView] = useState<View>(prefs.view);
@@ -337,6 +442,13 @@ export default function InventoryDatabase(props: Props) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropCol, setDropCol] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  // Duplicates review: which board of a group is being kept, and the group being saved.
+  const [keepPick, setKeepPick] = useState<{ group: string; id: string } | null>(null);
+  const [dupBusy, setDupBusy] = useState<string | null>(null);
+
+  const dupGroups = useMemo<DupGroup[]>(() => findDuplicateGroups(boards, dismissedPairs ?? new Set()), [boards, dismissedPairs]);
+  const dupIds = useMemo(() => new Set(dupGroups.flatMap(g => g.ids)), [dupGroups]);
+  const isIssue = useCallback((b: InvBoard, k: Issue) => (k === 'dupes' ? dupIds.has(b.id) : hasIssue(b, k, ownerOf)), [dupIds, ownerOf]);
 
   // Remember the view, sort and grouping for this browser.
   useEffect(() => {
@@ -356,10 +468,10 @@ export default function InventoryDatabase(props: Props) {
 
   // Counts for the attention strip.
   const issueCounts = useMemo(() => {
-    const c = { photo: 0, pin: 0, rate: 0, owner: 0, pending: 0 } as Record<Issue, number>;
-    for (const b of boards) for (const { key } of ISSUES) if (hasIssue(b, key, ownerOf)) c[key]++;
+    const c = { photo: 0, pin: 0, rate: 0, owner: 0, pending: 0, dupes: 0 } as Record<Issue, number>;
+    for (const b of boards) for (const { key } of ISSUES) if (isIssue(b, key)) c[key]++;
     return c;
-  }, [boards, ownerOf]);
+  }, [boards, isIssue]);
   const complete = useMemo(
     () => boards.filter(b => !(['photo', 'pin', 'owner'] as Issue[]).some(k => hasIssue(b, k, ownerOf))).length,
     [boards, ownerOf],
@@ -391,7 +503,7 @@ export default function InventoryDatabase(props: Props) {
       for (const k of Object.keys(filters) as FilterKey[]) {
         if (filters[k].length && !filters[k].includes(filterValue(b, k))) return false;
       }
-      if (issue && !hasIssue(b, issue, ownerOf)) return false;
+      if (issue && !isIssue(b, issue)) return false;
       return true;
     });
     const by: Record<SortKey, (a: InvBoard, b: InvBoard) => number> = {
@@ -403,7 +515,7 @@ export default function InventoryDatabase(props: Props) {
       rate_asc: (a, b) => (a.asking_rate || Infinity) - (b.asking_rate || Infinity),
     };
     return list.sort(by[sort]);
-  }, [boards, query, filters, issue, sort, ownerOf, brandOf]);
+  }, [boards, query, filters, issue, sort, ownerOf, brandOf, isIssue]);
 
   const activeFilterCount = Object.values(filters).reduce((t, v) => t + v.length, 0) + (issue ? 1 : 0);
   const clearAll = () => { setFilters({ status: [], verification: [], city: [], format: [], source: [] }); setIssue(null); setQuery(''); };
@@ -648,7 +760,29 @@ export default function InventoryDatabase(props: Props) {
       )}
 
       {/* ── Views ── */}
-      {shown.length === 0 ? (
+      {issue === 'dupes' ? (
+        <DupReview
+          groups={dupGroups.filter(g => g.ids.some(id => shown.some(b => b.id === id)))}
+          byId={new Map(boards.map(b => [b.id, b]))}
+          keepPick={keepPick} busy={dupBusy}
+          onPick={setKeepPick}
+          onOpen={setPeekId}
+          rateText={rateText}
+          canMerge={!!onMerge}
+          onMerge={async (group, keep, drop) => {
+            if (!onMerge) return;
+            setDupBusy(group);
+            const ok = await onMerge(keep, drop);
+            setDupBusy(null);
+            if (ok) setKeepPick(null);
+          }}
+          onDismiss={onDismissDuplicates ? async (group, list) => {
+            setDupBusy(group);
+            await onDismissDuplicates(list);
+            setDupBusy(null);
+          } : undefined}
+        />
+      ) : shown.length === 0 ? (
         <div className="invdb-empty">
           <p className="invdb-empty-title">{boards.length ? 'No boards match' : 'No boards yet'}</p>
           <p className="invdb-muted">{boards.length ? 'Try fewer filters or a different search.' : 'Add a board or import an owner’s deck to get started.'}</p>
@@ -992,8 +1126,8 @@ const CSS = `
 .invdb-quality { display:flex; align-items:center; gap:12px; padding:12px 18px 12px 14px; background:#fff; border:1px solid var(--line); border-radius:16px; flex-shrink:0; }
 .invdb-quality-num { margin:0; font-size:22px; font-weight:700; letter-spacing:-.02em; line-height:1.1; font-variant-numeric:tabular-nums; }
 .invdb-quality-label { margin:2px 0 0; font-size:12px; color:var(--mute); }
-.invdb-issues { flex:1; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
-.invdb-issue { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:3px; padding:10px 14px; background:#fff; border:1px solid var(--line);
+.invdb-issues { flex:1; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:8px; }
+.invdb-issue { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:3px; padding:10px 12px; background:#fff; border:1px solid var(--line);
   border-radius:14px; cursor:pointer; text-align:left; transition:border-color .15s, background .15s, box-shadow .15s; min-width:0; }
 .invdb-issue:hover:not(:disabled) { border-color:#D9DEE6; box-shadow:0 2px 8px -4px rgba(16,24,40,.12); }
 .invdb-issue.is-on { background:var(--brand-soft); border-color:#BFD3EA; box-shadow:0 0 0 3px rgba(27,79,138,.08); }
@@ -1002,7 +1136,7 @@ const CSS = `
 .invdb-issue.is-done .invdb-issue-num { color:#16A34A; }
 .invdb-issue.is-done .invdb-issue-label { color:var(--mute); }
 .invdb-issue.is-on .invdb-issue-num { color:var(--brand); }
-.invdb-issue-label { font-size:12.5px; color:var(--ink2); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.invdb-issue-label { font-size:12px; color:var(--ink2); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
 
 /* Toolbar */
 .invdb-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:0 0 12px; border-bottom:1px solid var(--line); margin-bottom:14px; flex-wrap:wrap; }
@@ -1203,6 +1337,35 @@ const CSS = `
 .invdb-peek-actions { display:flex; gap:8px; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--line2); background:#fff; flex-shrink:0; }
 .invdb-peek-actions .invdb-btn.is-primary { flex:1; }
 
+/* Duplicates review */
+.invdb-dups { display:flex; flex-direction:column; gap:14px; }
+.invdb-dups-intro { margin:0; font-size:13.5px; line-height:1.5; color:var(--ink2); max-width:780px; }
+.invdb-dup { background:#fff; border:1px solid var(--line); border-radius:16px; padding:14px; }
+.invdb-dup[aria-busy="true"] { opacity:.7; }
+.invdb-dup-head { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; font-size:13px; }
+.invdb-dup-why { display:inline-flex; align-items:center; height:24px; padding:0 10px; border-radius:999px; background:#FFF8EB; color:#92400E; font-weight:600; font-size:12.5px; }
+.invdb-dup-dismiss { margin-left:auto; height:32px; }
+.invdb-dup-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
+.invdb-dup-board { display:flex; flex-direction:column; border:1px solid var(--line); border-radius:12px; overflow:hidden; transition:border-color .15s, box-shadow .15s, opacity .15s; }
+.invdb-dup-board.is-keep { border-color:#9DB9DA; box-shadow:0 0 0 3px rgba(27,79,138,.12); }
+.invdb-dup-board.is-drop { opacity:.72; }
+.invdb-dup-photo { position:relative; display:block; width:100%; aspect-ratio:16/10; padding:0; border:none; background:var(--bg); cursor:pointer; overflow:hidden; }
+.invdb-dup-photo .invdb-cover-img, .invdb-dup-photo .invdb-cover-empty { width:100%; height:100%; }
+.invdb-dup-badge { position:absolute; left:10px; top:10px; font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:999px; background:rgba(11,18,32,.6); color:#fff; }
+.invdb-dup-badge.is-keep { background:var(--brand); }
+.invdb-dup-body { display:flex; flex-direction:column; gap:10px; padding:12px; flex:1; }
+.invdb-dup-name { all:unset; cursor:pointer; font-size:14px; font-weight:600; line-height:1.35; color:var(--ink); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.invdb-dup-name:hover { color:var(--brand); }
+.invdb-dup-name:focus-visible { outline:2px solid var(--brand); outline-offset:2px; border-radius:4px; }
+.invdb-dup-facts { margin:0; display:grid; gap:5px; font-size:12.5px; }
+.invdb-dup-facts div { display:grid; grid-template-columns:62px 1fr; gap:8px; }
+.invdb-dup-facts dt { color:var(--mute); }
+.invdb-dup-facts dd { margin:0; color:var(--ink2); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.invdb-dup-keep { margin-top:auto; width:100%; }
+.invdb-dup-confirm { margin-top:12px; display:flex; align-items:center; gap:14px; padding:12px 14px; border-radius:12px; background:var(--brand-soft); flex-wrap:wrap; }
+.invdb-dup-confirm p { margin:0; flex:1 1 320px; font-size:13px; line-height:1.5; color:var(--ink2); }
+.invdb-dup-actions { display:flex; gap:8px; }
+
 /* Small screens */
 @media (max-width: 1100px) {
   .invdb-health { flex-direction:column; }
@@ -1215,6 +1378,10 @@ const CSS = `
   .invdb-issues { display:flex; overflow-x:auto; scroll-snap-type:x proximity; margin:0 -16px; padding:0 16px 2px; scrollbar-width:none; }
   .invdb-issues::-webkit-scrollbar { display:none; }
   .invdb-issue { flex:0 0 auto; min-width:120px; scroll-snap-align:start; }
+  .invdb-dup { padding:12px; }
+  .invdb-dup-grid { grid-template-columns:1fr; }
+  .invdb-dup-actions { width:100%; }
+  .invdb-dup-actions .invdb-btn { flex:1; }
   .invdb-toolbar { flex-direction:column; align-items:stretch; }
   .invdb-views { display:grid; grid-template-columns:repeat(4,1fr); }
   .invdb-view { justify-content:center; padding:0 6px; }
