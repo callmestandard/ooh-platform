@@ -58,7 +58,10 @@ try {
   const k = after[0] ?? {};
   check(k.name === 'QA DUP Along Test Road', 'the kept board keeps its own name');
   check(k.latitude === 6.5 && k.width === 12 && k.address === 'Along Test Road, by QA junction', 'blank pin, size and address are filled in');
-  check(JSON.stringify(k.photo_urls) === JSON.stringify(['https://example.com/qa-a.jpg', 'https://example.com/qa-b.jpg', 'https://example.com/qa-c.jpg']), 'photos: its own first, then the others, no repeats');
+  // The test boards are created at the same moment, so the others' photos may come in either order.
+  const ph = k.photo_urls ?? [];
+  check(ph.length === 3 && ph[0] === 'https://example.com/qa-a.jpg' && ph.includes('https://example.com/qa-b.jpg') && ph.includes('https://example.com/qa-c.jpg'),
+    `photos: its own first, then the others, no repeats (${ph.map(u => u.slice(-8)).join(', ')})`);
   const rate = must(await admin.from('board_rates').select('gross_monthly_rate').eq('board_id', keep), 'rate after');
   check(rate[0]?.gross_monthly_rate == 750000, 'the rate moved over');
   const owner = must(await admin.from('board_owner_names').select('owner_name').eq('board_id', keep), 'owner after');
