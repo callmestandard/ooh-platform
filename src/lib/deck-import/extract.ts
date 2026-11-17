@@ -5,6 +5,7 @@
 // guessed; the import review screen shows what's missing.
 
 import { parseCoordinates } from '@/lib/coordinates';
+import { cityCentre, nearestCity } from '@/lib/geocode-board';
 
 /** Column names the import screen already recognises (see FIELD_HINTS). */
 export const DECK_COLUMNS = [
@@ -13,7 +14,7 @@ export const DECK_COLUMNS = [
 ] as const;
 export type DeckRow = Record<(typeof DECK_COLUMNS)[number], string>;
 
-type Field = 'name' | 'address' | 'city' | 'area' | 'state' | 'size' | 'format' | 'illum' | 'rate' | 'rate_annual' | 'gps' | 'lat' | 'lng' | 'faces' | 'width' | 'height';
+type Field = 'name' | 'address' | 'city' | 'area' | 'state' | 'size' | 'format' | 'illum' | 'rate' | 'rate_annual' | 'gps' | 'lat' | 'lng' | 'faces' | 'width' | 'height' | 'note';
 
 // Words owners use as labels, checked in order (longer phrases first).
 const LABELS: [RegExp, Field][] = [
@@ -33,7 +34,9 @@ const LABELS: [RegExp, Field][] = [
   [/^(city|town)$/, 'city'],
   [/^(state)$/, 'state'],
   [/^(area|lga|axis|district|zone|neighbou?rhood|locality|region)$/, 'area'],
-  [/^(location|address|site|site location|site address|location description|description|landmark|route|road|street|position|placement)$/, 'address'],
+  [/^(location|address|site|site location|site address|location description|road|street|position|placement)$/, 'address'],
+  // Traffic directions and nearby landmarks: not where the board is.
+  [/^(description|landmarks?|route|traffic|direction|direction of traffic|traffic direction|type of area|vehicular traffic|visibility( angle| distance)?|audience|ftf|ftt|ftf\/ftt|ftt\/ftf)$/, 'note'],
 ];
 
 // City names, plus well-known areas that tell us the city.
@@ -131,13 +134,24 @@ export function findIlluminated(text: string): string {
   return '';
 }
 
-/** "40ft x 20ft", "48 x 12", "12m × 4m", "40' by 20'" → metres. Unitless sizes of 25+ are read as feet. */
+/**
+ * "40ft x 20ft", "48 x 12", "12m × 4m", "40' by 20'" → metres. Unitless sizes of 25+ are read as feet.
+ * Sides marked H/W ("11mH by 5mW", "2.8M (H) x 6.90M (W)") go the right way round.
+ */
 export function findSize(text: string): { width: number; height: number } | null {
-  const m = text.match(/(\d+(?:\.\d+)?)\s*(m|mtrs?|metres?|meters?|ft|feet|foot|'|’)?\s*(?:x|×|\*|by)\s*(\d+(?:\.\d+)?)\s*(m|mtrs?|metres?|meters?|ft|feet|foot|'|’)?/i);
+  const UNIT = String.raw`(m|mtrs?|metres?|meters?|ft|feet|foot|'|’)?`;
+  // A side letter stuck to the number ("11mH") or alone in brackets ("5m(W)", "2.8M (H)").
+  const SIDE = String.raw`(?:([hw])(?![a-z])|\s*\(\s*([hw])\s*\))?`;
+  const re = new RegExp(String.raw`(\d+(?:\.\d+)?)\s*${UNIT}${SIDE}\s*(?:x|×|\*|by)\s*(\d+(?:\.\d+)?)\s*${UNIT}${SIDE}`, 'i');
+  const m = text.match(re);
   if (!m) return null;
-  let w = parseFloat(m[1]), h = parseFloat(m[3]);
+  let w = parseFloat(m[1]), h = parseFloat(m[5]);
+  const first = (m[3] || m[4] || '').toLowerCase(), second = (m[7] || m[8] || '').toLowerCase();
+  // Or the order given after the size: "20M X 4M (W x H)", "6m x 18m (H x W)".
+  const order = text.slice((m.index ?? 0) + m[0].length).match(/^\s*\(\s*([hw])\s*[x×]\s*([hw])\s*\)/i);
+  if (first === 'h' || second === 'w' || order?.[1].toLowerCase() === 'h') [w, h] = [h, w];
   if (!(w > 0 && h > 0) || w > 400 || h > 400) return null;
-  const unit = (m[2] || m[4] || '').toLowerCase();
+  const unit = (m[2] || m[6] || '').toLowerCase();
   const feet = /^(ft|feet|foot|'|’)$/.test(unit) || (!unit && Math.max(w, h) >= 25);
   if (feet) { w *= 0.3048; h *= 0.3048; }
   return { width: Math.round(w * 10) / 10, height: Math.round(h * 10) / 10 };
@@ -224,7 +238,7 @@ function splitLabel(line: string): [Field, string] | null {
   return null;
 }
 
-const NOT_A_TITLE = /^(size|rate|price|gps|location|type|format|illumination|faces?|available|contact|tel|phone|email|www\.|http|annual|yearly|monthly|cost|rental|rent|since|vacant|[rl]h[ds]$)/i;
+const NOT_A_TITLE = /^(size|rate|price|gps|location|type|format|illumination|faces?|available|contact|tel|phone|email|www\.|http|annual|yearly|monthly|cost|rental|rent|since|vacant|description|landmarks?|(ft[ft]|ftf\/t|ftf\/ftt|ftt\/ftf)\b\s*:|facing\s+traffic\b|traffic\s+(from|to)\b\s*:|((front|back|flood)[\s-]?lit|non[\s-]?illuminated|illuminated)$|([rl]h[ds]\s*)+$)/i;
 // Words that show a line is where the board stands.
 const PLACE_WORDS = /\b(along|road|rd|street|str|avenue|ave|way|express(way)?|exp|bridge|junction|jct|roundabout|round about|market|by|opp|opposite|beside|near|inside|in front of|adjacent|ftt|ftf|lftt|facing|bus ?stop|b\/stop|estate|toll ?gate|garage|motor park|flyover|interchange|close|crescent|drive|airport|stadium|mall|plaza)\b/i;
 const CONTINUES = /^(by|opp\.?|opposite|beside|near|ftt|ftf|facing|off|after|before|adjacent|at|,)\b/i;
@@ -233,6 +247,9 @@ const FORMAT_TAG = /^\s*[([]?\s*(led|digital|unipole|uni-?pole|gantry|billboard|
 
 /** Drops coordinates (3°20'01.4"E, 6.5123 3.3456) and stray punctuation from a title. */
 function cleanTitle(s: string): string {
+  // Text that ran on into the next label ("…Abiola wayFacing Traffic From…", "…LagosDescription: FTF…").
+  const runOn = s.search(/\s*(description|landmarks?|ftf|ftt)\s*:|(?<=[a-z])facing\s+traffic/i);
+  if (runOn > 10) s = s.slice(0, runOn);
   return s
     .replace(/\d{1,3}\s*°\s*\d{1,2}\s*['′’]\s*\d{1,2}(?:\.\d+)?\s*(?:["″”]|'')?\s*[NSEW]?/gi, ' ')
     .replace(/-?\d{1,2}\.\d{4,}\s*[,;/ ]\s*-?\d{1,3}\.\d{4,}/g, ' ')
@@ -241,7 +258,21 @@ function cleanTitle(s: string): string {
     .trim();
 }
 // Tabs are kept: table cells arrive as "Label<TAB>value".
-const tidy = (s: string) => s.replace(/[  \r\n\f\v]+/g, ' ').replace(/\t+/g, '\t').replace(/^[\s•●▪‣◦\-–—*]+/, '').trim();
+const tidy = (s: string) => s.replace(/[  \r\n\f\v]+/g, ' ').replace(/\t+/g, '\t').replace(/^[\s•●▪‣◦…\-–—*]+/, '').trim();
+
+/**
+ * A row from a two-column page ("Along Oba Akran Road<TAB>Size: 7m x 5m") is
+ * two lines, one per column. A row that is itself "Label<TAB>value" stays whole.
+ */
+function splitColumns(lines: string[]): { lines: string[]; split: boolean } {
+  let split = false;
+  const out = lines.flatMap(l => {
+    if (!l.includes('	') || splitLabel(l)) return [l];
+    split = true;
+    return l.split('	').map(tidy).filter(Boolean);
+  });
+  return { lines: out, split };
+}
 
 /**
  * Reads one slide. Returns null for slides that aren't a board (cover,
@@ -249,7 +280,8 @@ const tidy = (s: string) => s.replace(/[  \r\n\f\v]+/g, ' ').replace(/\t+/g, '\
  * labelled location.
  */
 export function extractBoard(rawLines: string[]): DeckRow | null {
-  const lines = rawLines.map(tidy).filter(l => l.length > 0 && l.length < 400);
+  const cols = splitColumns(rawLines.map(tidy).filter(l => l.length > 0 && l.length < 400));
+  const lines = cols.lines;
   if (lines.length === 0) return null;
   const text = lines.join('\n');
   const got: Partial<Record<Field, string>> = {};
@@ -283,24 +315,51 @@ export function extractBoard(rawLines: string[]): DeckRow | null {
   const placeScore = (l: string) => (PLACE_WORDS.test(l) ? 3 : 0) + (findCity(l) ? 2 : 0) + (l.length >= 25 ? 1 : 0);
   // An address split over two lines is read as one:
   // "Along Oba Akran Road" / "by Guinness FTT Agege, Lagos."
+  const ok = lines.map(usable);
+  // Two-column slides (address on one side, size and price on the other)
+  // interleave the address's lines with labels: those pieces are read as one
+  // address up to the line that ends it with a full stop.
+  const switches = ok.filter((u, i) => i > 0 && u !== ok[i - 1]).length;
+  const twoColumn = cols.split || switches >= 4;
   const candidates: string[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (!usable(lines[i])) continue;
-    const next = lines[i + 1];
-    const joins = next && usable(next) && !/[.!?]$/.test(lines[i]) && `${lines[i]} ${next}`.length <= 220
-      && (CONTINUES.test(next) || /^[a-z]/.test(next) || (PLACE_WORDS.test(lines[i]) && /[.]$/.test(next)));
-    if (joins) { candidates.push(`${lines[i]} ${next}`); i++; } else candidates.push(lines[i]);
+  if (twoColumn) {
+    let run = '';
+    lines.forEach((l, i) => {
+      if (!ok[i]) return;
+      // "Visibility: …", "PIXEL DIMENSION: …" are details, never the rest of an address.
+      if (run && !/[.!?]$/.test(run) && !l.includes(':') && `${run} ${l}`.length <= 220) run = `${run} ${l}`;
+      else { if (run) candidates.push(run); run = l; }
+    });
+    if (run) candidates.push(run);
+  } else {
+    for (let i = 0; i < lines.length; i++) {
+      if (!ok[i]) continue;
+      const next = lines[i + 1];
+      const joins = next && ok[i + 1] && !/[.!?]$/.test(lines[i]) && `${lines[i]} ${next}`.length <= 220
+        && (CONTINUES.test(next) || /^[a-z]/.test(next) || (PLACE_WORDS.test(lines[i]) && /[.]$/.test(next)));
+      if (joins) { candidates.push(`${lines[i]} ${next}`); i++; } else candidates.push(lines[i]);
+    }
   }
   const top = candidates.reduce<string | null>((best, c) => (best === null || placeScore(c) > placeScore(best) ? c : best), null);
   const title = cleanTitle(top ?? '').replace(/[\s.]+$/, '');
   const address = tidy(got.address ?? '') || title;
-  const where = findCity(got.city ?? '') ?? cityAtEnd(address) ?? findCity(`${address}\n${text}`);
+  let where = findCity(got.city ?? '') ?? cityAtEnd(address) ?? findCity(`${address}\n${text}`);
+  // The slide's GPS settles it: "…FTT Gwagwalada, Lokoja" faces traffic to Lokoja but stands in Abuja.
+  if (gps && !got.city) {
+    const centre = where ? cityCentre(where.city) : null;
+    const near = nearestCity(gps.lat, gps.lng);
+    if (near && (!centre || Math.hypot(centre[0] - gps.lat, centre[1] - gps.lng) > 0.7)) {
+      where = findCity(near) ?? where;
+    }
+  }
   const area = tidy(got.area ?? '') || areaHit(`${address}\n${text}`)?.area || '';
 
   const looksLikeBoard = !!(size || gps || rate || got.address || got.size || got.format || (format && address));
   if (!looksLikeBoard) return null;
 
-  const name = tidy(got.name ?? '') || title || address;
+  // A labelled location ("Location: Alfred Rewane Road, by Falomo Bridge") beats a guessed title.
+  const labelled = cleanTitle(tidy(got.address ?? '')).replace(/[\s.]+$/, '');
+  const name = tidy(got.name ?? '') || (/[a-z]{3,}/i.test(labelled) && labelled.length >= 6 ? labelled : '') || title || address;
   return {
     'Board Name': name.slice(0, 160),
     'Address': address.slice(0, 300),
@@ -325,15 +384,18 @@ export function extractBoard(rawLines: string[]): DeckRow | null {
  * are kept even when they repeat.
  */
 export function deckBoilerplate(slides: string[][]): Set<string> {
-  const key = (l: string) => tidy(l).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const key = boilerKey;
+  // Each column of a two-column row counts on its own ("…SINCE 1976<TAB>LHD").
+  const pieces = (lines: string[]) => lines.flatMap(l => (l.includes('\t') ? [l, ...l.split('\t')] : [l]));
   const counts = new Map<string, number>();
   for (const lines of slides) {
-    for (const k of new Set(lines.map(key))) if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
+    for (const k of new Set(pieces(lines).map(key))) if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
   }
-  const min = Math.max(3, Math.ceil(slides.length * 0.25));
+  // On a quarter of the slides, or on 8 or more (a tagline on one section of a long deck).
+  const min = Math.max(3, Math.min(8, Math.ceil(slides.length * 0.25)));
   const out = new Set<string>();
   for (const lines of slides) {
-    for (const l of lines) {
+    for (const l of pieces(lines)) {
       const k = key(l);
       if ((counts.get(k) ?? 0) < min || out.has(k)) continue;
       if (splitLabel(tidy(l)) || findFormat(l) || findSize(l) || findCity(l)) continue;
@@ -345,7 +407,13 @@ export function deckBoilerplate(slides: string[][]): Set<string> {
 
 /** A slide's lines without the deck's repeated lines. */
 export function withoutBoilerplate(lines: string[], boilerplate: Set<string>): string[] {
-  return lines.filter(l => !boilerplate.has(tidy(l).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()));
+  return lines
+    .map(l => (l.includes('\t') && !boilerplate.has(boilerKey(l)) ? l.split('\t').filter(c => !boilerplate.has(boilerKey(c))).join('\t') : l))
+    .filter(l => l.trim() && !boilerplate.has(boilerKey(l)));
+}
+
+function boilerKey(l: string): string {
+  return tidy(l).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 /**

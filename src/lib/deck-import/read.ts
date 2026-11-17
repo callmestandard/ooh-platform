@@ -6,6 +6,8 @@
 /** image: the board photo. photos: every large picture on the slide as stored in the deck, biggest first (read for GPS stamps). */
 export type DeckSlide = { index: number; lines: string[]; image: Blob | null; photos: Blob[] };
 
+import { pptxSlideLines, pdfPageLines, type PdfItem } from './lines';
+
 const MAX_SLIDES = 150;
 const PHOTO_MAX_PX = 1600;
 
@@ -28,8 +30,6 @@ async function toJpeg(blob: Blob): Promise<Blob | null> {
     return null;
   }
 }
-
-const textOf = (el: Element) => Array.from(el.getElementsByTagName('a:t')).map(t => t.textContent ?? '').join('');
 
 async function readPptx(file: File, onProgress?: (done: number, total: number) => void): Promise<DeckSlide[]> {
   const JSZip = (await import('jszip')).default;
@@ -68,16 +68,7 @@ async function readPptx(file: File, onProgress?: (done: number, total: number) =
     const f = zip.file(path);
     if (!f) continue;
     const doc = parse(await f.async('text'));
-    const lines: string[] = [];
-    for (const p of Array.from(doc.getElementsByTagName('a:p'))) {
-      if (hasAncestor(p, 'a:tbl')) continue;
-      const t = textOf(p).trim();
-      if (t) lines.push(t);
-    }
-    for (const tr of Array.from(doc.getElementsByTagName('a:tr'))) {
-      const cells = Array.from(tr.getElementsByTagName('a:tc')).map(tc => Array.from(tc.getElementsByTagName('a:p')).map(textOf).join(' ').trim()).filter(Boolean);
-      if (cells.length) lines.push(cells.join('\t'));
-    }
+    const lines = pptxSlideLines(doc as unknown as Parameters<typeof pptxSlideLines>[0]);
 
     // The board photo is the biggest picture on the slide (logos are small).
     const rels = await relsOf(path.replace(/slides\/(slide\d+\.xml)$/, 'slides/_rels/$1.rels'));
@@ -106,11 +97,6 @@ async function readPptx(file: File, onProgress?: (done: number, total: number) =
   return slides;
 }
 
-function hasAncestor(el: Element, tag: string): boolean {
-  for (let p = el.parentElement; p; p = p.parentElement) if (p.tagName === tag) return true;
-  return false;
-}
-
 async function readPdf(file: File, onProgress?: (done: number, total: number) => void): Promise<DeckSlide[]> {
   const pdfjs = await import('pdfjs-dist');
   pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
@@ -120,30 +106,7 @@ async function readPdf(file: File, onProgress?: (done: number, total: number) =>
   for (let n = 1; n <= total; n++) {
     const page = await doc.getPage(n);
 
-    // Group text pieces into lines by height on the page; a wide gap between
-    // pieces becomes a tab, like a table cell.
-    const content = await page.getTextContent();
-    type Piece = { s: string; x: number; y: number; w: number };
-    const pieces: Piece[] = [];
-    for (const it of content.items as { str?: string; transform?: number[]; width?: number }[]) {
-      if (!it.str || !it.str.trim() || !it.transform) continue;
-      pieces.push({ s: it.str, x: it.transform[4], y: it.transform[5], w: it.width ?? 0 });
-    }
-    pieces.sort((a, b) => b.y - a.y || a.x - b.x);
-    const rows: Piece[][] = [];
-    for (const pc of pieces) {
-      const row = rows.find(r => Math.abs(r[0].y - pc.y) < 4);
-      if (row) row.push(pc); else rows.push([pc]);
-    }
-    const lines = rows.map(r => {
-      r.sort((a, b) => a.x - b.x);
-      let out = '';
-      r.forEach((pc, i) => {
-        if (i > 0) { const gap = pc.x - (r[i - 1].x + r[i - 1].w); out += gap > 24 ? '\t' : gap > 1.5 ? ' ' : ''; }
-        out += pc.s;
-      });
-      return out.trim();
-    }).filter(Boolean);
+    const lines = pdfPageLines((await page.getTextContent()).items as PdfItem[]);
 
     // The page itself is the photo (PDF decks usually put the board picture on each page).
     let image: Blob | null = null;

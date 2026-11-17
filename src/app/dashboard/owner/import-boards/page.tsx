@@ -695,7 +695,14 @@ export default function ImportBoardsPage() {
       if (previous) setLeftover([...previous].filter(id => ![...found.values()].some(m => m.id === id)).length);
       setRows(prev => prev.map(r => {
         const m = found.get(r._id);
-        return m ? { ...r, match: m, action: m.canUpdate ? 'update' : 'skip' } : r;
+        if (!m) return r;
+        // Re-uploading a deck: a board from another deck that only looks alike
+        // (name or pin, not the same photo) is probably a different owner's
+        // board on the same road. It's shown, but added as new unless chosen.
+        const otherDeck = !!previous && !previous.has(m.id) && m.why !== 'Same photo';
+        // Paired only by city, size and type: shown, never updated without a choice.
+        const loose = m.why.startsWith('Same city');
+        return { ...r, match: m, action: !m.canUpdate ? 'skip' : otherDeck || loose ? 'new' : 'update' };
       }));
     } catch {
       toastError('Could not check for boards already listed. Each board will be added as new.');

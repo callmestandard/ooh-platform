@@ -84,6 +84,19 @@ const shapeCases: [string[], Partial<Record<string, string>>][] = [
   [['OKE FIA ALONG FREEDOM PARK ROAD FACING TRAFFIC FROM OKE FIA UNDER BRIDGE, OSHOGBO', 'SIZE: 40FT X 20FT'], { City: 'Osogbo', State: 'Osun' }],
   [['(PORTRAIT)', 'ILESHA GARAGE ROUNDABOUT , OSOGBO (FACE 2)', 'SIZE: 20FT X 40FT'], { Format: 'billboard', City: 'Osogbo' }],
 ];
+// Two-column PDF pages, "Location:" labels, sides marked H/W, text running into the next label.
+shapeCases.push(
+  [['RHD\tLHD', 'Unipole', 'Along Lagos Abeokuta Express\tSize: Ultrawave-15mx 4.7m', 'Road by Cement Bus Stop FTT\tAnnual Rate: N12,000,000', 'Iyana- Ipaja, Lagos.\tMonthly Rental: N1,100,000'],
+    { 'Board Name': 'Along Lagos Abeokuta Express Road by Cement Bus Stop FTT Iyana- Ipaja, Lagos', 'Width (m)': '15', 'Height (m)': '4.7', 'Monthly Rate': '1100000' }],
+  [['Eye catcher', 'Along Apapa mile 2 Express way', 'by Nepa transmission station\tSize: 2.8M (H) by 12.40M (W)', 'Annual :6,000,000.00', 'FTF mile 2/ Badagry Express', 'Monthly Rental: N 560,000.00'],
+    { 'Board Name': 'Along Apapa mile 2 Express way by Nepa transmission station FTF mile 2/ Badagry Express', 'Width (m)': '12.4', 'Height (m)': '2.8' }],
+  [['Location:  Alfred Rewane Road, By Falomo bridge, Falomo Ikoyi, Lagos', 'Description: FTF: Akin Adesola, Adeola Odeku, Bar-Beach', 'Size: 11mH by 5mW (55sqm)', 'PORTRAIT LED', 'Falomo,', 'Ikoyi, Lagos'],
+    { 'Board Name': 'Alfred Rewane Road, By Falomo bridge, Falomo Ikoyi, Lagos', 'Width (m)': '5', 'Height (m)': '11', Format: 'led' }],
+  [['GANYTY STATIC BOARD', 'BOARD DIMENSION: 20M X 4M (W x H)', 'RATE: NGN36,000,000 PER ANNUM', 'Along Ojuwoye Market By Agege Motor Road, Lagos', 'FTT: Ebuta Meta, Apapa Lagos'],
+    { 'Board Name': 'Along Ojuwoye Market By Agege Motor Road, Lagos', 'Width (m)': '20', 'Height (m)': '4' }],
+  [['Location: Simbiat Abiola wayFacing Traffic From Maryland, Mobolaji Bank Anthony', 'Size: 42.6m by 4.3m'], { 'Board Name': 'Simbiat Abiola way' }],
+  [['AIRPORT ROAD OPPOSITE UNIVERSITY OF ABUJA PERMANENT SITE FTT GWAGWALADA, LOKOJA', 'BOARD TYPE: Unipole', 'BOARD SIZE: 6m X 18m', `COORDINATES:  8°59'22.69"N  7°11'12.31"E`], { City: 'Abuja' }],
+);
 for (const [lines, want] of shapeCases) {
   const got = extractBoard(lines);
   const bad = Object.entries(want).filter(([k, v]) => got?.[k as keyof typeof got] !== v);

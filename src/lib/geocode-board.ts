@@ -30,6 +30,16 @@ export function cityCentre(city: string): [number, number] | null {
   return key ? CENTRES[key] : null;
 }
 
+/** The known city nearest a pin, if one is within maxKm. */
+export function nearestCity(lat: number, lng: number, maxKm = 80): string | null {
+  let best: { city: string; d: number } | null = null;
+  for (const [city, c] of Object.entries(CENTRES)) {
+    const d = km([lat, lng], c);
+    if (d <= maxKm && (!best || d < best.d)) best = { city, d };
+  }
+  return best?.city ?? null;
+}
+
 function km(a: [number, number], b: [number, number]): number {
   const R = 6371, r = Math.PI / 180;
   const dLat = (b[0] - a[0]) * r, dLng = (b[1] - a[1]) * r;
