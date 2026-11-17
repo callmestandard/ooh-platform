@@ -1,16 +1,39 @@
-import { Resend } from 'resend';
+import nodemailer, { type Transporter } from 'nodemailer';
 import { TEAM_WHATSAPP } from './public-links';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM   = process.env.RESEND_FROM_EMAIL ?? 'OOH Platform <onboarding@resend.dev>';
+// Email goes out through a normal mailbox over SMTP (Gmail / Google Workspace
+// by default). Vercel env:
+//   SMTP_USER  the mailbox address, e.g. bookings@yourcompany.com
+//   SMTP_PASS  a Google "app password" for that mailbox (not its normal password)
+//   EMAIL_FROM optional display name + address; defaults to "OOH Platform <SMTP_USER>"
+//   SMTP_HOST / SMTP_PORT optional; default smtp.gmail.com:465
+const SMTP_USER = process.env.SMTP_USER ?? '';
+const SMTP_PASS = (process.env.SMTP_PASS ?? '').replace(/\s+/g, '');   // app passwords are shown with spaces
+const FROM      = process.env.EMAIL_FROM || `OOH Platform <${SMTP_USER}>`;
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://oohplatform.ng').replace(/\/$/, '');
+
+let transport: Transporter | null = null;
+function mailer(): Transporter {
+  if (!transport) {
+    const port = Number(process.env.SMTP_PORT || 465);
+    transport = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port,
+      secure: port === 465,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    });
+  }
+  return transport;
+}
+
+/** Whether email sending is set up at all. */
+export const emailConfigured = () => !!(SMTP_USER && SMTP_PASS);
 
 /** Sends one email. Never throws; returns whether it was accepted. */
 export async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  if (!process.env.RESEND_API_KEY || !to) return false;
+  if (!emailConfigured() || !to) return false;
   try {
-    const { error } = await resend.emails.send({ from: FROM, to, subject, html });
-    if (error) { console.error('[email] send failed:', error.message); return false; }
+    await mailer().sendMail({ from: FROM, to, subject, html });
     return true;
   } catch (err) {
     console.error('[email] send failed:', err);

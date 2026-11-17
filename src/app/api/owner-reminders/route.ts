@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   if (!list.length) return NextResponse.json({ error: 'Add an email for this owner first' }, { status: 400 });
   const result = await send(list);
   if (!result.sent) {
-    return NextResponse.json({ error: 'The email could not be sent. Check that the sending address is on a domain verified in Resend.' }, { status: 502 });
+    return NextResponse.json({ error: 'The email could not be sent. Check SMTP_USER and SMTP_PASS (a Google app password) in Vercel.' }, { status: 502 });
   }
   return NextResponse.json(result);
 }
