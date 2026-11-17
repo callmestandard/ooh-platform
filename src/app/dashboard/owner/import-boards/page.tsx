@@ -14,8 +14,9 @@ import SavedContacts from '@/components/admin/SavedContacts';
 import PhotoCropper from '@/components/admin/PhotoCropper';
 import PhotoReview, { type ReviewItem } from '@/components/admin/PhotoReview';
 import { ownerContactKey } from '@/lib/owner-contacts';
-import { geocodeBoard } from '@/lib/geocode-board';
-import { findMatches, photoPrint, type Candidate, type Match } from '@/lib/import-match';
+import { geocodeBoard, cityCentre } from '@/lib/geocode-board';
+import { findMatches, photoPrint, metres, type Candidate, type Match } from '@/lib/import-match';
+import { gpsFromPhotos, stopPhotoReader } from '@/lib/deck-import/photo-gps';
 
 const PreviewMap = dynamic(() => import('./PreviewMap'), {
   ssr: false,
@@ -72,6 +73,8 @@ type ImportRow = {
   match: Match | null;
   /** new: add it · update: replace the listed board's details · skip: don't add. */
   action: 'new' | 'update' | 'skip';
+  /** The pin was read from a GPS stamp printed on the slide's photo. */
+  pin_from_photo: boolean;
 };
 
 /** Runs fn over items, n at a time. */
@@ -335,6 +338,7 @@ function validateRows(
       selected: !hasHardMissing,
       match: null,
       action: 'new',
+      pin_from_photo: false,
     };
   });
 }
@@ -417,6 +421,9 @@ export default function ImportBoardsPage() {
   const [deckPhotos, setDeckPhotos] = useState<Record<string, { blob: Blob; url: string }>>({});
   const [deckSummary, setDeckSummary] = useState<{ file: string; slides: number; boards: number; skipped: number[] } | null>(null);
   const [deckProgress, setDeckProgress] = useState('');
+  // Every large picture on each slide (by slide number), read for GPS stamps.
+  const slidePhotos = useRef<Record<number, Blob[]>>({});
+  const [stampProgress, setStampProgress] = useState<{ done: number; total: number } | null>(null);
   // Photo being reframed: its key in deckPhotos (a row's own id when the slide had no photo).
   const [cropping, setCropping] = useState<{ key: string; rowId?: string; title: string } | null>(null);
   // Photo-by-photo check before publishing: open at an index, and which rows are approved.
@@ -513,6 +520,7 @@ export default function ImportBoardsPage() {
       const skipped: number[] = [];
       // Lines repeated on most slides (a tagline, "SINCE 1976") are not board details.
       const boilerplate = deckBoilerplate(slides.map(sl => sl.lines));
+      slidePhotos.current = Object.fromEntries(slides.map(sl => [sl.index, sl.photos]));
       for (const sl of slides) {
         const board = extractBoard(withoutBoilerplate(sl.lines, boilerplate));
         if (!board) { skipped.push(sl.index); continue; }
@@ -617,7 +625,45 @@ export default function ImportBoardsPage() {
     setGeocodingDone(false);
     geocodeAbort.current = false;
     // Look for boards already listed, then find pins in the background.
-    runMatching(validated).finally(() => runGeocode(validated));
+    runMatching(validated)
+      .then(() => runStamps(validated), () => runStamps(validated))
+      .then(found => runGeocode(validated.filter(r => !found.has(r._id))));
+  }
+
+  // ── GPS stamps on deck photos ───────────────────────────────────────────
+
+  /** Reads the GPS printed on each slide's photos; returns the rows that got a pin this way. */
+  async function runStamps(initial: ImportRow[]): Promise<Set<string>> {
+    const found = new Set<string>();
+    const todo = initial.filter(r => r.from_slide && r.status !== 'skip' && r.latitude == null && slidePhotos.current[r.row_no]?.length);
+    if (!todo.length) return found;
+    setStampProgress({ done: 0, total: todo.length });
+    try {
+      for (let k = 0; k < todo.length; k++) {
+        if (geocodeAbort.current) break;
+        const row = todo[k];
+        const g = await gpsFromPhotos(slidePhotos.current[row.row_no], () => geocodeAbort.current);
+        const centre = row.city ? cityCentre(row.city) : null;
+        if (g && centre && metres(g.lat, g.lng, centre[0], centre[1]) > 80_000) {
+          // A misread digit or a photo from elsewhere: don't pin it.
+          setRows(prev => prev.map(r => r._id === row._id ? {
+            ...r, issues: [...r.issues, `Photo stamp reads ${g.lat}, ${g.lng}, which is far from ${row.city}. Not used`],
+            status: r.status === 'ready' ? 'warning' : r.status,
+          } : r));
+        } else if (g) {
+          found.add(row._id);
+          setRows(prev => prev.map(r => r._id === row._id ? { ...r, latitude: g.lat, longitude: g.lng, geocoded: false, pin_from_photo: true } : r));
+          toastSuccess(`📍 Slide ${row.row_no}: location found on the photo`);
+        }
+        setStampProgress({ done: k + 1, total: todo.length });
+      }
+    } catch {
+      toastError('Could not read the GPS on the photos. Pins will come from the addresses.');
+    } finally {
+      setStampProgress(null);
+      stopPhotoReader();
+    }
+    return found;
   }
 
   // ── Boards already listed ───────────────────────────────────────────────
@@ -884,6 +930,7 @@ export default function ImportBoardsPage() {
   const addCount = selectedCount - updateCount;
   const publishLabel = updateCount ? [addCount ? `add ${addCount}` : '', `update ${updateCount}`].filter(Boolean).join(', ') : `${selectedCount} boards`;
   const geocodingCount = rows.filter(r => r.geocoding).length;
+  const photoPinCount = rows.filter(r => r.pin_from_photo).length;
   const geocodedCount  = rows.filter(r => r.geocoded).length;
   const needsGeocode   = rows.filter(r => r.selected && !r.latitude && !r.longitude).length;
 
@@ -1217,6 +1264,18 @@ export default function ImportBoardsPage() {
                 <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>already listed — not added unless you continue</span>
               </div>
             )}
+            {stampProgress && (
+              <div data-stamp-progress style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: '#EFF6FF' }}>
+                <div style={{ width: 12, height: 12, border: '2px solid #BFDBFE', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                <span style={{ fontSize: '0.8125rem', color: '#1B4F8A' }}>Reading GPS on photos {stampProgress.done}/{stampProgress.total}</span>
+              </div>
+            )}
+            {photoPinCount > 0 && (
+              <div data-photo-pins style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: '#ECFDF5' }}>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#047857' }}>{photoPinCount}</span>
+                <span style={{ fontSize: '0.8125rem', color: '#64748B' }}>pins read from photo stamps</span>
+              </div>
+            )}
             {geocodingCount > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, background: '#EFF6FF' }}>
                 <div style={{ width: 12, height: 12, border: '2px solid #BFDBFE', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
@@ -1403,8 +1462,8 @@ export default function ImportBoardsPage() {
                           {row.geocoding ? (
                             <div style={{ width: 12, height: 12, border: '2px solid #E2E8F0', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
                           ) : row.latitude && row.longitude ? (
-                            <span style={{ color: row.geocoded ? '#D97706' : '#10B981' }} title={row.geocoded ? 'Geocoded — verify pin' : 'GPS coords'}>
-                              {row.geocoded ? '⚠ geo' : '✓ gps'}
+                            <span style={{ color: row.geocoded ? '#D97706' : '#10B981' }} title={row.pin_from_photo ? `Read from the photo: ${row.latitude}, ${row.longitude}` : row.geocoded ? 'Geocoded — verify pin' : 'GPS coords'}>
+                              {row.pin_from_photo ? '✓ photo' : row.geocoded ? '⚠ geo' : '✓ gps'}
                             </span>
                           ) : (
                             <span style={{ color: '#CBD5E1' }}>none</span>

@@ -2,6 +2,7 @@
 //   npx tsx scripts/test-deck-extract.ts
 import { extractBoard, deckCity, findContact, findCity } from '../src/lib/deck-import/extract';
 import { addressQueries } from '../src/lib/geocode-board';
+import { stampGps } from '../src/lib/deck-import/stamp-gps';
 
 type Case = { name: string; lines: string[]; expect: Partial<Record<string, string>> | null };
 const cases: Case[] = [
@@ -88,6 +89,21 @@ for (const [lines, want] of shapeCases) {
   const bad = Object.entries(want).filter(([k, v]) => got?.[k as keyof typeof got] !== v);
   if (!got || bad.length) { fail++; console.log('FAIL shape', lines[0], bad.map(([k, v]) => `${k}: got "${got?.[k as keyof typeof got]}" want "${v}"`).join('; ')); }
   else console.log('PASS shape', lines[0].slice(0, 40));
+}
+// GPS stamps as read off deck photos (text-reader slips included).
+const stampCases: [string, [number, number] | null][] = [
+  ['Ibadan, Oyo, Nigeria Lat 7.396822° Long 3.920231° 05/12/22 07:26 AM GMT +01:00', [7.396822, 3.920231]],
+  ['BATKASH/OGUN029/22 6.6970834N 3.2324984E Dec 16, 2022 6:14:31 PM', [6.697083, 3.232498]],
+  [`May 27, 2021 11:30:44 4°57'11.724"N 7°0'41.814"E Unnamed Road Ikwerre`, [4.953257, 7.011615]],
+  ['Lat 11.97599° Long 8.547O51°', [11.97599, 8.547051]],
+  ['Lat 5.6970834 Long 3.2324984 (sea, still inside the box)', [5.697083, 3.232498]],
+  ['Lat 51.5072 Long -0.1276', null],
+  ['May 22, 2022 10:00 AM', null],
+];
+for (const [text, want] of stampCases) {
+  const got = stampGps(text);
+  const same = want ? !!got && Math.abs(got.lat - want[0]) < 1e-5 && Math.abs(got.lng - want[1]) < 1e-5 : got === null;
+  if (!same) { fail++; console.log('FAIL stamp', text.slice(0, 40), got, 'want', want); } else console.log('PASS stamp', text.slice(0, 30));
 }
 console.log(fail ? `${fail} failed` : 'all passed');
 process.exit(fail ? 1 : 0);

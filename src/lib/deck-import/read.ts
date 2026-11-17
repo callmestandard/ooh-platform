@@ -3,7 +3,8 @@
 // "cell<TAB>cell", and the largest picture on the slide. PDF: the page's
 // text grouped into lines, and a picture of the whole page.
 
-export type DeckSlide = { index: number; lines: string[]; image: Blob | null };
+/** image: the board photo. photos: every large picture on the slide as stored in the deck, biggest first (read for GPS stamps). */
+export type DeckSlide = { index: number; lines: string[]; image: Blob | null; photos: Blob[] };
 
 const MAX_SLIDES = 150;
 const PHOTO_MAX_PX = 1600;
@@ -81,6 +82,7 @@ async function readPptx(file: File, onProgress?: (done: number, total: number) =
     // The board photo is the biggest picture on the slide (logos are small).
     const rels = await relsOf(path.replace(/slides\/(slide\d+\.xml)$/, 'slides/_rels/$1.rels'));
     let best: { size: number; data: Uint8Array; ext: string } | null = null;
+    const large: { size: number; blob: Blob }[] = [];
     for (const blip of Array.from(doc.getElementsByTagName('a:blip'))) {
       const target = rels.get(blip.getAttribute('r:embed') ?? '');
       if (!target) continue;
@@ -91,11 +93,14 @@ async function readPptx(file: File, onProgress?: (done: number, total: number) =
       if (!media) continue;
       const data = await media.async('uint8array');
       if (!best || data.length > best.size) best = { size: data.length, data, ext };
+      if (data.length > 15000 && !large.some(l => l.size === data.length)) {
+        large.push({ size: data.length, blob: new Blob([data as BlobPart], { type: ext === 'jpg' ? 'image/jpeg' : `image/${ext}` }) });
+      }
     }
     const image = best && best.size > 15000
       ? await toJpeg(new Blob([best.data as BlobPart], { type: best.ext === 'jpg' ? 'image/jpeg' : `image/${best.ext}` }))
       : null;
-    slides.push({ index: i + 1, lines, image });
+    slides.push({ index: i + 1, lines, image, photos: large.sort((a, b) => b.size - a.size).map(l => l.blob) });
     onProgress?.(i + 1, paths.length);
   }
   return slides;
@@ -154,7 +159,7 @@ async function readPdf(file: File, onProgress?: (done: number, total: number) =>
         image = await new Promise(res => canvas.toBlob(b => res(b), 'image/jpeg', 0.82));
       }
     } catch { /* text is still useful without a picture */ }
-    slides.push({ index: n, lines, image });
+    slides.push({ index: n, lines, image, photos: image ? [image] : [] });
     page.cleanup();
     onProgress?.(n, total);
   }
