@@ -85,6 +85,9 @@ BEGIN
   )
   WHERE k.id = p_keep;
 
+  -- "Not duplicates" marks on a removed board mean nothing any more.
+  DELETE FROM public.board_duplicate_dismissals WHERE board_a = ANY(v_drop) OR board_b = ANY(v_drop);
+
   -- Every table with a single-column link to boards: move the rows over.
   FOR v_fk IN
     SELECT c.conrelid::regclass AS tbl, a.attname AS col, a.attnum AS num
