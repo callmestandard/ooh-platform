@@ -5,7 +5,14 @@
 // NEXT_PUBLIC_MVP_MODE=false to show them.
 export const MVP_MODE = process.env.NEXT_PUBLIC_MVP_MODE !== 'false';
 
-export const MVP_HANDOFF_TEXT = 'Request accepted. Our team will contact you to complete the booking.';
+export const MVP_HANDOFF_TEXT = 'Request accepted. Our team will check with the media owner and contact you to confirm the booking.';
+
+// Buyers are never told a board is free or that a booking is guaranteed: every
+// booking is an enquiry that our team confirms with the owner. Turn this on only
+// once owners have signed agreements and keep their availability up to date;
+// it brings back the "Confirmed free" badges, the "available now" count and the
+// Available filter on the marketplace.
+export const SHOW_AVAILABILITY = false;
 
 type RoleRules = {
   /** Where the role lands; hidden pages send people here. */

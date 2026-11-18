@@ -215,12 +215,12 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
 
   const faqs = [
     {
-      q: `How many billboards are available in ${cityName}?`,
-      a: `There are ${count} billboard${count !== 1 ? 's' : ''} available in ${cityName} right now, listed by their media owners: ${formatStats.map(f => `${f.count} ${(FORMAT_LABELS[f.format] || f.format).toLowerCase()}${f.count !== 1 ? 's' : ''}`).join(', ')}. New boards are added as more owners list with us.`,
+      q: `How many billboards are listed in ${cityName}?`,
+      a: `There are ${count} billboard${count !== 1 ? 's' : ''} listed in ${cityName}: ${formatStats.map(f => `${f.count} ${(FORMAT_LABELS[f.format] || f.format).toLowerCase()}${f.count !== 1 ? 's' : ''}`).join(', ')}. Whether a board is free depends on your dates, so request it and we check with the owner. New boards are added as more owners list with us.`,
     },
     {
       q: `How do I book a billboard in ${cityName}?`,
-      a: `Choose a board on this page and press Request this location. Add your dates, and the media owner replies with availability and a price. You can accept the quote or make an offer. Once you agree, our team contacts you and the owner to complete the booking.`,
+      a: `Choose a board on this page and press Request this location. Add your dates, and we ask the media owner whether it is free and what it costs. You can accept the quote or make an offer. Once you agree, our team confirms with the owner and contacts you to complete the booking. Nothing is booked until the owner confirms.`,
     },
     ...pricingFaqs(cityName),
   ];

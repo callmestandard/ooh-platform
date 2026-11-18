@@ -19,6 +19,7 @@ import { sinceText } from '@/lib/owner-links';
 import ShortlistTray from '@/components/shortlist/ShortlistTray';
 import Board3DMap from '@/components/map/Board3DMapLoader';
 import type { NearbyBoard } from '@/components/map/Board3DMap';
+import { SHOW_AVAILABILITY } from '@/lib/mvp';
 
 type Board = {
   id: string;
@@ -176,7 +177,7 @@ export default function PublicBoardPage() {
 
   // Shown only when the owner confirmed the board in the last two weeks.
   const checkedDays = board.availability_checked_at ? Math.floor((now - new Date(board.availability_checked_at).getTime()) / 86_400_000) : null;
-  const fresh = board.status === 'available' && checkedDays != null && checkedDays <= 14
+  const fresh = SHOW_AVAILABILITY && board.status === 'available' && checkedDays != null && checkedDays <= 14
     ? `Confirmed free by the owner · ${sinceText(board.availability_checked_at)}` : null;
 
   const priceBlock = (

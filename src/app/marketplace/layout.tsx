@@ -2,10 +2,10 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'OOH Platform — Nigeria Billboard Marketplace',
-  description: 'Browse available billboard space across Nigeria. Filter by city, format, and price. Make offers directly to board owners.',
+  description: 'Browse billboard space across Nigeria. Filter by city, format and price, then request a quote from the media owner.',
   openGraph: {
     title: 'OOH Platform — Nigeria Billboard Marketplace',
-    description: 'Browse available billboard space across Nigeria. Lagos, Abuja, Port Harcourt and more. Filter by format and price, make offers directly.',
+    description: 'Browse billboard space across Nigeria: Lagos, Abuja, Port Harcourt and more. Filter by format and price, then request a quote.',
     type: 'website',
     siteName: 'OOH Platform',
     images: [
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'OOH Platform — Nigeria Billboard Marketplace',
-    description: 'Browse available billboard space across Nigeria.',
+    description: 'Browse billboard space across Nigeria.',
   },
 };
 

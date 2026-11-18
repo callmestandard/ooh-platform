@@ -172,7 +172,7 @@ function LoginContent() {
             fontSize: '1rem', color: 'rgba(255,255,255,0.45)',
             lineHeight: 1.6, margin: 0, maxWidth: '340px',
           }}>
-            Where billboard owners list space, agencies plan campaigns, and brands see results in real time.
+            {MVP_MODE ? 'Find billboards across Nigeria and ask their owners for a price.' : 'Where billboard owners list space, agencies plan campaigns, and brands see results in real time.'}
           </p>
 
           <div style={{ display: 'flex', gap: '32px', marginTop: '40px' }}>

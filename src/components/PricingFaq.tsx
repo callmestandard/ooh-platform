@@ -26,7 +26,7 @@ export function pricingFaqs(city?: string): Faq[] {
     },
     {
       q: 'Who owns the boards, and who do I pay?',
-      a: "The boards are listed by the media owners who own them. We work directly with the owners, and each listing shows whether and when it was last verified. Once you accept a quote, our team contacts you and the owner to complete the booking and payment.",
+      a: "The boards are listed by the media owners who own them. We work directly with the owners, and each listing shows whether and when it was last verified. Once you accept a quote, our team confirms with the owner and contacts you to complete the booking and payment. Nothing is booked until the owner confirms.",
     },
     {
       q: 'How long can I book a board for?',

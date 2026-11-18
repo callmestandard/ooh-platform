@@ -12,7 +12,7 @@ import SiteHeader from '@/components/public/SiteHeader';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 import { VerificationBadge, dimensionsText, illuminationText, locationText, verificationOf, UNKNOWN } from '@/lib/board-verification';
 import { FORMAT_GROUPS, formatGroup } from '@/lib/board-formats';
-import { MVP_MODE } from '@/lib/mvp';
+import { MVP_MODE, SHOW_AVAILABILITY } from '@/lib/mvp';
 import { boardPath } from '@/lib/public-links';
 import { displayName } from '@/lib/display-name';
 import WhatsAppButton from '@/components/WhatsAppButton';
@@ -113,7 +113,7 @@ const BUDGET_BANDS = [
 
 /** "Confirmed free · 3 days ago" when the owner confirmed this board recently. */
 function freshText(board: Board): string | null {
-  if (board.status !== 'available' || !board.availability_checked_at) return null;
+  if (!SHOW_AVAILABILITY || board.status !== 'available' || !board.availability_checked_at) return null;
   const days = Math.floor((Date.now() - new Date(board.availability_checked_at).getTime()) / 86_400_000);
   if (isNaN(days) || days > 14) return null;
   return `Confirmed free · ${sinceText(board.availability_checked_at)}`;
@@ -297,7 +297,7 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-            <StatusBadge status={board.status} />
+            {(SHOW_AVAILABILITY || board.status !== 'available') && <StatusBadge status={board.status} />}
             <VerificationBadge status={board.verification_status} small />
             {board.activeListing && <TrustBadgePill badge={board.activeListing.badge} small />}
           </div>
@@ -565,7 +565,7 @@ function MarketplaceContent() {
             background: 'rgba(255,255,255,0.1)', borderRadius: 999, padding: '4px 12px', marginBottom: 20,
           }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#F59E0B' }} />
-            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>{availableCount} boards available now</span>
+            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>{SHOW_AVAILABILITY ? `${availableCount} boards available now` : `${availableCount} boards listed`}</span>
           </div>
           <h1 style={{
             fontSize: '2.5rem', fontWeight: 800, color: '#fff',
@@ -681,13 +681,13 @@ function MarketplaceContent() {
           background: '#fff', border: '1px solid #E8EDF2', borderRadius: 14, padding: 10,
           boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
         }}>
-          <div className="mk-seg" aria-label="Availability">
+          {SHOW_AVAILABILITY && <div className="mk-seg" aria-label="Availability">
             {(['available', 'all'] as const).map(st => (
               <button key={st} className={statusFilter === st ? 'on' : ''} onClick={() => setStatusFilter(st)}>
                 {st === 'available' ? 'Available' : 'All'}
               </button>
             ))}
-          </div>
+          </div>}
           <div className="mk-seg" aria-label="Static or digital" data-filter="kind">
             {(['all', 'static', 'digital'] as const).map(k => (
               <button key={k} className={kindFilter === k ? 'on' : ''} onClick={() => setKindFilter(k)}>
@@ -842,7 +842,7 @@ function MarketplaceContent() {
               <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>How it works</span>
             </div>
             <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.03em', margin: '0 0 14px' }}>
-              Book outdoor advertising in 3 steps
+              {MVP_MODE ? 'How it works' : 'Book outdoor advertising in 3 steps'}
             </h2>
             <p style={{ fontSize: '0.9375rem', color: 'rgba(255,255,255,0.45)', margin: '0 auto 36px', maxWidth: 440 }}>
               {MVP_MODE ? 'No cold calls. No scattered WhatsApp chains.' : 'No cold calls. No site visits. No spreadsheets.'}
@@ -850,8 +850,8 @@ function MarketplaceContent() {
             <div className="resp-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, maxWidth: 640, margin: '0 auto 36px', textAlign: 'left' }}>
               {(MVP_MODE ? [
                 { num: '01', title: 'Browse & filter', body: 'Find boards by area, format and verification — in a grid or on the map.' },
-                { num: '02', title: 'Request availability', body: 'Pick your dates. The media owner replies with availability and a price.' },
-                { num: '03', title: 'Agree and book', body: 'Negotiate in one thread. Once you accept, our team completes the booking with you.' },
+                { num: '02', title: 'Send an enquiry', body: 'Pick your dates. We ask the media owner whether the board is free and what it costs.' },
+                { num: '03', title: 'Agree, then we confirm', body: 'Accept the quote or negotiate. Our team then confirms with the owner; nothing is booked until they do.' },
               ] : [
                 { num: '01', title: 'Browse & filter', body: 'Find boards by city, format, size, and budget on one page.' },
                 { num: '02', title: 'Request a quote', body: 'Submit your campaign dates and budget. Owner responds in 24h.' },

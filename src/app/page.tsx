@@ -63,8 +63,8 @@ const MVP_ROLES = {
     label: 'Buyers',
     steps: [
       { ico: 'search', n: '01', title: 'Find the right locations', body: 'Browse billboards by city and area, with photos, size, format and how recently each listing was verified.', link: 'Find a board', href: '/marketplace' },
-      { ico: 'msg', n: '02', title: 'Request availability and a price', body: 'Pick your dates and send a request. The media owner replies with availability and a quote — and you can negotiate in one conversation.', link: 'Create a buyer account', href: '/signup?role=agency' },
-      { ico: 'shield', n: '03', title: 'We complete the booking with you', body: 'Once you accept a quote, our team contacts you and the owner to finalise the booking. No scattered WhatsApp chains.', link: 'Get started', href: '/signup?role=agency' },
+      { ico: 'msg', n: '02', title: 'Ask for availability and a price', body: 'Pick your dates and send an enquiry. We ask the media owner whether the board is free and what it costs, and you can negotiate in one conversation.', link: 'Create a buyer account', href: '/signup?role=agency' },
+      { ico: 'shield', n: '03', title: 'We confirm the booking with you', body: 'Once you accept a quote, our team confirms with the owner and contacts you to finalise the booking. Nothing is booked until the owner confirms.', link: 'Get started', href: '/signup?role=agency' },
     ],
   },
   owners: {
@@ -399,7 +399,7 @@ function Hero() {
           {/* Subhead */}
           <p style={{ marginTop: 22, fontSize: 19, color: '#475569', maxWidth: 480, lineHeight: 1.55 }}>
             {MVP_MODE
-              ? 'See photos, locations and guide prices. Request a board and its owner replies with a quote. Our team completes the booking with you.'
+              ? 'See photos, locations and guide prices. Send an enquiry for the boards you want, and our team checks with the owner and confirms the booking with you.'
               : 'Billboard owners list space. Agencies plan and book campaigns. Brands track results in real time. One platform — the whole transaction.'}
           </p>
 
@@ -682,8 +682,8 @@ function HowItWorks() {
       <div className="lp-wrap">
         <div ref={ref} className={`lp-section-head${inView ? ' lp-in' : ''}`}>
           <span className="lp-eyebrow">How it works</span>
-          <h2>{MVP_MODE ? 'From search to booked, in one place' : 'Built for everyone in OOH'}</h2>
-          <p>{MVP_MODE ? 'Buyers find and request locations. Media owners reply with availability and a price. Our team completes the booking.' : 'Whether you own billboards, buy media space, or approve campaign spend — OOH has a workspace built for you.'}</p>
+          <h2>{MVP_MODE ? 'From search to booking, in one place' : 'Built for everyone in OOH'}</h2>
+          <p>{MVP_MODE ? 'Buyers find locations and send enquiries. Media owners reply with availability and a price. Our team confirms each booking with the owner.' : 'Whether you own billboards, buy media space, or approve campaign spend — OOH has a workspace built for you.'}</p>
         </div>
 
         {/* Tabs */}

@@ -464,7 +464,7 @@ export async function emailOwnerReplied(to: string, r: RequestEmailInfo, reply: 
 export async function emailDealAgreed(to: string, r: RequestEmailInfo, who: 'buyer' | 'owner' | 'admin', rate: number | null) {
   const rateRow = rate ? metaRow('Agreed price', `<span style="font-family:monospace;font-weight:800;">₦${Math.round(rate).toLocaleString('en-NG')}</span> per month`) : '';
   const copy = {
-    buyer: { title: 'Deal agreed', text: 'Request accepted. Our team will contact you shortly to complete the booking — no further action is needed right now.', link: `${APP_URL}/dashboard/agency/requests`, cta: 'View your request' },
+    buyer: { title: 'Quote accepted', text: 'Thanks. Our team will now check with the media owner and contact you to confirm the booking. The board is not booked until the owner confirms.', link: `${APP_URL}/dashboard/agency/requests`, cta: 'View your request' },
     owner: { title: 'Deal agreed', text: `You and ${esc(r.buyerCompany)} agreed terms for <strong>${esc(r.boardName)}</strong>. Our team will contact you to complete the booking.`, link: `${APP_URL}/dashboard/owner/negotiations`, cta: 'View the deal' },
     admin: { title: 'Deal agreed — complete the booking', text: `${esc(r.buyerCompany)} and ${esc(r.ownerName)} agreed terms. Contact both sides to complete the booking, then move the request to Booking in progress.`, link: `${APP_URL}/dashboard/admin/requests`, cta: 'Open the Requests console' },
   }[who];
@@ -475,7 +475,7 @@ export async function emailDealAgreed(to: string, r: RequestEmailInfo, who: 'buy
      ${requestTable(r, metaRow('Buyer', esc(r.buyerCompany)) + rateRow)}
      ${btn(copy.cta, copy.link, '#059669')}`,
   );
-  await sendEmail(to, `${who === 'admin' ? 'Action needed — deal agreed' : 'Deal agreed'}: ${r.boardName}`, html);
+  await sendEmail(to, `${who === 'admin' ? 'Action needed — deal agreed' : who === 'buyer' ? 'Quote accepted' : 'Deal agreed'}: ${r.boardName}`, html);
 }
 
 /**

@@ -164,7 +164,7 @@ export default function SignupPage() {
             { icon: '📍', text: 'Browse locations with photos, size and verification status' },
             { icon: '📨', text: 'Request a location and get availability and a price from the owner' },
             { icon: '🤝', text: 'Agree the terms in one conversation' },
-            { icon: '✅', text: 'Our team completes the booking with you' },
+            { icon: '✅', text: 'Our team confirms the booking with the owner' },
           ] : [
             { icon: '📋', text: 'Plan campaigns with AI-powered board selection' },
             { icon: '🤝', text: 'Negotiate and book boards in real time' },

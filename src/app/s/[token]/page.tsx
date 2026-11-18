@@ -75,7 +75,7 @@ export default function SharedBoardsPage() {
               </div>
               <p style={{ fontSize: '0.8125rem', color: '#334155', margin: '0 0 4px' }}>
                 <strong>Availability:</strong>{' '}
-                {b.booked.length === 0 ? 'Available now' : `Booked ${b.booked.map(r => `${fmtDate(r.start)} – ${fmtDate(r.end)}`).join('; ')} — free outside those dates`}
+                {b.booked.length === 0 ? 'Ask us to check your dates' : `Booked ${b.booked.map(r => `${fmtDate(r.start)} – ${fmtDate(r.end)}`).join('; ')} — free outside those dates`}
               </p>
               <p data-rate style={{ fontSize: '0.9375rem', fontWeight: 800, color: '#1B4F8A', margin: '8px 0 14px' }}>
                 {b.rate ? `₦${Math.round(b.rate).toLocaleString('en-NG')} per month` : 'Contact for rate'}
