@@ -842,7 +842,7 @@ function MarketplaceContent() {
               <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>How it works</span>
             </div>
             <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.03em', margin: '0 0 14px' }}>
-              {MVP_MODE ? 'How it works' : 'Book outdoor advertising in 3 steps'}
+              {MVP_MODE ? 'From enquiry to booking' : 'Book outdoor advertising in 3 steps'}
             </h2>
             <p style={{ fontSize: '0.9375rem', color: 'rgba(255,255,255,0.45)', margin: '0 auto 36px', maxWidth: 440 }}>
               {MVP_MODE ? 'No cold calls. No scattered WhatsApp chains.' : 'No cold calls. No site visits. No spreadsheets.'}
