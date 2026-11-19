@@ -6,6 +6,7 @@ import { useDashboardRole } from '@/components/layout/DashboardLayout';
 import { boardFormatLabel } from '@/lib/board-formats';
 import { STAGE_META, notifyRequest, type RequestStage } from '@/lib/availability-requests';
 import { Journey, StageTag, fmtShort, spanText } from '@/components/requests/journey';
+import { loadBoardPrivate } from '@/lib/board-private';
 
 // Admin console for "Request this location" (043–045): see every board
 // request, who to call, and move deals through the manual hand-off.
@@ -91,7 +92,7 @@ export default function AdminRequestsPage() {
     const { data, error } = await supabase
       .from('availability_requests')
       .select(`id, agency_id, agency_name, title, stage, stage_updated_at, start_date, end_date, budget, notes, sites_needed, extra_requirements, created_at, board_id,
-        board:boards(id, name, city, area, format, owner_id, contact_name, contact_phone, photo_urls),
+        board:boards(id, name, city, area, format, owner_id, photo_urls),
         responses:availability_responses(id, owner_id, available, quoted_rate, note, available_from, available_to, conditions, accepted_booking_id, answered_by_admin, updated_at),
         recipients:availability_request_recipients(owner_id, owner_name, responded_at),
         contacts:availability_request_contacts(name, company, email, phone)`)
@@ -100,6 +101,9 @@ export default function AdminRequestsPage() {
       .limit(300);
     if (error) { setError(error.message); setLoading(false); return; }
     const rows = (data ?? []) as unknown as Req[];
+    // Owner contacts are private (migration 060): fetched separately, admins only.
+    const priv = await loadBoardPrivate(rows.map(r => r.board?.id ?? ''));
+    for (const r of rows) if (r.board) { r.board.contact_name = priv[r.board.id]?.contact_name ?? null; r.board.contact_phone = priv[r.board.id]?.contact_phone ?? null; }
     setRequests(rows);
     if (rows.length) {
       const { data: n } = await supabase.from('availability_request_admin_notes').select('request_id, notes').in('request_id', rows.map(r => r.id));

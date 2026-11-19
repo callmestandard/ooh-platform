@@ -16,6 +16,7 @@ import { attachVisibleRates } from '@/lib/board-rates';
 import { type PrintTask, PRINT_STATUS_LABELS, PRINT_STATUS_STYLE, fetchPrintTasksForBookings } from '@/lib/print-tasks';
 import { VerificationBadge } from '@/lib/board-verification';
 import { mvpTabs } from '@/lib/mvp';
+import { BOARD_PUBLIC_COLUMNS, withBoardPrivate } from '@/lib/board-private';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -638,7 +639,7 @@ function OwnerContent() {
       setUserId(uid);
 
       const [boardsRes, bookingsRes] = await Promise.all([
-        supabase.from('boards').select('*').eq('owner_id', uid).order('created_at', { ascending: false }).limit(200),
+        supabase.from('boards').select(BOARD_PUBLIC_COLUMNS).eq('owner_id', uid).order('created_at', { ascending: false }).limit(200),
         supabase
           .from('bookings')
           .select('*, boards!inner(name, city, format, owner_id), campaigns(id, name, client_name, agency_id, client_id)')
@@ -652,7 +653,7 @@ function OwnerContent() {
       if (bookingsRes.error) throw bookingsRes.error;
 
       // Rates live in the private board_rates table (migration 035) — the owner may always read their own.
-      if (boardsRes.data) setBoards(await attachVisibleRates(boardsRes.data as Board[]));
+      if (boardsRes.data) setBoards(await attachVisibleRates(await withBoardPrivate(boardsRes.data as unknown as Board[])) as Board[]);
       if (bookingsRes.data) {
         const bks = bookingsRes.data as unknown as Booking[];
         setBookings(bks);

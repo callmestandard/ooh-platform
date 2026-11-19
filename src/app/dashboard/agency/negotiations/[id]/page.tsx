@@ -10,6 +10,7 @@ import { createNotification, getBoardOwnerAccount } from '@/lib/notifications';
 import { getActivityActor, logActivity } from '@/lib/activity-log';
 import ActivityTimeline from '@/components/activity/ActivityTimeline';
 import { MVP_MODE, MVP_HANDOFF_TEXT } from '@/lib/mvp';
+import { BOARD_PUBLIC_COLUMNS } from '@/lib/board-private';
 
 type Booking = {
   id: string;
@@ -133,7 +134,7 @@ export default function NegotiationDetailPage() {
     try {
       const { data, error } = await supabase
         .from('bookings')
-        .select(`*, boards!bookings_board_id_fkey (*), campaigns!bookings_campaign_id_fkey (id, name, client_name, request_id)`)
+        .select(`*, boards!bookings_board_id_fkey (${BOARD_PUBLIC_COLUMNS}), campaigns!bookings_campaign_id_fkey (id, name, client_name, request_id)`)
         .eq('id', id)
         .single();
       if (error) throw error;

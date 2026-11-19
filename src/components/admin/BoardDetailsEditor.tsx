@@ -3,6 +3,7 @@
 import { createPortal } from 'react-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { loadBoardPrivate } from '@/lib/board-private';
 
 const FORMATS: [string, string][] = [
   ['billboard', 'Billboard'], ['unipole', 'Unipole'], ['gantry', 'Gantry'],
@@ -43,8 +44,9 @@ export default function BoardDetailsEditor({ boardId, currentRate, onSaved, onCl
     let cancelled = false;
     (async () => {
       const { data, error: err } = await supabase.from('boards')
-        .select('name, notes, address, area, city, state, format, width, height, illuminated, face_count, contact_name, contact_phone')
+        .select('name, notes, address, area, city, state, format, width, height, illuminated, face_count')
         .eq('id', boardId).single();
+      const priv = (await loadBoardPrivate([boardId]))[boardId];
       if (cancelled) return;
       if (err || !data) { setError('Could not load this board.'); return; }
       const loaded: Details = {
@@ -52,7 +54,7 @@ export default function BoardDetailsEditor({ boardId, currentRate, onSaved, onCl
         city: toStr(data.city), state: toStr(data.state), format: toStr(data.format) === 'digital' ? 'led' : toStr(data.format),
         width: toStr(data.width), height: toStr(data.height),
         illuminated: data.illuminated == null ? '' : data.illuminated ? 'yes' : 'no',
-        face_count: toStr(data.face_count), contact_name: toStr(data.contact_name), contact_phone: toStr(data.contact_phone),
+        face_count: toStr(data.face_count), contact_name: toStr(priv?.contact_name), contact_phone: toStr(priv?.contact_phone),
         rate: currentRate ? String(currentRate) : '',
       };
       setD(loaded);

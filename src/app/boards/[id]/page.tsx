@@ -20,6 +20,7 @@ import ShortlistTray from '@/components/shortlist/ShortlistTray';
 import Board3DMap from '@/components/map/Board3DMapLoader';
 import type { NearbyBoard } from '@/components/map/Board3DMap';
 import { SHOW_AVAILABILITY, SHOW_PRICES } from '@/lib/mvp';
+import { BOARD_PUBLIC_COLUMNS } from '@/lib/board-private';
 
 type Board = {
   id: string;
@@ -84,7 +85,7 @@ export default function PublicBoardPage() {
   useEffect(() => {
     if (!id) return; // no id: the page shows "Board not found"
     Promise.all([
-      supabase.from('boards').select('*').eq('id', id).single(),
+      supabase.from('boards').select(BOARD_PUBLIC_COLUMNS).eq('id', id).single(),
       supabase.from('listings').select('sell_price, agent_id, board_authorizations(owner_verified)').eq('board_id', id).eq('status', 'active').maybeSingle(),
     ]).then(async ([{ data }, { data: listing }]) => {
       const [b, guides] = data && !SHOW_PRICES

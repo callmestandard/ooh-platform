@@ -27,7 +27,7 @@ export default function ClaimBoardsPage() {
     if (term.length < 3) { setBoards([]); return; }
     const { data, error } = await supabase
       .from('boards')
-      .select('id, name, city, address, format, partner_name, contact_phone')
+      .select('id, name, city, address, format, partner_name')
       .is('owner_id', null)
       .or(`partner_name.ilike.%${term}%,name.ilike.%${term}%`)
       .order('name')

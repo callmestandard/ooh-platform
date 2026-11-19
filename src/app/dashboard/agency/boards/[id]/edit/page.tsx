@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { attachVisibleRates } from '@/lib/board-rates';
 import ActivityTimeline from '@/components/activity/ActivityTimeline';
 import BoardForm, { type BoardRecord } from '../../BoardForm';
+import { BOARD_PUBLIC_COLUMNS, withBoardPrivate } from '@/lib/board-private';
 
 type DealEntry = {
   booking_id: string;
@@ -36,9 +37,9 @@ function EditBoardContent() {
     if (!id) return;
     (async () => {
       setLoading(true);
-      const { data, error } = await supabase.from('boards').select('*').eq('id', id).single();
+      const { data, error } = await supabase.from('boards').select(BOARD_PUBLIC_COLUMNS).eq('id', id).single();
       if (error || !data) { setNotFound(true); setLoading(false); return; }
-      setBoard((await attachVisibleRates([data as BoardRecord]))[0]);
+      setBoard((await attachVisibleRates(await withBoardPrivate([data as unknown as BoardRecord])) as BoardRecord[])[0]);
 
       // Negotiation history for this board, across every campaign it's ever
       // been shortlisted on — this is what makes the next negotiation start

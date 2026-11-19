@@ -21,6 +21,7 @@ import PrintStatusPanel from '@/components/print/PrintStatusPanel';
 import { fetchBoardPreferences, applyVendorPreferences } from '@/lib/vendor-preferences';
 import { listMakegoodsForBookings, createMakegood, makegoodFromSwap, isUnresolved, isOverdue, isUnappliedCredit, type Makegood } from '@/lib/makegoods';
 import { attachVisibleRates } from '@/lib/board-rates';
+import { BOARD_PUBLIC_COLUMNS } from '@/lib/board-private';
 import {
   type PrintTask, type ResponsibleParty, PRINT_STATUS_LABELS, PRINT_STATUS_STYLE,
   fetchPrintTasksForBookings, createPrintTask,
@@ -341,8 +342,8 @@ export default function CampaignPlanPage() {
     try {
       const [campRes, itemsRes, boardsRes, listingsRes] = await Promise.all([
         supabase.from('campaigns').select('*').eq('id', id).single(),
-        supabase.from('bookings').select('*, boards(*)').eq('campaign_id', id).order('created_at'),
-        supabase.from('boards').select('*').eq('status', 'available').order('name'),
+        supabase.from('bookings').select(`*, boards(${BOARD_PUBLIC_COLUMNS})`).eq('campaign_id', id).order('created_at'),
+        supabase.from('boards').select(BOARD_PUBLIC_COLUMNS).eq('status', 'available').order('name'),
         supabase.from('listings').select('id, board_id, sell_price, agent_id, board_authorizations(owner_verified)').eq('status', 'active'),
       ]);
       if (campRes.error) throw campRes.error;

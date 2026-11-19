@@ -3,10 +3,14 @@ import { requireAuth, unauthorized } from '@/lib/require-auth';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { logActivity } from '@/lib/activity-log';
 import { emailNewBookingRequest } from '@/lib/email';
+import { MVP_MODE } from '@/lib/mvp';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  // Off in MVP mode: it books boards directly at a price derived from the
+  // owner's private rate. Buyers use the request flow instead.
+  if (MVP_MODE) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const user = await requireAuth(req);
   if (!user) return unauthorized();
 

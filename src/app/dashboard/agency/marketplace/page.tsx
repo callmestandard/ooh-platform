@@ -411,7 +411,7 @@ export default function MarketplacePage() {
   useEffect(() => {
     supabase
       .from('boards')
-      .select('id, name, format, address, city, state, width, height, asking_rate, face_count, illuminated, status, photo_urls, latitude, longitude, notes, contact_phone, available_from, created_at')
+      .select('id, name, format, address, city, state, width, height, asking_rate, face_count, illuminated, status, photo_urls, latitude, longitude, notes, available_from, created_at')
       .order('created_at', { ascending: false })
       .limit(300)
       .then(async ({ data }) => {

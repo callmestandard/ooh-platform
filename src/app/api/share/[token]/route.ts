@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { rateLimit, rateLimitResponse } from '@/lib/rate-limit';
+import { SHOW_PRICES } from '@/lib/mvp';
 
 export const runtime = 'nodejs';
 
@@ -38,7 +39,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   const out = await Promise.all((boards ?? []).map(async b => {
     const { data: visibility } = await admin.rpc('board_effective_rate_visibility', { p_board_id: b.id });
     let rate: number | null = null;
-    if (visibility === 'all_verified_agencies') {
+    // While prices are hidden from buyers, a share link never carries a rate.
+    if (SHOW_PRICES && visibility === 'all_verified_agencies') {
       const { data: r } = await admin.from('board_rates').select('gross_monthly_rate').eq('board_id', b.id).maybeSingle();
       rate = r?.gross_monthly_rate ?? null;
     }

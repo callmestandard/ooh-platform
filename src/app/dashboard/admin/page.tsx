@@ -19,8 +19,9 @@ import FunnelPanel from '@/components/admin/FunnelPanel';
 import InventoryDatabase from '@/components/admin/InventoryDatabase';
 import { fetchGuidePrices, guideText, type GuidePrice } from '@/lib/guide-prices';
 import { pairKey } from '@/lib/board-duplicates';
+import { withBoardPrivate } from '@/lib/board-private';
 
-const BOARD_COLUMNS = 'id, name, address, city, area, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at, verification_status, last_verified_at, source, photo_urls, latitude, longitude, width, height, contact_phone';
+const BOARD_COLUMNS = 'id, name, address, city, area, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at, verification_status, last_verified_at, source, photo_urls, latitude, longitude, width, height';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -322,7 +323,7 @@ function AdminContent() {
         supabase.from('booking_payouts').select('id, booking_id, effective_rate, floor_rate, owner_payout_amount, agent_payout_amount, owner_payout_status, agent_payout_status, bookings(boards(name, city), campaigns(name)), agent:agent_id(full_name, company_name), owner:owner_id(full_name, company_name)').order('updated_at', { ascending: false }),
       ]);
       if (bRes.error) throw bRes.error;
-      if (bRes.data) setBoards(await attachVisibleRates(bRes.data as Board[]));
+      if (bRes.data) setBoards(await attachVisibleRates(await withBoardPrivate(bRes.data as Board[])));
       supabase.from('board_owner_names').select('board_id, owner_name').then(({ data }) =>
         setOwnerNames(Object.fromEntries(((data as { board_id: string; owner_name: string }[]) || []).map(r => [r.board_id, r.owner_name]))));
       supabase.from('owner_sales_contacts').select('owner_key, contact_phone').then(({ data }) =>
@@ -411,7 +412,7 @@ function AdminContent() {
       return false;
     }
     const { data } = await supabase.from('boards').select(BOARD_COLUMNS).eq('id', keep.id).single();
-    const fresh = data ? (await attachVisibleRates([data as Board]))[0] : null;
+    const fresh = data ? (await attachVisibleRates(await withBoardPrivate([data as Board])))[0] : null;
     const gone = new Set(drop.map(b => b.id));
     setBoards(prev => prev.filter(b => !gone.has(b.id)).map(b => (b.id === keep.id && fresh ? fresh : b)));
     showToast(`Merged into “${keep.name.slice(0, 60)}”`, 'success');
