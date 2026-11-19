@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useDashboardRole } from '@/components/layout/DashboardLayout';
 import { boardFormatLabel } from '@/lib/board-formats';
 import { STAGE_META, notifyRequest, type RequestStage } from '@/lib/availability-requests';
+import { Journey, StageTag, fmtShort, spanText } from '@/components/requests/journey';
 
 // Admin console for "Request this location" (043–045): see every board
 // request, who to call, and move deals through the manual hand-off.
@@ -19,7 +20,7 @@ type Req = {
   id: string; agency_id: string; agency_name: string | null; title: string; stage: RequestStage; stage_updated_at: string;
   start_date: string; end_date: string; budget: number | null; notes: string | null; sites_needed: number | null;
   extra_requirements: string | null; created_at: string; board_id: string;
-  board: { id: string; name: string; city: string | null; area: string | null; format: string | null; owner_id: string | null; contact_name: string | null; contact_phone: string | null } | null;
+  board: { id: string; name: string; city: string | null; area: string | null; format: string | null; owner_id: string | null; contact_name: string | null; contact_phone: string | null; photo_urls: string[] | null } | null;
   responses: Reply[];
   recipients: { owner_id: string; owner_name: string | null; responded_at: string | null }[];
   contacts: Contact | Contact[] | null;
@@ -30,6 +31,14 @@ type Booking = { id: string; status: string; offered_rate: number | null; agreed
 const OPEN: RequestStage[] = ['requested', 'owner_responded', 'quote_received', 'unavailable', 'negotiating', 'accepted', 'booking_in_progress'];
 const ANSWERABLE: RequestStage[] = ['requested', 'owner_responded', 'quote_received', 'unavailable'];
 const DAY = 86_400_000;
+
+/** The pipeline columns along the top: the same four steps the buyer sees. */
+const LANES: { key: string; label: string; hint: string; stages: RequestStage[] }[] = [
+  { key: 'owner', label: 'Waiting on owner', hint: 'Get the owner’s price', stages: ['requested', 'owner_responded'] },
+  { key: 'buyer', label: 'Price sent', hint: 'Buyer to answer', stages: ['quote_received'] },
+  { key: 'agree', label: 'Agreeing', hint: 'In conversation', stages: ['negotiating'] },
+  { key: 'book', label: 'To book', hint: 'Complete the booking', stages: ['accepted', 'booking_in_progress'] },
+];
 
 const naira = (n: number) => '₦' + Math.round(n).toLocaleString('en-NG');
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -55,22 +64,17 @@ function followUp(r: Req): string | null {
   }
 }
 
-const card: React.CSSProperties = { background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12 };
-const input: React.CSSProperties = { boxSizing: 'border-box', padding: '7px 10px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: '0.8125rem', color: '#0F172A', background: '#fff', fontFamily: 'inherit', outline: 'none' };
-const small: React.CSSProperties = { fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px' };
+const card: React.CSSProperties = { background: '#fff', border: '1px solid #E8EDF3', borderRadius: 16 };
+const input: React.CSSProperties = { boxSizing: 'border-box', padding: '9px 11px', borderRadius: 9, border: '1.5px solid #E2E8F0', fontSize: '0.8125rem', color: '#0F172A', background: '#fff', fontFamily: 'inherit', outline: 'none' };
+const small: React.CSSProperties = { fontSize: '0.6875rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' };
 const btn = (kind: 'primary' | 'plain' | 'danger' = 'plain'): React.CSSProperties => ({
-  padding: '7px 12px', borderRadius: 8, fontSize: '0.75rem', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
+  padding: '9px 14px', borderRadius: 9, fontSize: '0.75rem', fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
   border: kind === 'plain' ? '1px solid #CBD5E1' : 'none',
-  background: kind === 'primary' ? '#1B4F8A' : kind === 'danger' ? '#FEE2E2' : '#fff',
-  color: kind === 'primary' ? '#fff' : kind === 'danger' ? '#B91C1C' : '#1B4F8A',
+  background: kind === 'primary' ? '#1B4F8A' : kind === 'danger' ? '#FEF2F2' : '#fff',
+  color: kind === 'primary' ? '#fff' : kind === 'danger' ? '#B91C1C' : '#0F172A',
 });
 
-function StagePill({ stage }: { stage: RequestStage }) {
-  const m = STAGE_META[stage];
-  return <span data-stage={stage} style={{ fontSize: '0.6875rem', fontWeight: 700, padding: '3px 9px', borderRadius: 999, background: m.bg, color: m.color, whiteSpace: 'nowrap' }}>{m.label}</span>;
-}
-
-type Filter = 'follow' | 'open' | 'all';
+type Filter = 'follow' | 'open' | 'all' | `lane:${string}`;
 
 export default function AdminRequestsPage() {
   const role = useDashboardRole();
@@ -87,7 +91,7 @@ export default function AdminRequestsPage() {
     const { data, error } = await supabase
       .from('availability_requests')
       .select(`id, agency_id, agency_name, title, stage, stage_updated_at, start_date, end_date, budget, notes, sites_needed, extra_requirements, created_at, board_id,
-        board:boards(id, name, city, area, format, owner_id, contact_name, contact_phone),
+        board:boards(id, name, city, area, format, owner_id, contact_name, contact_phone, photo_urls),
         responses:availability_responses(id, owner_id, available, quoted_rate, note, available_from, available_to, conditions, accepted_booking_id, answered_by_admin, updated_at),
         recipients:availability_request_recipients(owner_id, owner_name, responded_at),
         contacts:availability_request_contacts(name, company, email, phone)`)
@@ -112,11 +116,13 @@ export default function AdminRequestsPage() {
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const lane = filter.startsWith('lane:') ? LANES.find(l => `lane:${l.key}` === filter) : null;
     return requests.filter(r => {
       // Keep the request being managed on screen even if it no longer matches.
       if (r.id === openId) return true;
       if (filter === 'follow' && !followUp(r)) return false;
       if (filter === 'open' && !OPEN.includes(r.stage)) return false;
+      if (lane && !lane.stages.includes(r.stage)) return false;
       if (stageFilter && r.stage !== stageFilter) return false;
       if (!q) return true;
       const c = contactOf(r);
@@ -128,26 +134,53 @@ export default function AdminRequestsPage() {
 
   const followCount = requests.filter(r => followUp(r)).length;
   const openCount = requests.filter(r => OPEN.includes(r.stage)).length;
+  const booked = requests.filter(r => r.stage === 'confirmed').length;
 
   return (
-    <div style={{ maxWidth: 1040, margin: '0 auto', padding: '8px 0 48px' }}>
-      <h1 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: '0 0 4px', letterSpacing: '-0.02em' }}>Requests</h1>
-      <p style={{ fontSize: '0.875rem', color: '#64748B', margin: '0 0 18px', maxWidth: 680 }}>
-        Every &ldquo;Request this location&rdquo;. Call owners who aren&rsquo;t on the platform, answer for them, and take agreed deals through to a confirmed booking.
-      </p>
+    <div className="ar">
+      <header className="ar-head">
+        <div>
+          <h1>Requests</h1>
+          <p>Every &ldquo;Request this location&rdquo;. Get the owner&rsquo;s price, help the buyer agree, and take the deal through to a booking.</p>
+        </div>
+        <div className="ar-kpis">
+          <div><b>{openCount}</b><span>open</span></div>
+          <div className={followCount ? 'warn' : ''}><b>{followCount}</b><span>need follow-up</span></div>
+          <div className="good"><b>{booked}</b><span>booked</span></div>
+        </div>
+      </header>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-        {([['follow', `Needs follow-up (${followCount})`], ['open', `Open (${openCount})`], ['all', `All (${requests.length})`]] as const).map(([k, text]) => (
-          <button key={k} onClick={() => setFilter(k)} style={{
-            padding: '6px 12px', borderRadius: 8, fontSize: '0.75rem', fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer',
-            border: '1px solid ' + (filter === k ? '#1B4F8A' : '#E2E8F0'), background: filter === k ? '#EFF6FF' : '#fff', color: filter === k ? '#1B4F8A' : '#475569',
-          }}>{text}</button>
-        ))}
-        <select value={stageFilter} onChange={e => setStageFilter(e.target.value as RequestStage | '')} style={{ ...input, padding: '6px 8px' }} aria-label="Stage">
+      {/* Pipeline: the same four steps the buyer sees. Click a step to see its requests. */}
+      <div className="ar-lanes" role="tablist" aria-label="Pipeline">
+        {LANES.map((l, i) => {
+          const rows = requests.filter(r => l.stages.includes(r.stage));
+          const late = rows.filter(r => followUp(r)).length;
+          const on = filter === `lane:${l.key}`;
+          return (
+            <button key={l.key} role="tab" aria-selected={on} className={`ar-lane${on ? ' on' : ''}`} onClick={() => setFilter(on ? 'open' : `lane:${l.key}`)}>
+              <span className="ar-lane-n">{i + 1}</span>
+              <span className="ar-lane-t">{l.label}</span>
+              <b>{rows.length}</b>
+              <small>{late ? <em>{late} need follow-up</em> : l.hint}</small>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="ar-bar">
+        <div className="ar-tabs">
+          {([['follow', 'Needs follow-up', followCount], ['open', 'Open', openCount], ['all', 'All', requests.length]] as const).map(([k, text, n]) => (
+            <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{text}<span>{n}</span></button>
+          ))}
+        </div>
+        <select value={stageFilter} onChange={e => setStageFilter(e.target.value as RequestStage | '')} style={{ ...input, padding: '8px 10px' }} aria-label="Stage">
           <option value="">Any stage</option>
           {(Object.keys(STAGE_META) as RequestStage[]).map(s => <option key={s} value={s}>{STAGE_META[s].label}</option>)}
         </select>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search board, buyer, email…" style={{ ...input, flex: 1, minWidth: 180 }} aria-label="Search" />
+        <div className="ar-search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search board, buyer, email…" aria-label="Search" />
+        </div>
       </div>
 
       {error && <div style={{ ...card, padding: 14, borderColor: '#FECACA', background: '#FEF2F2', color: '#B91C1C', fontSize: '0.8125rem', marginBottom: 14 }}>{error}</div>}
@@ -155,17 +188,21 @@ export default function AdminRequestsPage() {
       {loading ? (
         <div style={{ ...card, padding: 24, color: '#94A3B8', fontSize: '0.875rem' }}>Loading…</div>
       ) : shown.length === 0 ? (
-        <div style={{ ...card, padding: '36px 24px', textAlign: 'center', color: '#64748B', fontSize: '0.875rem' }}>
-          {filter === 'follow' ? 'Nothing needs follow-up right now.' : 'No requests match.'}
+        <div className="ar-empty">
+          <div className="ar-empty-ico"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+          <b>{filter === 'follow' ? 'All caught up' : 'No requests here'}</b>
+          <p>{filter === 'follow' ? 'Nothing needs follow-up right now.' : requests.length === 0 ? 'Requests from buyers will appear here.' : 'No requests match.'}</p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {shown.map(r => (
             <RequestCard key={r.id} r={r} open={openId === r.id} onToggle={() => setOpenId(openId === r.id ? null : r.id)}
               note={notes[r.id] ?? ''} onNoteSaved={text => setNotes(prev => ({ ...prev, [r.id]: text }))} onChanged={refresh} />
           ))}
         </div>
       )}
+
+      <style>{ADMIN_CSS}</style>
     </div>
   );
 }
@@ -178,60 +215,149 @@ function RequestCard({ r, open, onToggle, note, onNoteSaved, onChanged }: {
   const reason = followUp(r);
   const onPlatform = ownerOnPlatform(r);
   const ownerName = r.recipients?.[0]?.owner_name;
+  const photo = r.board?.photo_urls?.[0];
+  const closed = r.stage === 'cancelled' || r.stage === 'unavailable' || r.stage === 'confirmed';
 
   return (
-    <div data-admin-request={r.id} style={{ ...card, padding: 16, borderColor: reason ? '#FDE68A' : '#E2E8F0' }}>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <a href={`/boards/${r.board_id}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', textDecoration: 'none' }}>{r.board?.name ?? r.title}</a>
-            <StagePill stage={r.stage} />
+    <article data-admin-request={r.id} className={`ar-card${reason ? ' late' : ''}${open ? ' open' : ''}`}>
+      {reason && <p data-follow-up className="ar-flag"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3v18h2v-7h11l-2-4.5L18 5H7V3z"/></svg>{reason}</p>}
+      <div className="ar-top">
+        <a href={`/boards/${r.board_id}`} target="_blank" rel="noopener noreferrer" className="ar-ph" aria-hidden tabIndex={-1}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {photo && <img src={photo} alt="" loading="lazy" />}
+        </a>
+        <div className="ar-id">
+          <div className="ar-l1">
+            <a href={`/boards/${r.board_id}`} target="_blank" rel="noopener noreferrer" className="ar-name">{r.board?.name ?? r.title}</a>
+            <StageTag stage={r.stage} />
           </div>
-          <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '3px 0 0' }}>
-            {[r.board?.area, r.board?.city].filter(Boolean).join(', ')}{r.board?.format ? ` · ${boardFormatLabel(r.board.format)}` : ''} · {fmtDate(r.start_date)} → {fmtDate(r.end_date)}
-            {r.budget ? ` · budget ${naira(r.budget)}` : ''} · sent {ago(r.created_at)}
+          <p className="ar-meta">
+            {[r.board?.area, r.board?.city].filter(Boolean).join(', ')}{r.board?.format ? ` · ${boardFormatLabel(r.board.format)}` : ''}
           </p>
-          {reason && <p data-follow-up style={{ fontSize: '0.75rem', fontWeight: 700, color: '#92400E', margin: '6px 0 0' }}>⚑ {reason}</p>}
+          <p className="ar-meta2">
+            <b>{fmtShort(r.start_date)} – {fmtDate(r.end_date)}</b> · {spanText(r.start_date, r.end_date)}{r.budget ? ` · budget ${naira(r.budget)}` : ''} · sent {ago(r.created_at)}
+          </p>
         </div>
-        <button onClick={onToggle} style={btn(open ? 'plain' : 'primary')}>{open ? 'Close' : 'Manage'}</button>
+        <div className="ar-side">
+          {!closed && <div className="ar-j"><Journey stage={r.stage} compact /></div>}
+          <button onClick={onToggle} style={btn(open ? 'plain' : 'primary')}>{open ? 'Close' : 'Manage'}</button>
+        </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10, marginTop: 12 }}>
-        <div style={{ background: '#F8FAFC', borderRadius: 10, padding: '10px 12px' }}>
+      <div className="ar-cells">
+        <div className="ar-cell">
           <p style={small}>Buyer</p>
-          <p style={{ fontSize: '0.8125rem', color: '#0F172A', margin: 0, fontWeight: 600 }}>{c?.name ?? '—'}{c?.company ? ` · ${c.company}` : ''}</p>
-          <p style={{ fontSize: '0.75rem', color: '#475569', margin: '2px 0 0', wordBreak: 'break-all' }}>
-            {c?.email && <a href={`mailto:${c.email}`} style={{ color: '#1B4F8A' }}>{c.email}</a>}
-            {c?.phone && <> · <a href={`tel:${c.phone}`} style={{ color: '#1B4F8A' }}>{c.phone}</a></>}
+          <p className="ar-cell-m">{c?.name ?? '—'}{c?.company ? <span> · {c.company}</span> : ''}</p>
+          <p className="ar-cell-s">
+            {c?.email && <a href={`mailto:${c.email}`}>{c.email}</a>}
+            {c?.phone && <> · <a href={`tel:${c.phone}`}>{c.phone}</a></>}
           </p>
         </div>
-        <div style={{ background: '#F8FAFC', borderRadius: 10, padding: '10px 12px' }}>
-          <p style={small}>Owner</p>
-          <p style={{ fontSize: '0.8125rem', color: '#0F172A', margin: 0, fontWeight: 600 }}>
-            {onPlatform ? ownerName ?? 'On the platform' : 'Not on the platform'}
-          </p>
-          <p style={{ fontSize: '0.75rem', color: '#475569', margin: '2px 0 0' }}>
-            {r.board?.contact_name ?? 'No contact name'}
-            {r.board?.contact_phone ? <> · <a href={`tel:${r.board.contact_phone}`} style={{ color: '#1B4F8A' }}>{r.board.contact_phone}</a></> : ' · no phone on file'}
+        <div className="ar-cell">
+          <p style={small}>Owner {onPlatform ? <span className="ar-on">on platform</span> : <span className="ar-off">offline</span>}</p>
+          <p className="ar-cell-m">{onPlatform ? ownerName ?? 'On the platform' : r.board?.contact_name ?? 'No contact name'}</p>
+          <p className="ar-cell-s">
+            {onPlatform && r.board?.contact_name ? <>{r.board.contact_name} · </> : null}
+            {r.board?.contact_phone ? <a href={`tel:${r.board.contact_phone}`}>{r.board.contact_phone}</a> : 'no phone on file'}
           </p>
         </div>
-        <div style={{ background: '#F8FAFC', borderRadius: 10, padding: '10px 12px' }}>
-          <p style={small}>Reply{reply?.answered_by_admin ? ' (entered by our team)' : ''}</p>
+        <div className="ar-cell">
+          <p style={small}>Reply{reply?.answered_by_admin ? ' · entered by us' : ''}</p>
           {reply ? (
             <>
-              <p style={{ fontSize: '0.8125rem', color: '#0F172A', margin: 0, fontWeight: 600 }}>
-                {reply.available ? 'Available' : 'Not available'}{reply.available && reply.quoted_rate ? ` · ${naira(reply.quoted_rate)}/mo` : ''}
+              <p className="ar-cell-m">
+                {reply.available ? (reply.quoted_rate ? <><span className="ar-price">{naira(reply.quoted_rate)}</span> /mo</> : 'Available, no price yet') : 'Not available'}
               </p>
-              {(reply.conditions || reply.note) && <p style={{ fontSize: '0.75rem', color: '#475569', margin: '2px 0 0' }}>{[reply.conditions, reply.note].filter(Boolean).join(' · ')}</p>}
+              {(reply.conditions || reply.note) && <p className="ar-cell-s">{[reply.conditions, reply.note].filter(Boolean).join(' · ')}</p>}
             </>
-          ) : <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>No reply yet</p>}
+          ) : <p className="ar-cell-m" style={{ color: '#94A3B8', fontWeight: 500 }}>No reply yet</p>}
         </div>
       </div>
 
       {open && <Manage r={r} note={note} onNoteSaved={onNoteSaved} onChanged={onChanged} />}
-    </div>
+    </article>
   );
 }
+
+const ADMIN_CSS = `
+.ar { max-width: 1080px; margin: 0 auto; padding: 8px 0 56px; font-family: 'Inter', -apple-system, sans-serif; }
+.ar-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+.ar-head h1 { margin: 0; font-size: 1.625rem; font-weight: 800; color: #0F172A; letter-spacing: -0.025em; }
+.ar-head p { margin: 6px 0 0; max-width: 560px; font-size: 0.875rem; color: #64748B; line-height: 1.5; }
+.ar-kpis { display: flex; gap: 8px; }
+.ar-kpis div { padding: 8px 14px; border-radius: 12px; background: #fff; border: 1px solid #E8EDF3; display: flex; flex-direction: column; min-width: 72px; }
+.ar-kpis b { font-size: 1.25rem; font-weight: 800; color: #0F172A; letter-spacing: -0.02em; line-height: 1.2; }
+.ar-kpis span { font-size: 0.6875rem; color: #64748B; font-weight: 600; }
+.ar-kpis .warn { background: #FFFBEB; border-color: #FDE68A; }
+.ar-kpis .warn b { color: #B45309; }
+.ar-kpis .good b { color: #047857; }
+.ar-lanes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-bottom: 16px; background: #fff; border: 1px solid #E8EDF3; border-radius: 16px; overflow: hidden; }
+.ar-lane { position: relative; display: grid; grid-template-columns: auto 1fr auto; grid-template-rows: auto auto; column-gap: 10px; row-gap: 4px; align-items: center; padding: 14px 16px; border: none; background: none; text-align: left; font-family: inherit; cursor: pointer; transition: background .15s; }
+.ar-lane + .ar-lane { border-left: 1px solid #F1F5F9; }
+.ar-lane:hover { background: #F8FAFC; }
+.ar-lane.on { background: #EFF6FF; }
+.ar-lane.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #1B4F8A; }
+.ar-lane-n { width: 22px; height: 22px; border-radius: 50%; background: #F1F5F9; color: #475569; display: grid; place-items: center; font-size: 0.6875rem; font-weight: 800; }
+.ar-lane.on .ar-lane-n { background: #1B4F8A; color: #fff; }
+.ar-lane-t { font-size: 0.8125rem; font-weight: 700; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ar-lane b { font-size: 1.375rem; font-weight: 800; color: #0F172A; letter-spacing: -0.02em; grid-row: span 2; }
+.ar-lane small { grid-column: 2; font-size: 0.6875rem; color: #94A3B8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ar-lane small em { font-style: normal; color: #B45309; font-weight: 700; }
+.ar-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.ar-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: #F1F5F9; }
+.ar-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border: none; border-radius: 8px; background: none; color: #64748B; font: 600 0.8125rem/1 inherit; font-family: inherit; cursor: pointer; }
+.ar-tabs button span { font-size: 0.6875rem; padding: 2px 6px; border-radius: 6px; background: rgba(15,23,42,.06); }
+.ar-tabs button.on { background: #fff; color: #0F172A; box-shadow: 0 1px 3px rgba(15,23,42,.1); }
+.ar-search { flex: 1; min-width: 200px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 10px; border: 1.5px solid #E2E8F0; background: #fff; color: #94A3B8; }
+.ar-search:focus-within { border-color: #1B4F8A; }
+.ar-search input { flex: 1; border: none; outline: none; padding: 9px 0; font: 400 0.8125rem/1 inherit; font-family: inherit; color: #0F172A; background: none; }
+.ar-card { background: #fff; border: 1px solid #E8EDF3; border-radius: 18px; padding: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.04); transition: box-shadow .2s; }
+.ar-card:hover, .ar-card.open { box-shadow: 0 8px 28px -12px rgba(15,23,42,.18); }
+.ar-card.late { border-color: #FDE68A; }
+.ar-flag { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 12px; padding: 4px 10px; border-radius: 8px; background: #FFFBEB; color: #B45309; font-size: 0.75rem; font-weight: 700; }
+.ar-top { display: flex; gap: 14px; align-items: flex-start; }
+.ar-ph { width: 76px; height: 60px; border-radius: 11px; overflow: hidden; background: linear-gradient(135deg, #E2E8F0, #CBD5E1); flex-shrink: 0; display: block; }
+.ar-ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ar-id { flex: 1; min-width: 0; }
+.ar-l1 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ar-name { font-size: 0.9375rem; font-weight: 700; color: #0F172A; text-decoration: none; letter-spacing: -0.01em; }
+.ar-name:hover { color: #1B4F8A; }
+.ar-meta { margin: 3px 0 0; font-size: 0.8125rem; color: #64748B; }
+.ar-meta2 { margin: 4px 0 0; font-size: 0.75rem; color: #94A3B8; }
+.ar-meta2 b { color: #334155; font-weight: 600; }
+.ar-side { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.ar-j { width: 120px; }
+.ar-cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+.ar-cell { background: #F8FAFC; border-radius: 12px; padding: 11px 13px; min-width: 0; }
+.ar-cell-m { margin: 0; font-size: 0.8125rem; font-weight: 600; color: #0F172A; }
+.ar-cell-m span { color: #64748B; font-weight: 500; }
+.ar-cell-s { margin: 3px 0 0; font-size: 0.75rem; color: #475569; word-break: break-word; }
+.ar-cell-s a { color: #1B4F8A; text-decoration: none; }
+.ar-cell-s a:hover { text-decoration: underline; }
+.ar-on, .ar-off { margin-left: 4px; padding: 1px 6px; border-radius: 5px; font-size: 0.5625rem; letter-spacing: .04em; }
+.ar-on { background: #D1FAE5; color: #047857; }
+.ar-off { background: #FEF3C7; color: #92400E; }
+.ar-price { font-size: 1rem; font-weight: 800; letter-spacing: -0.01em; }
+.ar-empty { text-align: center; padding: 44px 24px; border-radius: 18px; background: #fff; border: 1px dashed #CBD5E1; }
+.ar-empty-ico { width: 48px; height: 48px; margin: 0 auto 12px; border-radius: 50%; background: #ECFDF5; color: #10B981; display: grid; place-items: center; }
+.ar-empty b { font-size: 1rem; color: #0F172A; }
+.ar-empty p { margin: 4px 0 0; font-size: 0.8125rem; color: #64748B; }
+@media (max-width: 860px) {
+  .ar-lanes { grid-template-columns: 1fr 1fr; }
+  .ar-lane:nth-child(3) { border-left: none; }
+  .ar-lane:nth-child(n+3) { border-top: 1px solid #F1F5F9; }
+  .ar-cells { grid-template-columns: 1fr; }
+  .ar-top { flex-wrap: wrap; }
+  .ar-side { width: 100%; justify-content: space-between; }
+}
+@media (max-width: 520px) {
+  .ar-kpis { width: 100%; }
+  .ar-kpis div { flex: 1; }
+  .ar-lane { padding: 12px; }
+  .ar-lane small { display: none; }
+}
+`;
+
 
 function Manage({ r, note, onNoteSaved, onChanged }: { r: Req; note: string; onNoteSaved: (t: string) => void; onChanged: () => Promise<void> }) {
   const reply = replyOf(r);
@@ -277,7 +403,7 @@ function Manage({ r, note, onNoteSaved, onChanged }: { r: Req; note: string; onN
   const dealId = reply?.accepted_booking_id ?? null;
 
   return (
-    <div style={{ marginTop: 14, borderTop: '1px solid #F1F5F9', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ marginTop: 14, borderTop: '1px solid #F1F5F9', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 18 }}>
       {err && <p style={{ fontSize: '0.8125rem', color: '#B91C1C', margin: 0 }}>{err}</p>}
 
       {(r.notes || r.extra_requirements || r.sites_needed) && (
