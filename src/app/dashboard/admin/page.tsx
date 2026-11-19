@@ -20,7 +20,7 @@ import InventoryDatabase from '@/components/admin/InventoryDatabase';
 import { fetchGuidePrices, guideText, type GuidePrice } from '@/lib/guide-prices';
 import { pairKey } from '@/lib/board-duplicates';
 
-const BOARD_COLUMNS = 'id, name, address, city, area, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at, verification_status, last_verified_at, source, photo_urls, latitude, longitude, width, height';
+const BOARD_COLUMNS = 'id, name, address, city, area, state, format, asking_rate, status, illuminated, face_count, owner_id, created_at, verification_status, last_verified_at, source, photo_urls, latitude, longitude, width, height, contact_phone';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -225,6 +225,8 @@ function AdminContent() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   // Owner names typed by our team for boards whose owner has no account yet.
   const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
+  // Owners (by owner key, as in 053) that have a sales contact on file.
+  const [salesContactKeys, setSalesContactKeys] = useState<Set<string>>(new Set());
   // The brand on each board now and when their campaign ends (migration 049).
   const [currentBrands, setCurrentBrands] = useState<Record<string, { brand: string | null; ends_on: string | null }>>({});
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
@@ -323,6 +325,8 @@ function AdminContent() {
       if (bRes.data) setBoards(await attachVisibleRates(bRes.data as Board[]));
       supabase.from('board_owner_names').select('board_id, owner_name').then(({ data }) =>
         setOwnerNames(Object.fromEntries(((data as { board_id: string; owner_name: string }[]) || []).map(r => [r.board_id, r.owner_name]))));
+      supabase.from('owner_sales_contacts').select('owner_key, contact_phone').then(({ data }) =>
+        setSalesContactKeys(new Set(((data as { owner_key: string; contact_phone: string | null }[]) || []).filter(r => r.contact_phone?.trim()).map(r => r.owner_key))));
       supabase.from('board_current_brand').select('board_id, brand, ends_on').then(({ data }) =>
         setCurrentBrands(Object.fromEntries(((data as { board_id: string; brand: string | null; ends_on: string | null }[]) || []).map(r => [r.board_id, r]))));
 
@@ -976,6 +980,11 @@ function AdminContent() {
           ownerOf={board => {
             const acct = board.owner_id ? profiles.find(p => p.id === board.owner_id) : null;
             return { name: acct ? acct.company_name || acct.full_name : board.owner_id ? null : ownerNames[board.id] ?? null, hasAccount: !!board.owner_id };
+          }}
+          reachable={board => {
+            if (board.owner_id || board.contact_phone?.trim()) return true;
+            const name = ownerNames[board.id];
+            return !!name && salesContactKeys.has('name:' + name.trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 200));
           }}
           brandOf={board => currentBrands[board.id]}
           onStatus={(board, next) => setBoardStatus(board as Board, next)}

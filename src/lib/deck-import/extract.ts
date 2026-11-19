@@ -279,6 +279,20 @@ function splitColumns(lines: string[]): { lines: string[]; split: boolean } {
  * contact, terms): nothing that looks like a size, rate, GPS pin, format or
  * labelled location.
  */
+/**
+ * Board names and addresses are public. Never let a price or a size label
+ * ride along in them ("Iyana<TAB>Annual Rate: N8,000,000.00"): prices are
+ * private and sizes have their own fields.
+ */
+export function withoutPriceText(s: string): string {
+  return s
+    .replace(/\s*(annual(\s*rate)?|monthly(\s*(rental|rate))?|cost\s*per\s*(month|annum|year)|rate|rental|price)\s*:?\s*(₦|NGN|N)?\s?\d[\d,]*(\.\d+)?(\s*\/\s*face)?/gi, ' ')
+    .replace(/\s*size\s*:\s*[\d.]+\s*m?\s*\(h\)\s*(by|x)\s*[\d.]+\s*m?\s*\(w\)/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/[\s,;:–—-]+$/, '')
+    .trim();
+}
+
 export function extractBoard(rawLines: string[]): DeckRow | null {
   const cols = splitColumns(rawLines.map(tidy).filter(l => l.length > 0 && l.length < 400));
   const lines = cols.lines;
@@ -361,8 +375,8 @@ export function extractBoard(rawLines: string[]): DeckRow | null {
   const labelled = cleanTitle(tidy(got.address ?? '')).replace(/[\s.]+$/, '');
   const name = tidy(got.name ?? '') || (/[a-z]{3,}/i.test(labelled) && labelled.length >= 6 ? labelled : '') || title || address;
   return {
-    'Board Name': name.slice(0, 160),
-    'Address': address.slice(0, 300),
+    'Board Name': withoutPriceText(name).slice(0, 160),
+    'Address': withoutPriceText(address).slice(0, 300),
     'City': where?.city || tidy(got.city ?? ''),
     'Area': area.slice(0, 80),
     'State': tidy(got.state ?? '') || where?.state || '',

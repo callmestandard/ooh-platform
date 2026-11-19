@@ -47,11 +47,14 @@ export type InvBoard = {
   width?: number | null;
   height?: number | null;
   illuminated?: boolean | null;
+  contact_phone?: string | null;
 };
 
 type Props = {
   boards: InvBoard[];
   ownerOf: (b: InvBoard) => { name: string | null; hasAccount: boolean };
+  /** True when we can reach someone who sells this board: an owner account, a phone on the board, or a sales contact for its owner. */
+  reachable?: (b: InvBoard) => boolean;
   brandOf: (b: InvBoard) => { brand: string | null; ends_on: string | null } | undefined;
   onStatus: (b: InvBoard, next: Exclude<InvStatus, 'booked'>) => Promise<void> | void;
   onVerification: (b: InvBoard, next: VerificationStatus) => Promise<void> | void;
@@ -81,13 +84,16 @@ const STATUSES: InvStatus[] = ['available', 'booked', 'unavailable', 'decommissi
 const VERIFICATIONS: VerificationStatus[] = ['pending', 'verified', 'partner_verified'];
 const VER_DOT: Record<VerificationStatus, string> = { pending: '#A1A1AA', verified: '#2563EB', partner_verified: '#059669' };
 
-type Issue = 'photo' | 'pin' | 'pinoff' | 'rate' | 'owner' | 'pending' | 'dupes';
+type Issue = 'photo' | 'pin' | 'pinoff' | 'rate' | 'owner' | 'contact' | 'size' | 'place' | 'pending' | 'dupes';
 const ISSUES: { key: Issue; label: string; done: string; hint: string }[] = [
   { key: 'photo',   label: 'No photo',      done: 'All have photos',  hint: 'Buyers skip boards without a photo' },
   { key: 'pin',     label: 'No map pin',    done: 'All pinned',       hint: 'Not shown on the map' },
   { key: 'pinoff',  label: 'Pin may be off', done: 'Pins match roads', hint: 'The board’s name mentions a road that isn’t near its pin' },
   { key: 'rate',    label: 'No rate',       done: 'All priced',       hint: 'Buyers see “Request quote”' },
   { key: 'owner',   label: 'Owner unknown', done: 'All owners known', hint: 'No owner account or name' },
+  { key: 'contact', label: 'No reachable contact', done: 'All reachable', hint: 'No owner account, no phone on the board and no sales contact for its owner: a request for it can’t be passed on' },
+  { key: 'size',    label: 'Size to check', done: 'Sizes look right', hint: 'No size, or the height is bigger than the width (maybe entered the wrong way round)' },
+  { key: 'place',   label: 'Address too thin', done: 'Addresses look right', hint: 'The address is very short, only a facing code (RHD/LHD) or just the city' },
   { key: 'pending', label: 'Not verified',  done: 'All verified',     hint: 'Owner hasn’t confirmed yet' },
   { key: 'dupes',   label: 'Duplicates',    done: 'No duplicates',    hint: 'Possible duplicates: same photo, pin or name as another board' },
 ];
@@ -127,12 +133,28 @@ function readPrefs(): Prefs {
   return window.innerWidth < 700 ? { ...fallback, view: 'gallery' } : fallback;
 }
 
+// Formats that are often taller than wide, so a tall size is not a mistake.
+const TALL_OK = new Set(['wall_drape', 'led']);
+function sizeLooksWrong(b: InvBoard) {
+  if (!b.width || !b.height) return true;
+  return b.height > b.width && !TALL_OK.has(b.format);
+}
+function addressTooThin(b: InvBoard) {
+  const a = (b.address ?? '').trim();
+  if (a.length < 12 || a.includes('\t')) return true;
+  if (/^(\(?\s*(rhd|lhd|rhs|lhs|gantry|unipole|billboard)\s*\)?[\s/,]*)+$/i.test(a)) return true;
+  return a.toLowerCase() === (b.city ?? '').trim().toLowerCase();
+}
+
 function hasIssue(b: InvBoard, issue: Issue, ownerOf: Props['ownerOf']): boolean {
   switch (issue) {
     case 'photo': return !b.photo_urls?.length;
     case 'pin': return b.latitude == null || b.longitude == null;
     case 'rate': return !b.asking_rate;
     case 'owner': return !b.owner_id && !ownerOf(b).name;
+    case 'size': return sizeLooksWrong(b);
+    case 'place': return addressTooThin(b);
+    case 'contact': return false; // needs the owners' sales contacts, in the component
     case 'pending': return verificationOf(b) === 'pending';
     case 'dupes': return false; // worked out across boards, in the component
     case 'pinoff': return false; // checked against the street map, in the component
@@ -428,7 +450,7 @@ function DupReview({ groups, byId, keepPick, busy, onPick, onOpen, rateText, can
 // ── Main ───────────────────────────────────────────────────────────────────
 
 export default function InventoryDatabase(props: Props) {
-  const { boards, ownerOf, brandOf, onStatus, onVerification, onEditDetails, onEditPhotos, onMovePin, onDelete, guideOf, onGuideHidden, dismissedPairs, onMerge, onDismissDuplicates } = props;
+  const { boards, ownerOf, reachable, brandOf, onStatus, onVerification, onEditDetails, onEditPhotos, onMovePin, onDelete, guideOf, onGuideHidden, dismissedPairs, onMerge, onDismissDuplicates } = props;
 
   const [prefs] = useState(readPrefs);
   const [view, setView] = useState<View>(prefs.view);
@@ -454,8 +476,12 @@ export default function InventoryDatabase(props: Props) {
   // Pins whose board name mentions a road that isn't near the pin (board id → road the pin is on).
   const pinOff = usePinChecks(boards);
   const isIssue = useCallback(
-    (b: InvBoard, k: Issue) => (k === 'dupes' ? dupIds.has(b.id) : k === 'pinoff' ? pinOff.has(b.id) : hasIssue(b, k, ownerOf)),
-    [dupIds, pinOff, ownerOf],
+    (b: InvBoard, k: Issue) => (
+      k === 'dupes' ? dupIds.has(b.id)
+      : k === 'pinoff' ? pinOff.has(b.id)
+      : k === 'contact' ? (reachable ? !reachable(b) : !b.owner_id && !b.contact_phone?.trim())
+      : hasIssue(b, k, ownerOf)),
+    [dupIds, pinOff, ownerOf, reachable],
   );
 
   // Remember the view, sort and grouping for this browser.
@@ -476,7 +502,7 @@ export default function InventoryDatabase(props: Props) {
 
   // Counts for the attention strip.
   const issueCounts = useMemo(() => {
-    const c = { photo: 0, pin: 0, pinoff: 0, rate: 0, owner: 0, pending: 0, dupes: 0 } as Record<Issue, number>;
+    const c = { photo: 0, pin: 0, pinoff: 0, rate: 0, owner: 0, contact: 0, size: 0, place: 0, pending: 0, dupes: 0 } as Record<Issue, number>;
     for (const b of boards) for (const { key } of ISSUES) if (isIssue(b, key)) c[key]++;
     return c;
   }, [boards, isIssue]);
@@ -1192,7 +1218,7 @@ const CSS = `
 .invdb-quality { display:flex; align-items:center; gap:12px; padding:12px 18px 12px 14px; background:#fff; border:1px solid var(--line); border-radius:16px; flex-shrink:0; }
 .invdb-quality-num { margin:0; font-size:22px; font-weight:700; letter-spacing:-.02em; line-height:1.1; font-variant-numeric:tabular-nums; }
 .invdb-quality-label { margin:2px 0 0; font-size:12px; color:var(--mute); }
-.invdb-issues { flex:1; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:8px; }
+.invdb-issues { flex:1; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
 .invdb-issue { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:3px; padding:10px 12px; background:#fff; border:1px solid var(--line);
   border-radius:14px; cursor:pointer; text-align:left; transition:border-color .15s, background .15s, box-shadow .15s; min-width:0; }
 .invdb-issue:hover:not(:disabled) { border-color:#D9DEE6; box-shadow:0 2px 8px -4px rgba(16,24,40,.12); }
