@@ -10,7 +10,8 @@ import { TEAM_WHATSAPP } from './public-links';
 const SMTP_USER = process.env.SMTP_USER ?? '';
 const SMTP_PASS = (process.env.SMTP_PASS ?? '').replace(/\s+/g, '');   // app passwords are shown with spaces
 const FROM      = process.env.EMAIL_FROM || `OOH Platform <${SMTP_USER}>`;
-const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://oohplatform.ng').replace(/\/$/, '');
+// Links in emails. oohplatform.ng isn't live yet, so fall back to the address that works.
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://ooh-platform-xi.vercel.app').replace(/\/$/, '');
 
 let transport: Transporter | null = null;
 function mailer(): Transporter {
@@ -75,7 +76,7 @@ function emailWrap(preheader: string, body: string, footerNote = 'You&apos;re re
 
       <!-- Footer -->
       <tr><td style="padding:20px 0 0;text-align:center;">
-        <p style="font-size:11px;color:#94A3B8;margin:0;">${process.env.NEXT_PUBLIC_MVP_MODE !== 'false' ? 'Nigeria&apos;s billboard marketplace' : 'Nigeria&apos;s OOH Advertising Operating System'} · <a href="${APP_URL}" style="color:#1B4F8A;text-decoration:none;">oohplatform.ng</a></p>
+        <p style="font-size:11px;color:#94A3B8;margin:0;">${process.env.NEXT_PUBLIC_MVP_MODE !== 'false' ? 'Nigeria&apos;s billboard marketplace' : 'Nigeria&apos;s OOH Advertising Operating System'} · <a href="${APP_URL}" style="color:#1B4F8A;text-decoration:none;">${APP_URL.replace(/^https?:\/\//, '')}</a></p>
         <p style="font-size:11px;color:#CBD5E1;margin:4px 0 0;">${footerNote}</p>
       </td></tr>
 
