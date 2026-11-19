@@ -31,10 +31,12 @@ function mailer(): Transporter {
 export const emailConfigured = () => !!(SMTP_USER && SMTP_PASS);
 
 /** Sends one email. Never throws; returns whether it was accepted. */
-export async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+export type EmailAttachment = { filename: string; content: Buffer; contentType?: string };
+
+export async function sendEmail(to: string, subject: string, html: string, attachments?: EmailAttachment[]): Promise<boolean> {
   if (!emailConfigured() || !to) return false;
   try {
-    await mailer().sendMail({ from: FROM, to, subject, html });
+    await mailer().sendMail({ from: FROM, to, subject, html, attachments });
     return true;
   } catch (err) {
     console.error('[email] send failed:', err);
@@ -440,30 +442,33 @@ export async function emailRequestToAdmin(to: string, r: RequestEmailInfo, owner
   await sendEmail(to, `${ownerOnPlatform ? 'New request' : 'Follow up'}: ${r.boardName} — ${r.buyerCompany}`, html);
 }
 
-/** To the buyer: the owner (or our team) answered. */
-export async function emailOwnerReplied(to: string, r: RequestEmailInfo, reply: { available: boolean; rate: number | null; from: string | null; to: string | null; conditions: string | null; note: string | null }) {
-  const price = reply.rate ? `<span style="font-size:18px;font-family:monospace;color:#0F172A;font-weight:800;">₦${Math.round(reply.rate).toLocaleString('en-NG')}</span> <span style="color:#94A3B8;font-weight:500;">per month</span>` : 'On request';
+/**
+ * To the buyer: the owner (or our team) answered. Never shows the owner's
+ * price (061): the buyer's price comes in our quotation.
+ */
+export async function emailOwnerReplied(to: string, r: RequestEmailInfo, reply: { available: boolean; from: string | null; to: string | null; conditions: string | null; note: string | null }) {
   const extra = reply.available
-    ? metaRow('Price', price)
+    ? metaRow('Status', '<span style="color:#047857;">Available</span>')
       + (reply.from || reply.to ? metaRow('Available', `${ngDate(reply.from ?? r.startDate)} – ${ngDate(reply.to ?? r.endDate)}`) : '')
       + (reply.conditions ? metaRow('Conditions', esc(reply.conditions)) : '')
     : metaRow('Status', '<span style="color:#B45309;">Not available for these dates</span>');
   const html = emailWrap(
-    reply.available ? `${esc(r.boardName)} is available — see the price` : `${esc(r.boardName)} isn't available for your dates`,
-    `${h1(reply.available ? 'The owner replied: available' : 'The owner replied')}
+    reply.available ? `${esc(r.boardName)} is available — your quotation is on its way` : `${esc(r.boardName)} isn't available for your dates`,
+    `${h1(reply.available ? 'Good news: the board is available' : 'The board is not available')}
      ${lead(reply.available
-       ? `Good news — <strong>${esc(r.boardName)}</strong> is available. Accept the offer, or negotiate in one conversation with the owner.`
+       ? `<strong>${esc(r.boardName)}</strong> is available for your dates. We're preparing your quotation now and will email it to you shortly.`
        : `Unfortunately <strong>${esc(r.boardName)}</strong> isn't available for your dates. Browse other locations nearby — our team can also help you find an alternative.`)}
      ${requestTable(r, extra)}
      ${reply.note ? `<p style="font-size:13px;color:#475569;margin:12px 0 0;line-height:1.6;border-left:3px solid #E2E8F0;padding-left:12px;">${esc(reply.note)}</p>` : ''}
-     ${reply.available ? btn('View the offer', `${APP_URL}/dashboard/agency/requests`) : btn('Find other locations', `${APP_URL}/marketplace`)}`,
+     ${reply.available ? btn('Track your request', `${APP_URL}/dashboard/agency/requests`) : btn('Find other locations', `${APP_URL}/marketplace`)}`,
   );
-  await sendEmail(to, reply.available ? `Offer received: ${r.boardName}` : `Not available: ${r.boardName}`, html);
+  await sendEmail(to, reply.available ? `Available: ${r.boardName}` : `Not available: ${r.boardName}`, html);
 }
 
 /** To the buyer, the owner or our team: a deal was agreed. */
 export async function emailDealAgreed(to: string, r: RequestEmailInfo, who: 'buyer' | 'owner' | 'admin', rate: number | null) {
-  const rateRow = rate ? metaRow('Agreed price', `<span style="font-family:monospace;font-weight:800;">₦${Math.round(rate).toLocaleString('en-NG')}</span> per month`) : '';
+  // An owner never sees a price here: it could be our selling price (061).
+  const rateRow = rate && who !== 'owner' ? metaRow('Agreed price', `<span style="font-family:monospace;font-weight:800;">₦${Math.round(rate).toLocaleString('en-NG')}</span> per month`) : '';
   const copy = {
     buyer: { title: 'Quote accepted', text: 'Thanks. Our team will now check with the media owner and contact you to confirm the booking. The board is not booked until the owner confirms.', link: `${APP_URL}/dashboard/agency/requests`, cta: 'View your request' },
     owner: { title: 'Deal agreed', text: `You and ${esc(r.buyerCompany)} agreed terms for <strong>${esc(r.boardName)}</strong>. Our team will contact you to complete the booking.`, link: `${APP_URL}/dashboard/owner/negotiations`, cta: 'View the deal' },
@@ -510,4 +515,81 @@ export function ownerReminderEmail(o: OwnerReminder): { subject: string; html: s
     `You&apos;re receiving this weekly because OOH Platform lists your boards.${TEAM_WHATSAPP ? ` To stop, WhatsApp us on 0${TEAM_WHATSAPP.slice(3)}.` : ''}`,
   );
   return { subject, html };
+}
+
+// ── Quotations (061) ──────────────────────────────────────────────────────────
+// Buyer-facing amounts only. Owner prices, costs and margins never go in these.
+
+export type QuotationEmailInfo = {
+  ref: string; title: string | null; total: number; vatAmount: number; validUntil: string | null;
+  buyerCompany: string; paymentTerms: string | null;
+  lines: { description: string; lineTotal: number }[];
+};
+
+const money = (n: number) => `${n < 0 ? '−' : ''}₦${Math.abs(Math.round(n)).toLocaleString('en-NG')}`;
+
+function quoteTable(q: QuotationEmailInfo): string {
+  const rows = q.lines.map(l => `<tr>
+      <td style="padding:7px 0;font-size:13px;color:#334155;border-bottom:1px solid #EEF2F6;">${esc(l.description)}</td>
+      <td style="padding:7px 0;font-size:13px;color:#0F172A;font-weight:600;text-align:right;white-space:nowrap;border-bottom:1px solid #EEF2F6;">${money(l.lineTotal)}</td>
+    </tr>`).join('');
+  return `<table cellpadding="0" cellspacing="0" style="width:100%;background:#F8FAFC;border-radius:10px;padding:14px 20px;margin:0 0 8px;">
+    <tbody>
+      ${rows}
+      ${q.vatAmount ? `<tr><td style="padding:7px 0;font-size:12px;color:#64748B;">VAT</td><td style="padding:7px 0;font-size:12px;color:#64748B;text-align:right;">${money(q.vatAmount)}</td></tr>` : ''}
+      <tr><td style="padding:9px 0 0;font-size:14px;color:#0F172A;font-weight:800;">Total</td>
+          <td style="padding:9px 0 0;font-size:16px;color:#0F172A;font-weight:800;text-align:right;font-family:monospace;">${money(q.total)}</td></tr>
+    </tbody>
+  </table>`;
+}
+
+/** To the buyer: here is your quotation (PDF attached). */
+export function quotationSentEmail(q: QuotationEmailInfo, revised: boolean): { subject: string; html: string } {
+  const html = emailWrap(
+    `Your quotation ${esc(q.ref)} — ${money(q.total)}`,
+    `${h1(revised ? 'Your updated quotation' : 'Your quotation is ready')}
+     ${lead(`Quotation <strong>${esc(q.ref)}</strong>${q.title ? ` for ${esc(q.title)}` : ''}. It's valid until <strong>${ngDate(q.validUntil)}</strong>. Accept it, decline it or ask us a question from your requests page. The PDF is attached.`)}
+     ${quoteTable(q)}
+     ${q.paymentTerms ? `<p style="font-size:12px;color:#64748B;margin:10px 0 0;line-height:1.6;"><strong>Payment:</strong> ${esc(q.paymentTerms)}</p>` : ''}
+     <p style="font-size:12px;color:#64748B;margin:10px 0 0;line-height:1.6;">Nothing is booked until you accept and our team confirms the booking with the media owner.</p>
+     ${btn('Review and accept', `${APP_URL}/dashboard/agency/requests`)}`,
+  );
+  return { subject: `${revised ? 'Updated quotation' : 'Quotation'} ${q.ref}: ${money(q.total)}`, html };
+}
+
+/** To the buyer: we withdrew a quotation. */
+export function quotationWithdrawnEmail(q: QuotationEmailInfo, reason: string | null): { subject: string; html: string } {
+  const html = emailWrap(
+    `Quotation ${esc(q.ref)} was withdrawn`,
+    `${h1('Quotation withdrawn')}
+     ${lead(`We've withdrawn quotation <strong>${esc(q.ref)}</strong>, so it can no longer be accepted.${reason ? ` Reason: ${esc(reason)}` : ''} Our team will be in touch.`)}
+     ${btn('View your requests', `${APP_URL}/dashboard/agency/requests`)}`,
+  );
+  return { subject: `Quotation withdrawn: ${q.ref}`, html };
+}
+
+/** To the buyer: the booking from their quotation is confirmed. */
+export function bookingConfirmedEmail(q: QuotationEmailInfo): { subject: string; html: string } {
+  const html = emailWrap(
+    `Booking confirmed — ${esc(q.ref)}`,
+    `${h1('Your booking is confirmed')}
+     ${lead(`The media owner has confirmed the booking for quotation <strong>${esc(q.ref)}</strong>. Our team will send next steps for artwork and payment.`)}
+     ${quoteTable(q)}
+     ${btn('View your requests', `${APP_URL}/dashboard/agency/requests`, '#059669')}`,
+  );
+  return { subject: `Booking confirmed: ${q.ref}`, html };
+}
+
+/** To our team: the buyer accepted, declined or asked about a quotation. */
+export function quotationAnsweredEmail(q: QuotationEmailInfo, action: 'accepted' | 'declined' | 'clarify', note: string | null): { subject: string; html: string } {
+  const title = action === 'accepted' ? 'Quotation accepted — confirm the booking'
+    : action === 'declined' ? 'Quotation declined' : 'Question about a quotation';
+  const html = emailWrap(
+    `${title}: ${esc(q.ref)}`,
+    `${h1(title)}
+     ${lead(`${esc(q.buyerCompany)} ${action === 'accepted' ? 'accepted' : action === 'declined' ? 'declined' : 'asked about'} quotation <strong>${esc(q.ref)}</strong> (${money(q.total)}).${action === 'accepted' ? ' Confirm availability with the owner, then confirm the booking.' : ''}`)}
+     ${note ? `<p style="font-size:13px;color:#475569;margin:0 0 12px;line-height:1.6;border-left:3px solid #E2E8F0;padding-left:12px;">${esc(note)}</p>` : ''}
+     ${btn('Open quotations', `${APP_URL}/dashboard/admin/quotations`)}`,
+  );
+  return { subject: `${title}: ${q.ref} — ${q.buyerCompany}`, html };
 }

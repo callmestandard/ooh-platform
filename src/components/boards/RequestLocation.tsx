@@ -163,7 +163,7 @@ export default function RequestLocation({ board, compact }: { board: RequestBoar
           {(!compact || isBooked) && <p style={{ fontSize: '0.875rem', color: '#475569', margin: '0 0 12px', lineHeight: 1.55 }}>
             {isBooked
               ? 'This board is currently booked. Tell us your campaign dates and we’ll ask the owner when it is free.'
-              : 'Tell us your campaign dates. The media owner replies with a price, and our team helps you complete the booking.'}
+              : 'Tell us your campaign dates. We check availability with the media owner and send you a quotation, then help you complete the booking.'}
           </p>}
           <button type="button" onClick={start} className="rl-cta" data-request-open>Request this location</button>
         </>

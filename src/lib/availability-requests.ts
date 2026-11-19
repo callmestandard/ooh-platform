@@ -50,8 +50,8 @@ export type RequestStage =
 /** Buyer-facing labels for each stage. */
 export const STAGE_META: Record<RequestStage, { label: string; help: string; bg: string; color: string }> = {
   requested:           { label: 'Requested',           help: 'Sent. Waiting for the media owner to reply.',                           bg: '#FEF3C7', color: '#92400E' },
-  owner_responded:     { label: 'Owner responded',     help: 'The owner says it is available. A price will follow.',                 bg: '#DBEAFE', color: '#1E40AF' },
-  quote_received:      { label: 'Quote received',      help: 'The owner sent a price for your dates.',                               bg: '#DBEAFE', color: '#1E40AF' },
+  owner_responded:     { label: 'Owner responded',     help: 'The owner says it is available. A quotation will follow.',             bg: '#DBEAFE', color: '#1E40AF' },
+  quote_received:      { label: 'Quotation sent',      help: 'We sent the buyer a quotation.',                                      bg: '#DBEAFE', color: '#1E40AF' },
   unavailable:         { label: 'Unavailable',         help: "The owner can't offer this board for your dates.",                   bg: '#F1F5F9', color: '#475569' },
   negotiating:         { label: 'Negotiating',         help: 'You and the owner are agreeing the terms in a conversation.',                              bg: '#EDE9FE', color: '#5B21B6' },
   accepted:            { label: 'Accepted',            help: 'Request accepted. Our team will contact you to complete the booking.', bg: '#D1FAE5', color: '#065F46' },

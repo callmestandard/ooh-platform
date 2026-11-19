@@ -7,9 +7,12 @@ import { boardFormatLabel } from '@/lib/board-formats';
 import { STAGE_META, notifyRequest, type RequestStage } from '@/lib/availability-requests';
 import { Journey, StageTag, fmtShort, spanText } from '@/components/requests/journey';
 import { loadBoardPrivate } from '@/lib/board-private';
+import { RequestQuotations, loadOwnerPrices, type QuoteRequest } from '@/components/quotations/AdminQuotations';
 
 // Admin console for "Request this location" (043–045): see every board
 // request, who to call, and move deals through the manual hand-off.
+// 061: the owner's price is recorded privately and the buyer gets our
+// quotation instead.
 
 type Contact = { name: string | null; company: string | null; email: string | null; phone: string | null };
 type Reply = {
@@ -35,8 +38,8 @@ const DAY = 86_400_000;
 
 /** The pipeline columns along the top: the same four steps the buyer sees. */
 const LANES: { key: string; label: string; hint: string; stages: RequestStage[] }[] = [
-  { key: 'owner', label: 'Waiting on owner', hint: 'Get the owner’s price', stages: ['requested', 'owner_responded'] },
-  { key: 'buyer', label: 'Price sent', hint: 'Buyer to answer', stages: ['quote_received'] },
+  { key: 'owner', label: 'To quote', hint: 'Get the owner’s price, send a quotation', stages: ['requested', 'owner_responded'] },
+  { key: 'buyer', label: 'Quotation sent', hint: 'Buyer to answer', stages: ['quote_received'] },
   { key: 'agree', label: 'Agreeing', hint: 'In conversation', stages: ['negotiating'] },
   { key: 'book', label: 'To book', hint: 'Complete the booking', stages: ['accepted', 'booking_in_progress'] },
 ];
@@ -56,10 +59,10 @@ function followUp(r: Req): string | null {
   const since = Date.now() - new Date(r.stage_updated_at || r.created_at).getTime();
   switch (r.stage) {
     case 'requested': return !ownerOnPlatform(r) ? 'Owner not on the platform — call them' : since > 2 * DAY ? 'No owner reply for 2 days' : null;
-    case 'owner_responded': return since > 2 * DAY ? 'Owner said available but sent no price' : null;
-    case 'quote_received': return since > 3 * DAY ? "Buyer hasn't answered the quote in 3 days" : null;
+    case 'owner_responded': return since > DAY ? 'Owner answered — send the buyer a quotation' : null;
+    case 'quote_received': return since > 3 * DAY ? "Buyer hasn't answered the quotation in 3 days" : null;
     case 'negotiating': return since > 3 * DAY ? 'Negotiation quiet for 3 days' : null;
-    case 'accepted': return 'Deal agreed — start the booking';
+    case 'accepted': return 'Quotation accepted — check with the owner, then confirm the booking';
     case 'booking_in_progress': return 'Booking in progress — confirm when done';
     default: return null;
   }
@@ -81,6 +84,8 @@ export default function AdminRequestsPage() {
   const role = useDashboardRole();
   const [requests, setRequests] = useState<Req[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [ownerPrices, setOwnerPrices] = useState<Record<string, number>>({});
+  const [quoted, setQuoted] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('follow');
@@ -106,6 +111,12 @@ export default function AdminRequestsPage() {
     for (const r of rows) if (r.board) { r.board.contact_name = priv[r.board.id]?.contact_name ?? null; r.board.contact_phone = priv[r.board.id]?.contact_phone ?? null; }
     setRequests(rows);
     if (rows.length) {
+      // 061: owner prices (private) and which requests have quotations. Empty until 061 is run.
+      setOwnerPrices(await loadOwnerPrices(rows.map(r => r.id)));
+      const { data: qs } = await supabase.from('quotations').select('status, request_ids');
+      const byReq: Record<string, string[]> = {};
+      for (const q of (qs ?? []) as { status: string; request_ids: string[] }[]) for (const id of q.request_ids) (byReq[id] ??= []).push(q.status);
+      setQuoted(byReq);
       const { data: n } = await supabase.from('availability_request_admin_notes').select('request_id, notes').in('request_id', rows.map(r => r.id));
       setNotes(Object.fromEntries((n ?? []).map((x: { request_id: string; notes: string | null }) => [x.request_id, x.notes ?? ''])));
     }
@@ -201,7 +212,8 @@ export default function AdminRequestsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {shown.map(r => (
             <RequestCard key={r.id} r={r} open={openId === r.id} onToggle={() => setOpenId(openId === r.id ? null : r.id)}
-              note={notes[r.id] ?? ''} onNoteSaved={text => setNotes(prev => ({ ...prev, [r.id]: text }))} onChanged={refresh} />
+              note={notes[r.id] ?? ''} onNoteSaved={text => setNotes(prev => ({ ...prev, [r.id]: text }))} onChanged={refresh}
+              all={requests} ownerPrices={ownerPrices} quoteStatuses={quoted[r.id] ?? []} />
           ))}
         </div>
       )}
@@ -211,9 +223,20 @@ export default function AdminRequestsPage() {
   );
 }
 
-function RequestCard({ r, open, onToggle, note, onNoteSaved, onChanged }: {
+type QuoteCtx = { all: Req[]; ownerPrices: Record<string, number>; quoteStatuses: string[] };
+
+const toQuoteRequest = (x: Req): QuoteRequest => {
+  const rep = replyOf(x);
+  return {
+    id: x.id, agency_id: x.agency_id, stage: x.stage, start_date: x.start_date, end_date: x.end_date, board_id: x.board_id,
+    board: x.board ? { id: x.board.id, name: x.board.name, city: x.board.city, area: x.board.area } : null,
+    reply: rep ? { available_from: rep.available_from, available_to: rep.available_to } : null,
+  };
+};
+
+function RequestCard({ r, open, onToggle, note, onNoteSaved, onChanged, all, ownerPrices, quoteStatuses }: {
   r: Req; open: boolean; onToggle: () => void; note: string; onNoteSaved: (t: string) => void; onChanged: () => Promise<void>;
-}) {
+} & QuoteCtx) {
   const c = contactOf(r);
   const reply = replyOf(r);
   const reason = followUp(r);
@@ -266,19 +289,20 @@ function RequestCard({ r, open, onToggle, note, onNoteSaved, onChanged }: {
           </p>
         </div>
         <div className="ar-cell">
-          <p style={small}>Reply{reply?.answered_by_admin ? ' · entered by us' : ''}</p>
+          <p style={small}>Owner&rsquo;s answer{reply?.answered_by_admin ? ' · entered by us' : ''}</p>
           {reply ? (
             <>
               <p className="ar-cell-m">
-                {reply.available ? (reply.quoted_rate ? <><span className="ar-price">{naira(reply.quoted_rate)}</span> /mo</> : 'Available, no price yet') : 'Not available'}
+                {reply.available ? (ownerPrices[r.id] ? <><span className="ar-price">{naira(ownerPrices[r.id])}</span> /mo <span title="Only admins see this">· internal</span></> : 'Available, no price yet') : 'Not available'}
               </p>
+              {quoteStatuses.length > 0 && <p className="ar-cell-s">Quotation: {quoteStatuses.join(', ')}</p>}
               {(reply.conditions || reply.note) && <p className="ar-cell-s">{[reply.conditions, reply.note].filter(Boolean).join(' · ')}</p>}
             </>
           ) : <p className="ar-cell-m" style={{ color: '#94A3B8', fontWeight: 500 }}>No reply yet</p>}
         </div>
       </div>
 
-      {open && <Manage r={r} note={note} onNoteSaved={onNoteSaved} onChanged={onChanged} />}
+      {open && <Manage r={r} note={note} onNoteSaved={onNoteSaved} onChanged={onChanged} all={all} ownerPrices={ownerPrices} quoteStatuses={quoteStatuses} />}
     </article>
   );
 }
@@ -363,7 +387,7 @@ const ADMIN_CSS = `
 `;
 
 
-function Manage({ r, note, onNoteSaved, onChanged }: { r: Req; note: string; onNoteSaved: (t: string) => void; onChanged: () => Promise<void> }) {
+function Manage({ r, note, onNoteSaved, onChanged, all, ownerPrices, quoteStatuses }: { r: Req; note: string; onNoteSaved: (t: string) => void; onChanged: () => Promise<void> } & QuoteCtx) {
   const reply = replyOf(r);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -373,7 +397,7 @@ function Manage({ r, note, onNoteSaved, onChanged }: { r: Req; note: string; onN
 
   // Answer-for-owner form
   const [avail, setAvail] = useState<boolean | null>(reply ? reply.available : null);
-  const [rate, setRate] = useState(reply?.quoted_rate ? String(reply.quoted_rate) : '');
+  const [rate, setRate] = useState(ownerPrices[r.id] ? String(ownerPrices[r.id]) : '');
   const [from, setFrom] = useState(reply?.available_from ?? '');
   const [to, setTo] = useState(reply?.available_to ?? '');
   const [cond, setCond] = useState(reply?.conditions ?? '');
@@ -421,16 +445,16 @@ function Manage({ r, note, onNoteSaved, onChanged }: { r: Req; note: string; onN
 
       {canAnswer && (
         <div data-answer-for-owner>
-          <p style={small}>Answer for the owner</p>
-          <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 8px' }}>Use this after speaking to the owner. The buyer sees it as the owner&rsquo;s reply.</p>
+          <p style={small}>Record the owner&rsquo;s answer</p>
+          <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 8px' }}>Use this after speaking to the owner. The buyer is only told whether the board is available. The owner&rsquo;s price stays internal; send the buyer a quotation below.</p>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-            {([[true, 'Available — send quote'], [false, 'Not available']] as const).map(([v, t]) => (
+            {([[true, 'Available'], [false, 'Not available']] as const).map(([v, t]) => (
               <button key={t} onClick={() => setAvail(v)} style={{ ...btn(), background: avail === v ? (v ? '#10B981' : '#EF4444') : '#fff', color: avail === v ? '#fff' : '#475569', border: avail === v ? 'none' : '1px solid #CBD5E1' }}>{t}</button>
             ))}
           </div>
           {avail && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8, alignItems: 'flex-end' }}>
-              <input type="number" min={0} value={rate} onChange={e => setRate(e.target.value)} placeholder="Price, ₦ per month" aria-label="Price per month" style={{ ...input, width: 180 }} />
+              <input type="number" min={0} value={rate} onChange={e => setRate(e.target.value)} placeholder="Owner’s price, ₦/month (internal)" aria-label="Owner’s price per month (internal)" style={{ ...input, width: 230, background: '#FAF5FF', borderColor: '#E9D5FF' }} />
               <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.6875rem', color: '#64748B', fontWeight: 600 }}>From
                 <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ ...input, width: 150 }} /></label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: '0.6875rem', color: '#64748B', fontWeight: 600 }}>To
@@ -441,13 +465,15 @@ function Manage({ r, note, onNoteSaved, onChanged }: { r: Req; note: string; onN
           {avail !== null && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <input value={replyNote} onChange={e => setReplyNote(e.target.value)} placeholder="Note to the buyer (optional)" aria-label="Note to the buyer" style={{ ...input, flex: 1, minWidth: 200 }} />
-              <button onClick={answer} disabled={busy === 'answer'} style={btn('primary')}>{busy === 'answer' ? 'Sending…' : reply ? 'Update reply' : 'Send reply to buyer'}</button>
+              <button onClick={answer} disabled={busy === 'answer'} style={btn('primary')}>{busy === 'answer' ? 'Saving…' : reply ? 'Update answer' : 'Save answer'}</button>
             </div>
           )}
         </div>
       )}
 
-      {dealId && <Thread bookingId={dealId} canReplyAsOwner={!!reply?.answered_by_admin || !ownerOnPlatform(r)} onChanged={onChanged} />}
+      <RequestQuotations r={toQuoteRequest(r)} siblings={all.map(toQuoteRequest)} ownerPrices={ownerPrices} onChanged={onChanged} />
+
+      {dealId && !quoteStatuses.includes('accepted') && <Thread bookingId={dealId} canReplyAsOwner={!!reply?.answered_by_admin || !ownerOnPlatform(r)} onChanged={onChanged} />}
 
       {r.stage !== 'confirmed' && r.stage !== 'cancelled' && (
         <div data-stage-actions>
@@ -455,7 +481,7 @@ function Manage({ r, note, onNoteSaved, onChanged }: { r: Req; note: string; onN
           <input value={stageMsg} onChange={e => setStageMsg(e.target.value)} placeholder="Message to the buyer and owner (optional)" aria-label="Stage message" style={{ ...input, width: '100%', marginBottom: 8 }} />
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {r.stage === 'accepted' && <button onClick={() => setStage('booking_in_progress')} disabled={!!busy} style={btn('primary')}>{busy === 'booking_in_progress' ? 'Saving…' : 'Start booking'}</button>}
-            {(r.stage === 'accepted' || r.stage === 'booking_in_progress') && <button onClick={() => setStage('confirmed')} disabled={!!busy} style={btn('primary')}>{busy === 'confirmed' ? 'Saving…' : 'Mark booking confirmed'}</button>}
+            {(r.stage === 'accepted' || r.stage === 'booking_in_progress') && !quoteStatuses.includes('accepted') && <button onClick={() => setStage('confirmed')} disabled={!!busy} style={btn('primary')}>{busy === 'confirmed' ? 'Saving…' : 'Mark booking confirmed'}</button>}
             <button onClick={() => setStage('cancelled')} disabled={!!busy} style={btn('danger')}>{busy === 'cancelled' ? 'Closing…' : 'Close request'}</button>
           </div>
         </div>

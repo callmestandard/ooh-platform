@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:quotes": "node scripts/test-quotations.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

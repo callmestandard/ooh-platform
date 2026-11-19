@@ -6,7 +6,7 @@
 
 import type { RequestStage } from '@/lib/availability-requests';
 
-export const JOURNEY_STEPS = ['Sent', 'Owner’s price', 'Agree', 'Booked'] as const;
+export const JOURNEY_STEPS = ['Sent', 'Quotation', 'Accept', 'Booked'] as const;
 
 /** Which step is in progress (0–3), 4 when booked, or -1 when the request is closed. */
 export function journeyActive(stage: RequestStage): number {
@@ -26,11 +26,11 @@ export type Tone = 'wait' | 'act' | 'good' | 'done' | 'closed';
 
 /** What the buyer should know right now: a headline, one line of detail, and whose move it is. */
 export const BUYER_NEXT: Record<RequestStage, { title: string; detail: string; tone: Tone }> = {
-  requested:           { title: 'Waiting for the owner’s price', detail: 'We’ve sent your dates to the media owner. We’ll email you as soon as they reply.', tone: 'wait' },
-  owner_responded:     { title: 'The owner is preparing a price', detail: 'They’ve seen your dates and will send a price for them.', tone: 'wait' },
-  quote_received:      { title: 'Your price is ready', detail: 'Accept it, or talk to the owner about the price or dates.', tone: 'act' },
+  requested:           { title: 'Checking availability', detail: 'We’re checking your dates with the media owner. We’ll email you as soon as we know.', tone: 'wait' },
+  owner_responded:     { title: 'Preparing your quotation', detail: 'The owner has answered. We’re preparing your quotation and will email it to you.', tone: 'wait' },
+  quote_received:      { title: 'Your quotation is ready', detail: 'Review it below. Accept it, decline it, or ask us a question before it expires.', tone: 'act' },
   negotiating:         { title: 'You’re agreeing the terms', detail: 'Carry on the conversation with the owner until you both agree.', tone: 'act' },
-  accepted:            { title: 'Price agreed', detail: 'Our team will contact you to complete the booking. Nothing is booked until the owner confirms.', tone: 'good' },
+  accepted:            { title: 'Quotation accepted', detail: 'Our team is confirming the booking with the media owner. Nothing is booked until we confirm it.', tone: 'good' },
   booking_in_progress: { title: 'Booking in progress', detail: 'Our team is completing the booking with you and the owner.', tone: 'good' },
   confirmed:           { title: 'Booked', detail: 'Your booking is confirmed.', tone: 'done' },
   unavailable:         { title: 'Not available for your dates', detail: 'The owner can’t offer this board then. Try other dates or a board nearby.', tone: 'closed' },
@@ -39,8 +39,8 @@ export const BUYER_NEXT: Record<RequestStage, { title: string; detail: string; t
 
 /** Short stage names for tags. */
 export const STAGE_TAG: Record<RequestStage, string> = {
-  requested: 'Waiting for price', owner_responded: 'Waiting for price', quote_received: 'Price ready',
-  negotiating: 'Negotiating', accepted: 'Agreed', booking_in_progress: 'Booking', confirmed: 'Booked',
+  requested: 'Checking', owner_responded: 'Quote coming', quote_received: 'Quotation ready',
+  negotiating: 'Negotiating', accepted: 'Accepted', booking_in_progress: 'Booking', confirmed: 'Booked',
   unavailable: 'Not available', cancelled: 'Closed',
 };
 

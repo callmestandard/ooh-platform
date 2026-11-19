@@ -578,7 +578,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 Ready to advertise in {cityName}?
               </h2>
               <p style={{ color: '#94A3B8', fontSize: '1rem', margin: '0 0 28px', lineHeight: 1.6 }}>
-                Pick a board and send your dates. The media owner replies with a price, and our team completes the booking with you.
+                Pick a board and send your dates. We check availability with the media owner, send you a quotation, and complete the booking with you.
               </p>
               <Link
                 href={campaignUrl}

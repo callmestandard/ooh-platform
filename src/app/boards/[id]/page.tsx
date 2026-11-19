@@ -192,7 +192,7 @@ export default function PublicBoardPage() {
           : 'On request'}
       </p>
       {!effectiveRate && <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: '#64748B' }}>
-        {guide ? 'From the owner’s rate card. Your quote confirms the final price.' : <>Send a request and the media owner replies with a price for your dates.</>}
+        {guide ? 'From the owner’s rate card. Your quote confirms the final price.' : <>Send a request and we send you a quotation for your dates.</>}
       </p>}
       {fresh && <p data-fresh style={{ margin: '10px 0 0', display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.8125rem', fontWeight: 600, color: '#047857' }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', flexShrink: 0 }} />{fresh}

@@ -1,5 +1,6 @@
 'use client';
 
+import { supabase } from '@/lib/supabase';
 import { useEffect, useState } from 'react';
 import { useDashboardRole } from '@/components/layout/DashboardLayout';
 import { boardFormatLabel } from '@/lib/board-formats';
@@ -50,12 +51,19 @@ export default function OwnerAvailabilityRequestsPage() {
     setOpenId(item.request.id);
     setDetailLoading(true);
     setNotice(null);
-    const [matching, existing] = await Promise.all([fetchOwnerMatchingBoards(item.request), fetchOwnResponses(item.request.id)]);
+    const [matching, existing, prices] = await Promise.all([
+      fetchOwnerMatchingBoards(item.request), fetchOwnResponses(item.request.id),
+      // 061: the owner's price is kept privately (the buyer gets our quotation).
+      supabase.from('request_owner_prices').select('board_id, owner_net_monthly').eq('request_id', item.request.id).order('recorded_at', { ascending: false }),
+    ]);
+    const priceOf: Record<string, number> = {};
+    for (const x of (prices.data ?? []) as { board_id: string | null; owner_net_monthly: number }[]) if (x.board_id && !(x.board_id in priceOf)) priceOf[x.board_id] = Number(x.owner_net_monthly);
     const next: Record<string, Answer> = {};
     matching.forEach(b => {
       const e = existing.find(x => x.board_id === b.id);
+      const rate = priceOf[b.id] ?? e?.quoted_rate ?? null;
       next[b.id] = e
-        ? { available: e.available, rate: e.quoted_rate ? String(e.quoted_rate) : '', note: e.note ?? '', from: e.available_from ?? '', to: e.available_to ?? '', conditions: e.conditions ?? '', accepted: !!e.accepted_booking_id }
+        ? { available: e.available, rate: rate ? String(rate) : '', note: e.note ?? '', from: e.available_from ?? '', to: e.available_to ?? '', conditions: e.conditions ?? '', accepted: !!e.accepted_booking_id }
         : { available: null, rate: '', note: '', from: '', to: '', conditions: '', accepted: false };
     });
     setBoards(matching);
@@ -78,7 +86,7 @@ export default function OwnerAvailabilityRequestsPage() {
     })));
     setSaving(false);
     if (error) { setError('Could not send your reply — ' + error); return; }
-    setNotice(item.request.board_id ? 'Reply sent to the buyer.' : 'Reply sent to the agency.');
+    setNotice(item.request.board_id ? 'Reply saved. We tell the buyer whether the board is available and send them our quotation.' : 'Reply sent to the agency.');
     await refresh();
   }
 
@@ -90,7 +98,7 @@ export default function OwnerAvailabilityRequestsPage() {
     <div style={{ maxWidth: 940, margin: '0 auto', padding: '8px 0 48px', fontFamily: 'inherit' }}>
       <h1 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: '0 0 4px', letterSpacing: '-0.02em' }}>Availability requests</h1>
       <p style={{ fontSize: '0.875rem', color: '#64748B', margin: '0 0 20px', maxWidth: 660 }}>
-        Buyers asking whether your boards are free for their dates. Answer once per board. Your price and reply are seen only by the buyer who asked and the platform team.
+        Buyers asking whether your boards are free for their dates. Answer once per board. The buyer sees whether the board is available; your price is seen only by the OOH Platform team, who send the buyer a quotation.
       </p>
 
       {error && <div style={{ ...card, borderColor: '#FECACA', background: '#FEF2F2', color: '#B91C1C', fontSize: '0.8125rem', marginBottom: 16 }}>{error}</div>}
@@ -132,7 +140,7 @@ export default function OwnerAvailabilityRequestsPage() {
                 <div style={{ marginTop: 12, padding: 14, background: '#F8FAFC', borderRadius: 10 }}>
                   {r.notes && <p style={{ fontSize: '0.8125rem', color: '#334155', margin: '0 0 8px' }}><strong>{r.board_id ? 'Campaign requirement:' : 'Note from the agency:'}</strong> {r.notes}</p>}
                   {r.extra_requirements && <p style={{ fontSize: '0.8125rem', color: '#334155', margin: '0 0 8px' }}><strong>Additional requirements:</strong> {r.extra_requirements}</p>}
-                  {r.board_id && <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 12px' }}>Reply <strong>Available — send quote</strong> with your monthly price, or <strong>Not available</strong>. If you can only offer part of the buyer&rsquo;s dates, set the period you can offer. The buyer sees your reply straight away.</p>}
+                  {r.board_id && <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 12px' }}>Reply <strong>Available — send quote</strong> with your monthly price, or <strong>Not available</strong>. If you can only offer part of the buyer&rsquo;s dates, set the period you can offer. The buyer sees whether it is available; your price goes only to our team.</p>}
                   {detailLoading ? <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>Loading your boards…</p> : boards.length === 0 ? (
                     <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: 0 }}>None of your boards match this request any more.</p>
                   ) : (

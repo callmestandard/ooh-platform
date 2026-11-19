@@ -16,7 +16,8 @@ type Window = {
   /** 059: missing (undefined) until that migration is run. */
   visited?: number; searched?: number; sent?: number; quoted?: number;
   buyers: number; requests: number; answered: number; accepted: number; confirmed: number;
-  confirmed_value: number; median_answer_hours: number | null; proposals: number; proposals_opened: number;
+  /** 061: excludes VAT; revenue = what we keep after owner and supplier costs. */
+  confirmed_value: number; revenue?: number; median_answer_hours: number | null; proposals: number; proposals_opened: number;
 };
 type Funnel = {
   days: number; now: Window; prev: Window;
@@ -41,7 +42,7 @@ const REQUEST_STEPS: Step[] = [
   { key: 'answered', label: 'Owner answered', unit: 'requests', base: 'requests', of: 'of requests' },
   { key: 'quoted', label: 'Quotation sent', unit: 'requests', base: 'requests', of: 'of requests' },
   { key: 'accepted', label: 'Quotation accepted', unit: 'requests', base: 'quoted', of: 'of quotations' },
-  { key: 'confirmed', label: 'Booking confirmed', unit: 'requests', base: 'accepted', of: 'of accepted', sub: w => (w.confirmed_value > 0 ? `${naira(w.confirmed_value)}/mo` : null) },
+  { key: 'confirmed', label: 'Booking confirmed', unit: 'requests', base: 'accepted', of: 'of accepted', sub: w => (w.confirmed_value > 0 ? `${naira(w.confirmed_value)} booked${w.revenue != null ? ` · ${naira(w.revenue)} ours` : ''}` : null) },
 ];
 
 function naira(n: number) {

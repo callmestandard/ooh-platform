@@ -1,36 +1,43 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useDashboardRole } from '@/components/layout/DashboardLayout';
 import { boardFormatLabel } from '@/lib/board-formats';
 import {
-  listMyBoardRequests, cancelBoardRequest, answerBoardQuote, CANCELLABLE_STAGES, ANSWERABLE_STAGES,
+  listMyBoardRequests, cancelBoardRequest, CANCELLABLE_STAGES,
   type BoardRequest, type RequestStage,
 } from '@/lib/availability-requests';
 import { Journey, StageTag, BUYER_NEXT, toneOf, naira, fmtDate, fmtShort, spanText, ago } from '@/components/requests/journey';
+import { BuyerQuotationCard, BQ_CSS, loadMyQuotations } from '@/components/quotations/BuyerQuotation';
+import type { BuyerQuotation } from '@/lib/quotations';
 
 type Filter = 'active' | 'closed' | 'all';
 const DONE: RequestStage[] = ['confirmed', 'cancelled', 'unavailable'];
 const DEAL_STAGES: RequestStage[] = ['negotiating', 'accepted', 'booking_in_progress', 'confirmed'];
 const YOUR_MOVE: RequestStage[] = ['quote_received', 'negotiating'];
 
+/** The quotation to show on a request: an open or accepted one, else the latest. */
+const quoteFor = (quotes: BuyerQuotation[], id: string) => {
+  const mine = quotes.filter(q => q.request_ids.includes(id));
+  return mine.find(q => q.status === 'sent' || q.status === 'accepted') ?? mine[0] ?? null;
+};
+
 /** Requests that need the buyer first, then the rest newest first. */
 const order = (r: BoardRequest) => (YOUR_MOVE.includes(r.stage) ? 0 : DONE.includes(r.stage) ? 2 : 1);
 
 export default function MyRequestsPage() {
   const role = useDashboardRole();
-  const router = useRouter();
-  const [confirming, setConfirming] = useState<string | null>(null);
   const [requests, setRequests] = useState<BoardRequest[]>([]);
+  const [quotes, setQuotes] = useState<BuyerQuotation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('active');
   const [busy, setBusy] = useState<string | null>(null);
 
   async function refresh() {
-    const { requests, error } = await listMyBoardRequests();
+    const [{ requests, error }, qs] = await Promise.all([listMyBoardRequests(), loadMyQuotations()]);
     setRequests(requests);
+    setQuotes(qs);
     setError(error);
     setLoading(false);
   }
@@ -46,17 +53,6 @@ export default function MyRequestsPage() {
     setBusy(null);
     if (error) { setError('Could not cancel: ' + error); return; }
     await refresh();
-  }
-
-  async function answer(r: BoardRequest, accept: boolean) {
-    setBusy(r.id);
-    setError(null);
-    const { bookingId, error } = await answerBoardQuote(r.id, accept);
-    setBusy(null);
-    setConfirming(null);
-    if (error || !bookingId) { setError((accept ? 'Could not accept: ' : 'Could not open the conversation: ') + (error ?? 'please try again')); return; }
-    if (accept) { await refresh(); return; }
-    router.push(`/dashboard/agency/negotiations/${bookingId}`);
   }
 
   if (role !== 'agency') {
@@ -80,7 +76,7 @@ export default function MyRequestsPage() {
               : requests.length === 0 ? 'Boards you’ve asked about will show here.'
               : <>
                   {yourMove > 0 && <span className="mr-badge"><i />{yourMove} need{yourMove === 1 ? 's' : ''} you</span>}
-                  {waiting > 0 && <span>{waiting} waiting on the owner</span>}
+                  {waiting > 0 && <span>{waiting} in progress</span>}
                   {yourMove === 0 && waiting === 0 && <span>Nothing open right now</span>}
                 </>}
           </p>
@@ -111,17 +107,19 @@ export default function MyRequestsPage() {
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
           </div>
           <h2>{requests.length === 0 ? 'No requests yet' : filter === 'closed' ? 'Nothing closed yet' : 'No open requests'}</h2>
-          <p>Find a board you like and press <b>Request this location</b>. The owner replies with a price for your dates.</p>
+          <p>Find a board you like and press <b>Request this location</b>. We check availability and send you a quotation.</p>
           <div className="mr-empty-j"><Journey active={0} /></div>
           <a href="/marketplace" className="mr-btn mr-primary">Browse boards</a>
         </div>
       ) : (
         <div className="mr-list">
-          {shown.map(r => {
+          {(() => { const placed = new Set<string>(); return shown.map(r => {
             const resp = r.responses?.[0];
+            const quote = quoteFor(quotes, r.id);
+            // A quotation covering several boards is shown in full once, on the first of them.
+            const quoteHere = quote && !placed.has(quote.id) ? (placed.add(quote.id), true) : false;
             const photo = r.board?.photo_urls?.[0];
             const ownerReached = (r.recipients?.length ?? 0) > 0;
-            const canAnswer = ANSWERABLE_STAGES.includes(r.stage) && !!resp?.available;
             const dealId = DEAL_STAGES.includes(r.stage) ? resp?.accepted_booking_id ?? null : null;
             const next = BUYER_NEXT[r.stage];
             const tone = toneOf(r.stage);
@@ -157,17 +155,13 @@ export default function MyRequestsPage() {
                     {r.stage === 'requested' && !ownerReached && ' Our team is contacting the owner for you.'}
                   </p>
 
-                  {resp && (
+                  {resp && !quote && (
                     <div className="mr-reply" data-owner-reply>
                       <div className="mr-reply-h">
-                        <span>Owner&rsquo;s reply</span>
+                        <span>Availability</span>
                         <small>{ago(resp.updated_at)}</small>
                       </div>
-                      {resp.available && resp.quoted_rate ? (
-                        <p className="mr-price"><b>{naira(resp.quoted_rate)}</b> per month</p>
-                      ) : (
-                        <p className="mr-reply-s">{resp.available ? 'Available for your dates' : 'Not available for your dates'}</p>
-                      )}
+                      <p className="mr-reply-s">{resp.available ? 'Available for your dates' : 'Not available for your dates'}</p>
                       {resp.available && (resp.available_from || resp.available_to) && (
                         <p className="mr-reply-x">Can offer {resp.available_from ? fmtDate(resp.available_from) : 'now'} – {resp.available_to ? fmtDate(resp.available_to) : 'open-ended'}</p>
                       )}
@@ -176,27 +170,11 @@ export default function MyRequestsPage() {
                     </div>
                   )}
 
-                  {canAnswer && (
-                    <div className="mr-actions" data-answer>
-                      {confirming === r.id && resp?.quoted_rate ? (
-                        <div className="mr-confirm">
-                          <p>Accept <b>{naira(resp.quoted_rate)} per month</b> for {fmtShort(r.start_date)} – {fmtDate(r.end_date)}? Our team then contacts you to complete the booking.</p>
-                          <div>
-                            <button onClick={() => answer(r, true)} disabled={busy === r.id} className="mr-btn mr-primary">{busy === r.id ? 'Accepting…' : 'Yes, accept'}</button>
-                            <button onClick={() => setConfirming(null)} disabled={busy === r.id} className="mr-btn">Back</button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          {resp?.quoted_rate ? <button onClick={() => setConfirming(r.id)} disabled={busy === r.id} className="mr-btn mr-primary">Accept price</button> : null}
-                          <button onClick={() => answer(r, false)} disabled={busy === r.id} className={`mr-btn${resp?.quoted_rate ? '' : ' mr-primary'}`}>
-                            {busy === r.id ? 'Opening…' : resp?.quoted_rate ? 'Negotiate' : 'Ask the owner for a price'}
-                          </button>
-                        </>
-                      )}
-                    </div>
+                  {quote && quoteHere && <BuyerQuotationCard q={quote} onChanged={refresh} />}
+                  {quote && !quoteHere && (
+                    <p className="mr-reply-x" data-in-quote>Included in quotation <b>{quote.ref}</b> above.</p>
                   )}
-                  {dealId && (
+                  {dealId && !quote && (
                     <div className="mr-actions">
                       <a href={`/dashboard/agency/negotiations/${dealId}`} className={`mr-btn${r.stage === 'negotiating' ? ' mr-primary' : ''}`}>
                         {r.stage === 'negotiating' ? 'Continue the conversation →' : 'View the conversation'}
@@ -210,7 +188,7 @@ export default function MyRequestsPage() {
 
                 <footer className="mr-foot">
                   <span>Sent {fmtDate(r.created_at)}{r.budget ? ` · budget ${naira(r.budget)}` : ''}{r.sites_needed ? ` · ${r.sites_needed} board${r.sites_needed > 1 ? 's' : ''}` : ''}</span>
-                  {CANCELLABLE_STAGES.includes(r.stage) && r.stage !== 'unavailable' && confirming !== r.id && (
+                  {CANCELLABLE_STAGES.includes(r.stage) && r.stage !== 'unavailable' && (
                     <button onClick={() => cancel(r)} disabled={busy === r.id} className="mr-cancel">
                       {busy === r.id ? 'Working…' : r.stage === 'negotiating' ? 'Withdraw' : 'Cancel request'}
                     </button>
@@ -218,10 +196,11 @@ export default function MyRequestsPage() {
                 </footer>
               </article>
             );
-          })}
+          }); })()}
         </div>
       )}
 
+      <style>{BQ_CSS}</style>
       <style>{`
         .mr { max-width: 860px; margin: 0 auto; padding: 8px 0 56px; font-family: 'Inter', -apple-system, sans-serif; }
         .mr-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }

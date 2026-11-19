@@ -118,13 +118,13 @@ export async function POST(req: NextRequest) {
   // 2. Owner (or our team) replied
   if (REPLIED_STAGES.includes(r.stage)) {
     const { data: resp } = await db.from('availability_responses')
-      .select('available, quoted_rate, available_from, available_to, conditions, note, updated_at')
+      .select('available, available_from, available_to, conditions, note, updated_at')
       .eq('request_id', r.id).order('updated_at', { ascending: false }).limit(1).maybeSingle();
     if (resp) {
       const ok = fresh(resp.updated_at);
       if (await claim(r.id, 'replied', !ok) && ok && buyerEmail) {
         await emailOwnerReplied(buyerEmail, info, {
-          available: resp.available, rate: resp.quoted_rate, from: resp.available_from, to: resp.available_to,
+          available: resp.available, from: resp.available_from, to: resp.available_to,
           conditions: resp.conditions, note: resp.note,
         });
         sent.push('replied');
@@ -134,7 +134,10 @@ export async function POST(req: NextRequest) {
 
   // 3. Deal agreed
   if (ACCEPTED_STAGES.includes(r.stage)) {
-    const ok = fresh(r.stage_updated_at);
+    // Accepted through a quotation (061): /api/quotations/notify sends those emails.
+    const { count: quoted } = await db.from('quotations').select('id', { count: 'exact', head: true })
+      .contains('request_ids', [r.id]).not('accepted_at', 'is', null);
+    const ok = fresh(r.stage_updated_at) && !quoted;
     if (await claim(r.id, 'accepted', !ok) && ok) {
       const { data: resp } = await db.from('availability_responses').select('accepted_booking_id').eq('request_id', r.id).not('accepted_booking_id', 'is', null).limit(1).maybeSingle();
       let rate: number | null = null;
