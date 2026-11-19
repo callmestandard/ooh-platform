@@ -6,7 +6,7 @@ import BoardPins, { type BoardPin } from '@/components/map/BoardPins';
 import { VerificationBadge, VERIFICATION_META, verificationOf, type VerificationStatus } from '@/lib/board-verification';
 import { boardFormatLabel } from '@/lib/board-formats';
 import type { MapStyleKey } from '@/components/map/ooh-map-shared';
-import { PhotoStepper } from './BoardLook';
+import { PhotoStepper, googleStreetViewUrl } from './BoardLook';
 
 export type MapBoard = {
   id: string;
@@ -73,8 +73,6 @@ type Props = {
   verificationColors?: boolean;
   /** Centre this board in the part of the map a side panel leaves visible. */
   focus?: { id: string; padRight: number } | null;
-  /** Adds a "Street view" button to the board card. */
-  onStreetView?: (id: string) => void;
   /** Space kept clear at the edges when fitting (e.g. a card row on phones). */
   fitPadding?: { top: number; bottom: number; left: number; right: number };
 };
@@ -93,7 +91,7 @@ function coreOf(boards: MapBoard[]): MapBoard[] {
 
 export default function MarketplaceMap({
   boards, onOpen, hoveredId = null, onHover, selectedId, onSelect, onView, initialCamera,
-  fitKey, trimOutliers, cooperative = true, preview = true, explorer, verificationColors, onStreetView, focus, fitPadding,
+  fitKey, trimOutliers, cooperative = true, preview = true, explorer, verificationColors, focus, fitPadding,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const [ready, setReady] = useState(false);
@@ -240,12 +238,12 @@ export default function MarketplaceMap({
                 </button>
                 <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
                   <button type="button" onClick={() => onOpen(open.id)} style={{ flex: 1, padding: '8px 0', border: 'none', background: '#1B4F8A', color: '#fff', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>View board</button>
-                  {onStreetView && (
-                    <button type="button" data-street-btn onClick={() => onStreetView(open.id)} title="See the site at street level"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 10px', border: '1px solid #E2E8F0', background: '#fff', color: '#0F172A', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                  {explorer && (
+                    <a data-street-btn href={googleStreetViewUrl(open.latitude, open.longitude)} target="_blank" rel="noopener noreferrer" title="Open Google Street View in a new tab"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 10px', border: '1px solid #E2E8F0', background: '#fff', color: '#0F172A', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', textDecoration: 'none' }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M9.5 21v-6l-2-1V10a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v4l-2 1v6"/></svg>
-                      Street view
-                    </button>
+                      Street View ↗
+                    </a>
                   )}
                 </div>
               </div>

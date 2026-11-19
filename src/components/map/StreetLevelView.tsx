@@ -74,7 +74,7 @@ type Status = 'loading' | 'ready' | 'none' | 'error';
  * library because a client token can read the coverage tiles but may be
  * refused the photo data itself; the embed needs no token of ours.
  */
-export default function StreetLevelView({ lat, lng, height = 400 }: { lat: number; lng: number; height?: number }) {
+export default function StreetLevelView({ lat, lng, height = 400, showGoogle = true }: { lat: number; lng: number; height?: number; /** false when the page shows its own Google Street View link. */ showGoogle?: boolean }) {
   const [status, setStatus] = useState<Status>('loading');
   const [image, setImage] = useState<NearestImage | null>(null);
   const openInMapillary = `https://www.mapillary.com/app/?lat=${lat}&lng=${lng}&z=17`;
@@ -130,8 +130,8 @@ export default function StreetLevelView({ lat, lng, height = 400 }: { lat: numbe
             />
           )}
           {status === 'loading' && message('Looking for street-level photos…', 'Searching Mapillary around this point.')}
-          {status === 'none' && message('No street-level photos here', 'Nobody has contributed Mapillary imagery within about 500 m of this point yet. Try Google Street View below.')}
-          {status === 'error' && message('Could not load street-level photos', 'Mapillary did not respond for this point. Try Google Street View below.')}
+          {status === 'none' && message('No street-level photos here', `Nobody has contributed Mapillary imagery within about 500 m of this point yet. Try Google Street View${showGoogle ? ' below' : ''}.`)}
+          {status === 'error' && message('Could not load street-level photos', `Mapillary did not respond for this point. Try Google Street View${showGoogle ? ' below' : ''}.`)}
         </div>
       )}
 
@@ -147,14 +147,14 @@ export default function StreetLevelView({ lat, lng, height = 400 }: { lat: numbe
           {' '}contributors, licensed{' '}
           <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer" style={{ color: '#1B4F8A', fontWeight: 600, textDecoration: 'none' }}>CC BY-SA 4.0</a>
         </p>
-        <a
+        {showGoogle && <a
           href={openInGoogleStreetView}
           target="_blank"
           rel="noopener noreferrer"
           style={{ display: 'inline-block', padding: '7px 14px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: '#1B4F8A', fontSize: '0.75rem', fontWeight: 600, textDecoration: 'none' }}
         >
           View on Google Street View ↗
-        </a>
+        </a>}
       </div>
     </div>
   );

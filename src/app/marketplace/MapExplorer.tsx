@@ -128,7 +128,7 @@ export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initial
         </span>
         <span className="mx-save" onClick={e => { e.preventDefault(); e.stopPropagation(); }}><SaveButton boardId={b.id} name={b.name} /></span>
         {Number.isFinite(b.latitude) && (
-          <span className="mx-street" role="button" tabIndex={0} title="See the site at street level" aria-label={`Street view of ${b.name}`}
+          <span className="mx-street" role="button" tabIndex={0} title="See the site: photos and Google Street View" aria-label={`See the site: ${b.name}`}
             onClick={e => { e.preventDefault(); e.stopPropagation(); setSelected(b.id); setLookId(b.id); }}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setSelected(b.id); setLookId(b.id); } }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M9.5 21v-6l-2-1V10a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v4l-2 1v6"/></svg>
@@ -187,7 +187,6 @@ export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initial
           trimOutliers
           cooperative={false}
           preview={!phone && !lookId}
-          onStreetView={id => { setSelected(id); setLookId(id); }}
           focus={!phone && lookId ? { id: lookId, padRight: 470 } : null}
           explorer
           fitPadding={fitPadding}

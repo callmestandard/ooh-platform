@@ -10,6 +10,11 @@ const StreetLevelView = dynamic(() => import('@/components/map/StreetLevelView')
   loading: () => <div style={{ height: 300, background: '#F1F5F9' }} />,
 });
 
+/** Google's documented Maps URL for the panorama nearest a point: a plain link, no API or key. */
+export function googleStreetViewUrl(lat: number, lng: number) {
+  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
+}
+
 /** Board photos you can step through: arrows, a counter, and swipe on phones. */
 export function PhotoStepper({ photos, alt, height, rounded = 0 }: { photos: string[]; alt: string; height: number; rounded?: number }) {
   const [i, setI] = useState(0);
@@ -57,6 +62,7 @@ export function PhotoStepper({ photos, alt, height, rounded = 0 }: { photos: str
 /** "See the site": the board's own photos and the street-level view of its spot. */
 export default function BoardLook({ board, onClose, onOpen }: { board: MapBoard; onClose: () => void; onOpen: (id: string) => void }) {
   const photos = (board.photo_urls ?? []).filter(Boolean);
+  const [community, setCommunity] = useState(false);
   // One listener for the panel's lifetime: re-adding it on every render could
   // drop the key press when another Escape handler re-renders the page first.
   const closeRef = useRef(onClose);
@@ -80,10 +86,21 @@ export default function BoardLook({ board, onClose, onOpen }: { board: MapBoard;
       <div className="bl-scroll">
         <p className="bl-label">Photos of the board</p>
         <PhotoStepper photos={photos} alt={board.name} height={220} rounded={12} />
-        <p className="bl-label">Street level <span>· walk along the road with the arrows</span></p>
-        <div className="bl-street">
-          <StreetLevelView key={board.id} lat={board.latitude} lng={board.longitude} height={300} />
-        </div>
+        <p className="bl-label">Street level</p>
+        <a className="bl-google" href={googleStreetViewUrl(board.latitude, board.longitude)} target="_blank" rel="noopener noreferrer" data-google-sv>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M9.5 21v-6l-2-1V10a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v4l-2 1v6"/></svg>
+          <span><b>Open in Google Street View</b><small>See the board from the road, in a new tab</small></span>
+          <svg className="bl-ext" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg>
+        </a>
+        {community ? (
+          <div className="bl-street">
+            <StreetLevelView key={board.id} lat={board.latitude} lng={board.longitude} height={280} showGoogle={false} />
+          </div>
+        ) : (
+          <button type="button" className="bl-more" onClick={() => setCommunity(true)} data-community-btn>
+            Also show community street photos <span>(Mapillary, may be older)</span>
+          </button>
+        )}
         <button type="button" className="bl-open" onClick={() => onOpen(board.id)}>View board and request a quote</button>
       </div>
       <style>{`
@@ -98,6 +115,15 @@ export default function BoardLook({ board, onClose, onOpen }: { board: MapBoard;
         .bl-label { margin: 14px 0 8px; font-size: 0.75rem; font-weight: 700; color: #0F172A; text-transform: uppercase; letter-spacing: .04em; }
         .bl-label span { text-transform: none; letter-spacing: 0; font-weight: 500; color: #94A3B8; }
         .bl-street { border-radius: 12px; overflow: hidden; border: 1px solid #E2E8F0; }
+        .bl-google { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; background: #0F172A; color: #fff; text-decoration: none; transition: background .12s; }
+        .bl-google:hover { background: #1E293B; }
+        .bl-google span { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+        .bl-google b { font-size: 0.875rem; font-weight: 700; }
+        .bl-google small { font-size: 0.75rem; color: #CBD5E1; }
+        .bl-more { margin-top: 10px; width: 100%; padding: 9px; border: 1px dashed #CBD5E1; border-radius: 10px; background: #fff; color: #334155; font: 600 0.8125rem/1.3 'Inter', sans-serif; cursor: pointer; }
+        .bl-more span { font-weight: 500; color: #94A3B8; }
+        .bl-more:hover { border-color: #94A3B8; background: #F8FAFC; }
+        .bl-street { margin-top: 10px; }
         .bl-open { margin-top: 14px; width: 100%; padding: 11px; border: none; border-radius: 10px; background: #1B4F8A; color: #fff; font: 600 0.875rem/1 'Inter', sans-serif; cursor: pointer; }
         @media (max-width: 900px) {
           .bl { position: fixed; inset: 0; width: auto; border-radius: 0; z-index: 1000; animation-name: blUp; }
