@@ -269,6 +269,7 @@ function PostBoardContent() {
   // Admins use this same form to add a board for an owner, or as unclaimed.
   const adminMode = useDashboardRole() === 'admin';
   const [owners, setOwners] = useState<OwnerAccount[]>([]);
+  const [knownOwnerNames, setKnownOwnerNames] = useState<string[]>([]);
   const [adminOwner, setAdminOwner] = useState<OwnerChoice>({ ownerId: null, ownerName: '' });
   const [adminSource, setAdminSource] = useState('');
   const [adminVerification, setAdminVerification] = useState<'pending' | 'verified'>('pending');
@@ -322,6 +323,7 @@ function PostBoardContent() {
   // editable per board in case a specific listing needs a different contact.
   useEffect(() => {
     if (adminMode) {
+      supabase.rpc('admin_media_owners').then(({ data, error }) => { if (!error) setKnownOwnerNames(((data ?? []) as { name: string }[]).map(o => o.name)); });
       supabase.from('profiles').select('id, full_name, company_name, email').eq('role', 'owner').order('company_name')
         .then(({ data }) => setOwners(((data as { id: string; full_name: string | null; company_name: string | null; email: string | null }[]) || [])
           .map(o => ({ id: o.id, label: o.company_name || o.full_name || o.email || o.id, email: o.email }))));
@@ -724,7 +726,7 @@ function PostBoardContent() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
               <div style={{ gridColumn: '1 / -1' }}>
                 <FieldLabel>Owner</FieldLabel>
-                <OwnerPicker owners={owners} value={adminOwner} onChange={setAdminOwner} />
+                <OwnerPicker owners={owners} knownNames={knownOwnerNames} value={adminOwner} onChange={setAdminOwner} />
                 <p style={{ fontSize: '0.6875rem', color: '#94A3B8', margin: '4px 0 0' }}>
                   Pick their account if they have one; otherwise type their name and it’s kept for our team only
                 </p>

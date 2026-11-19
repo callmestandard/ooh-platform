@@ -86,7 +86,7 @@ export default function PublicBoardPage() {
   useEffect(() => {
     if (!id) return; // no id: the page shows "Board not found"
     Promise.all([
-      supabase.from('boards').select(BOARD_PUBLIC_COLUMNS).eq('id', id).single(),
+      supabase.from('boards').select(BOARD_PUBLIC_COLUMNS).eq('id', id).neq('status', 'decommissioned').single(), // archived boards are not shown
       supabase.from('listings').select('sell_price, agent_id, board_authorizations(owner_verified)').eq('board_id', id).eq('status', 'active').maybeSingle(),
     ]).then(async ([{ data }, { data: listing }]) => {
       const [b, guides] = data && !SHOW_PRICES

@@ -36,7 +36,9 @@ type BoardEdit = {
   board_id: string; owner_key: string; owner_name: string | null; updated_at: string;
   changes: { name?: string; area?: string; address?: string; width?: number; height?: number; illuminated?: boolean };
   photo_url: string | null; note: string | null;
-  now: { name: string; area: string | null; city: string | null; address: string | null; width: number | null; height: number | null; illuminated: boolean | null; photo: string | null };
+  // From 063: the owner says the map pin is wrong.
+  location_note?: string | null; location_lat?: number | null; location_lng?: number | null;
+  now: { name: string; area: string | null; city: string | null; address: string | null; width: number | null; height: number | null; illuminated: boolean | null; photo: string | null; latitude?: number | null; longitude?: number | null };
 };
 
 const naira = (n: number) => '₦' + Math.round(n).toLocaleString('en-NG');
@@ -265,6 +267,9 @@ function EditCard({ x, onDone }: { x: BoardEdit; onDone: () => Promise<void> }) 
   if (c.width != null) rows.push(['Width', x.now.width != null ? `${x.now.width}m` : 'not set', `${c.width}m`]);
   if (c.height != null) rows.push(['Height', x.now.height != null ? `${x.now.height}m` : 'not set', `${c.height}m`]);
   if (c.illuminated != null) rows.push(['Lighting', lit(x.now.illuminated), lit(c.illuminated)]);
+  const pin = (lat?: number | null, lng?: number | null) => (lat != null && lng != null ? `${lat.toFixed(5)}, ${lng.toFixed(5)}` : 'no pin');
+  if (x.location_lat != null) rows.push(['Map pin', pin(x.now.latitude, x.now.longitude), pin(x.location_lat, x.location_lng)]);
+  const mapUrl = (lat: number, lng: number) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
   async function decide(apply: boolean) {
     if (!apply && !window.confirm('Dismiss this correction? The listing stays as it is.')) return;
@@ -306,6 +311,14 @@ function EditCard({ x, onDone }: { x: BoardEdit; onDone: () => Promise<void> }) 
             </dl>
           )}
           {x.note && <p className="nc-note">Note: {x.note}</p>}
+          {(x.location_note || x.location_lat != null) && (
+            <p className="nc-note" data-location-report>
+              <strong>Owner says the location is wrong.</strong>{x.location_note ? ` “${x.location_note}”` : ''}
+              {x.location_lat != null && x.location_lng != null && <> · <a href={mapUrl(x.location_lat, x.location_lng)} target="_blank" rel="noopener noreferrer">their point</a></>}
+              {x.now.latitude != null && x.now.longitude != null && <> · <a href={mapUrl(x.now.latitude, x.now.longitude)} target="_blank" rel="noopener noreferrer">current pin</a></>}
+              {x.location_lat == null && <><br />No point sent: move the pin by hand in the inventory, then mark this as done.</>}
+            </p>
+          )}
         </div>
       </div>
       <div className="nc-reply-act">
@@ -409,6 +422,7 @@ const CSS = `
 .nc-meta { font-size: .75rem; color: #64748B; margin: 2px 0 6px; }
 .nc-said { font-size: .875rem; margin: 0; }
 .nc-said.is-yes strong { color: #047857; } .nc-said.is-no strong { color: #B91C1C; }
+.nc-note a { color: #1B4F8A; font-weight: 600; }
 .nc-note { font-size: .8125rem; color: #475569; background: #F8FAFC; border-radius: 8px; padding: 6px 9px; margin: 6px 0 0; }
 .nc-photos { display: flex; align-items: center; gap: 10px; margin: 8px 0 4px; }
 .nc-photos figure { margin: 0; width: 132px; }

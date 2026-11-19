@@ -14,7 +14,7 @@ import { boardFormatLabel } from '@/lib/board-formats';
 import { teamWhatsAppLink } from '@/lib/public-links';
 import { isStale, sinceText, type OwnerBoardChanges, type OwnerBoardEdit, type OwnerBoardStatus, type OwnerLinkBoard, type OwnerLinkReply, type OwnerLinkRequest, type OwnerLinkView } from '@/lib/owner-links';
 
-type Edit = { status: OwnerBoardStatus; from: string };
+type Edit = { status: OwnerBoardStatus; from: string; rate: string };
 
 const today = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -50,6 +50,7 @@ export default function OwnerLinkPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedCount, setSavedCount] = useState<number | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [ratesSent, setRatesSent] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -78,8 +79,8 @@ export default function OwnerLinkPage() {
 
   const boards = view?.boards ?? [];
   const requests = view?.requests ?? [];
-  const current = (b: OwnerLinkBoard): Edit => edits[b.id] ?? { status: asStatus(b.status), from: b.available_from ?? '' };
-  const changed = boards.filter(b => { const e = edits[b.id]; return e && (e.status !== asStatus(b.status) || (e.status === 'booked' && e.from !== (b.available_from ?? ''))); }).length;
+  const current = (b: OwnerLinkBoard): Edit => edits[b.id] ?? { status: asStatus(b.status), from: b.available_from ?? '', rate: '' };
+  const changed = boards.filter(b => { const e = edits[b.id]; return e && (e.status !== asStatus(b.status) || (e.status === 'booked' && e.from !== (b.available_from ?? '')) || Number(e.rate) > 0); }).length;
   const stale = boards.filter(b => isStale(b.checked_at)).length;
   const waiting = requests.filter(r => !r.reply).length;
   const missingDate = boards.some(b => { const e = current(b); return e.status === 'booked' && !e.from; });
@@ -92,12 +93,13 @@ export default function OwnerLinkPage() {
   async function confirmAll() {
     if (missingDate) { setSaveError('Add the date each booked board is free again.'); return; }
     setSaving(true); setSaveError(null);
-    const updates = boards.map(b => { const e = current(b); return { id: b.id, status: e.status, available_from: e.status === 'booked' ? e.from : null }; });
+    const updates = boards.map(b => { const e = current(b); return { id: b.id, status: e.status, available_from: e.status === 'booked' ? e.from : null, ...(Number(e.rate) > 0 ? { rate: Number(e.rate) } : {}) }; });
     const { data, error } = await supabase.rpc('owner_link_update_boards', { p_token: token, p_updates: updates });
     setSaving(false);
     if (error) { setSaveError(friendly(error.message)); return; }
     const now = new Date().toISOString();
     setView(v => v && { ...v, boards: v.boards.map(b => { const e = current(b); return { ...b, status: e.status, available_from: e.status === 'booked' ? e.from : null, checked_at: now }; }) });
+    setRatesSent(prev => { const n = new Set(prev); updates.forEach(u => { if ('rate' in u) n.add(u.id); }); return n; });
     setEdits({});
     setSavedCount(Number(data) || updates.length);
   }
@@ -148,7 +150,7 @@ export default function OwnerLinkPage() {
 
             <section className="ol-sec" data-boards>
               <h2>Your boards ({boards.length})</h2>
-              <p className="ol-sec-sub">Is each board free, booked or off right now? Change any that are wrong, then confirm. Tap a board to see its photo or fix its details.</p>
+              <p className="ol-sec-sub">Is each board free, booked or off right now? Change any that are wrong, then confirm. Add your current monthly rate if it has changed: only our team sees it. Tap a board to see its photo or fix its details.</p>
               {boards.length === 0 && <p className="ol-empty">No boards are listed for you yet. Message our team to add them.</p>}
               <ul className="ol-boards">
                 {boards.map(b => {
@@ -183,6 +185,16 @@ export default function OwnerLinkPage() {
                         </label>
                       )}
                       {e.status === 'unavailable' && <p className="ol-hint">Off means buyers can&rsquo;t request it (for example, under repair or no longer yours).</p>}
+                      {e.status !== 'unavailable' && (
+                        <label className="ol-from ol-rate">
+                          <span>Your rate per month <em>(optional)</em></span>
+                          <span className="ol-rate-in">
+                            <i aria-hidden="true">₦</i>
+                            <input inputMode="numeric" value={e.rate ? Number(e.rate).toLocaleString('en-NG') : ''} placeholder={ratesSent.has(b.id) ? 'Sent ✓' : 'e.g. 1,500,000'}
+                              onChange={ev => setEdit(b, { rate: ev.target.value.replace(/[^\d]/g, '').slice(0, 11) })} aria-label={`Monthly rate for ${b.name}`} data-rate-input />
+                          </span>
+                        </label>
+                      )}
                     </li>
                   );
                 })}
@@ -344,6 +356,7 @@ function BoardSheet({ token, b, onClose, onSent }: { token: string; b: OwnerLink
               <button type="button" className="ol-btn-2 ol-wide" onClick={() => { setDone(false); setEditing(true); }} data-edit-board>
                 {waiting || done ? 'Change your correction' : 'Fix details or change the photo'}
               </button>
+              <WrongPlace token={token} b={b} />
             </>
           ) : (
             <form onSubmit={send}>
@@ -374,6 +387,50 @@ function BoardSheet({ token, b, onClose, onSent }: { token: string; b: OwnerLink
         </div>
       </div>
     </div>
+  );
+}
+
+/** "The map location is wrong": a description, or the phone's location when standing at the board. */
+function WrongPlace({ token, b }: { token: string; b: OwnerLinkBoard }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const [point, setPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+
+  function locate() {
+    if (!navigator.geolocation) { setErr('Your phone can’t share its location here. Describe the place instead.'); return; }
+    setBusy(true); setErr(null);
+    navigator.geolocation.getCurrentPosition(
+      pos => { setBusy(false); setPoint({ lat: +pos.coords.latitude.toFixed(6), lng: +pos.coords.longitude.toFixed(6) }); },
+      () => { setBusy(false); setErr('Could not get your location. Allow location for this page, or describe the place instead.'); },
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
+  }
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    if (!note.trim() && !point) { setErr('Say where the board really is, or use your location.'); return; }
+    setBusy(true); setErr(null);
+    const { error } = await supabase.rpc('owner_link_report_location', { p_token: token, p_board_id: b.id, p_note: note, p_lat: point?.lat ?? null, p_lng: point?.lng ?? null });
+    setBusy(false);
+    if (error) { setErr(error.message.includes('owner_link_report_location') ? 'This is not switched on yet. Please message our team.' : friendly(error.message)); return; }
+    setSent(true); setOpen(false);
+  }
+
+  if (sent) return <p className="ol-sent" role="status" data-location-sent><strong>Thank you.</strong> Our team will check the location and move the pin.</p>;
+  if (!open) return <button type="button" className="ol-link ol-cancel" onClick={() => setOpen(true)} data-wrong-place>Is the map location wrong?</button>;
+  return (
+    <form onSubmit={send} className="ol-place" data-place-form>
+      <label className="ol-lbl" htmlFor={`wp-${b.id}`}>Where is the board really?</label>
+      <input id={`wp-${b.id}`} className="ol-field" value={note} maxLength={500} onChange={e => setNote(e.target.value)} placeholder="e.g. 200m after the bridge, facing traffic to Ikeja" />
+      <button type="button" className="ol-btn-2 ol-wide" onClick={locate} disabled={busy}>
+        {point ? `Location added ✓ (${point.lat.toFixed(4)}, ${point.lng.toFixed(4)})` : 'Standing at the board? Use my location'}
+      </button>
+      {err && <p role="alert" className="ol-err">{err}</p>}
+      <button type="submit" className="ol-btn ol-wide" disabled={busy} style={{ marginTop: 8 }}>{busy ? 'Sending…' : 'Send to our team'}</button>
+      <button type="button" className="ol-link ol-cancel" onClick={() => setOpen(false)} disabled={busy}>Cancel</button>
+    </form>
   );
 }
 
@@ -564,6 +621,12 @@ const CSS = `
 .ol-seg .is-on.is-available { color: #047857; } .ol-seg .is-on.is-booked { color: #B45309; } .ol-seg .is-on.is-unavailable { color: #B91C1C; }
 .ol-from { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; font-size: .8125rem; font-weight: 600; color: #334155; }
 .ol-from input { height: 40px; border-radius: 10px; border: 1px solid #CBD5E1; padding: 0 10px; font-family: inherit; font-size: .9375rem; }
+.ol-rate { margin-top: 8px; }
+.ol-rate em { font-style: normal; font-weight: 500; color: #94A3B8; }
+.ol-rate-in { position: relative; display: inline-flex; align-items: center; }
+.ol-rate-in i { position: absolute; left: 10px; font-style: normal; color: #64748B; font-size: .875rem; pointer-events: none; }
+.ol-rate-in input { width: 150px; padding-left: 24px; text-align: right; font-weight: 600; }
+.ol-place { margin-top: 14px; padding-top: 12px; border-top: 1px solid #F1F5F9; }
 .ol-from input.is-missing { border-color: #F59E0B; box-shadow: 0 0 0 3px #FEF3C7; }
 .ol-empty { font-size: .875rem; color: #64748B; }
 .ol-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: rgba(255,255,255,.96); backdrop-filter: blur(12px); border-top: 1px solid #E2E8F0; padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); }

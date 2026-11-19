@@ -428,6 +428,7 @@ function MarketplaceContent() {
         supabase
           .from('boards')
           .select('id, name, address, city, state, area, format, asking_rate, width, height, illuminated, face_count, status, photo_urls, verification_status, latitude, longitude, availability_checked_at')
+          .neq('status', 'decommissioned') // archived boards are hidden from buyers
           .order('created_at', { ascending: false }),
         supabase.from('listings').select('id, board_id, sell_price, agent_id, board_authorizations(owner_verified)').eq('status', 'active'),
       ]);

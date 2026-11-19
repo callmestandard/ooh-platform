@@ -9,14 +9,17 @@ export type OwnerChoice = { ownerId: string | null; ownerName: string };
 type Option =
   | { kind: 'account'; account: OwnerAccount }
   | { kind: 'name'; name: string }
+  | { kind: 'known'; name: string }
   | { kind: 'none' };
 
 /**
  * Type a media owner: matching owner accounts are suggested, and a name with
  * no account is kept as typed (the board stays unclaimed until they sign up).
  */
-export default function OwnerPicker({ owners, value, onChange, disabled, compact }: {
+export default function OwnerPicker({ owners, knownNames = [], value, onChange, disabled, compact }: {
   owners: OwnerAccount[];
+  /** Owner records we already have (063), suggested so the same company isn't typed twice. */
+  knownNames?: string[];
   value: OwnerChoice;
   onChange: (v: OwnerChoice) => void;
   disabled?: boolean;
@@ -37,9 +40,15 @@ export default function OwnerPicker({ owners, value, onChange, disabled, compact
     .filter(o => !q || o.label.toLowerCase().includes(q) || (o.email ?? '').toLowerCase().includes(q))
     .sort((a, b) => Number(b.label.toLowerCase().startsWith(q)) - Number(a.label.toLowerCase().startsWith(q)))
     .slice(0, 6);
-  const exact = owners.some(o => o.label.toLowerCase() === q);
+  const accountLabels = new Set(owners.map(o => o.label.toLowerCase()));
+  const known = knownNames
+    .filter(n => !accountLabels.has(n.toLowerCase()) && (!q || n.toLowerCase().includes(q) || q.includes(n.toLowerCase().split(' ')[0])))
+    .sort((a, b) => Number(b.toLowerCase().startsWith(q)) - Number(a.toLowerCase().startsWith(q)))
+    .slice(0, 6);
+  const exact = owners.some(o => o.label.toLowerCase() === q) || knownNames.some(n => n.toLowerCase() === q);
   const options: Option[] = [
     ...matches.map(account => ({ kind: 'account' as const, account })),
+    ...known.map(name => ({ kind: 'known' as const, name })),
     ...(q && !exact ? [{ kind: 'name' as const, name: text.trim() }] : []),
     ...(!q ? [{ kind: 'none' as const }] : []),
   ];
@@ -49,7 +58,7 @@ export default function OwnerPicker({ owners, value, onChange, disabled, compact
   function choose(o: Option) {
     setOpen(false);
     if (o.kind === 'account') { onChange({ ownerId: o.account.id, ownerName: '' }); setText(o.account.label); }
-    else if (o.kind === 'name') { onChange({ ownerId: null, ownerName: o.name }); setText(o.name); }
+    else if (o.kind === 'name' || o.kind === 'known') { onChange({ ownerId: null, ownerName: o.name }); setText(o.name); }
     else { onChange({ ownerId: null, ownerName: '' }); setText(''); }
   }
 
@@ -59,7 +68,9 @@ export default function OwnerPicker({ owners, value, onChange, disabled, compact
     const t = text.trim();
     if (selected && t === selected.label) return;
     const match = owners.find(o => o.label.toLowerCase() === t.toLowerCase());
+    const knownMatch = knownNames.find(n => n.toLowerCase() === t.toLowerCase());
     if (match) { onChange({ ownerId: match.id, ownerName: '' }); setText(match.label); }
+    else if (knownMatch) { onChange({ ownerId: null, ownerName: knownMatch }); setText(knownMatch); }
     else onChange({ ownerId: null, ownerName: t });
   }
 
@@ -74,7 +85,8 @@ export default function OwnerPicker({ owners, value, onChange, disabled, compact
   // No badge while the text is being changed; it shows again once a choice is made.
   const badge = text.trim() !== shown.trim() ? null : value.ownerId
     ? { text: 'Has account', bg: '#ECFDF5', color: '#065F46' }
-    : value.ownerName.trim() ? { text: 'No account yet', bg: '#FFFBEB', color: '#92400E' } : null;
+    : knownNames.some(n => n.toLowerCase() === value.ownerName.trim().toLowerCase()) ? { text: 'Existing owner', bg: '#EFF6FF', color: '#1D4ED8' }
+    : value.ownerName.trim() ? { text: knownNames.length ? 'New owner' : 'No account yet', bg: '#FFFBEB', color: '#92400E' } : null;
   const pad = compact ? '8px 10px' : '10px 12px';
 
   return (
@@ -109,10 +121,15 @@ export default function OwnerPicker({ owners, value, onChange, disabled, compact
                   <span style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>{o.account.label}</span>
                   <span style={{ display: 'block', fontSize: '0.6875rem', color: '#94A3B8', marginTop: 1 }}>Owner account{o.account.email ? ` · ${o.account.email}` : ''} · board goes on their account</span>
                 </>
+              ) : o.kind === 'known' ? (
+                <>
+                  <span style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>{o.name}</span>
+                  <span style={{ display: 'block', fontSize: '0.6875rem', color: '#94A3B8', marginTop: 1 }}>Existing owner · no account yet</span>
+                </>
               ) : o.kind === 'name' ? (
                 <>
                   <span style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>Use “{o.name}”</span>
-                  <span style={{ display: 'block', fontSize: '0.6875rem', color: '#94A3B8', marginTop: 1 }}>No account yet · the board stays unclaimed until they sign up</span>
+                  <span style={{ display: 'block', fontSize: '0.6875rem', color: '#94A3B8', marginTop: 1 }}>{knownNames.length ? 'Creates a new owner record' : 'No account yet · the board stays unclaimed until they sign up'}</span>
                 </>
               ) : (
                 <span style={{ display: 'block', fontSize: '0.8125rem', color: '#64748B' }}>Owner not known (unclaimed)</span>

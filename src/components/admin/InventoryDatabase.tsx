@@ -72,6 +72,11 @@ type Props = {
   /** Folds the other boards into keep. Resolves true when done. */
   onMerge?: (keep: InvBoard, drop: InvBoard[]) => Promise<boolean>;
   onDismissDuplicates?: (boards: InvBoard[]) => Promise<void> | void;
+  /** Media owner records (063), for "Assign owner". */
+  mediaOwners?: { id: string; name: string }[];
+  onAssignOwner?: (boards: InvBoard[], ownerId: string | null) => Promise<void> | void;
+  /** Archive (hidden from buyers, status kept for later) or restore. */
+  onArchive?: (boards: InvBoard[], archive: boolean) => Promise<void> | void;
 };
 
 // ── Options ────────────────────────────────────────────────────────────────
@@ -80,7 +85,7 @@ const STATUS_META: Record<InvStatus, { label: string; dot: string; bg: string; c
   available:      { label: 'Available',      dot: '#22C55E', bg: '#EEFBF3', color: '#166534' },
   booked:         { label: 'Booked',         dot: '#3B82F6', bg: '#EFF5FF', color: '#1E40AF' },
   unavailable:    { label: 'Unavailable',    dot: '#F59E0B', bg: '#FFF8EB', color: '#92400E' },
-  decommissioned: { label: 'Decommissioned', dot: '#A1A1AA', bg: '#F4F4F5', color: '#52525B' },
+  decommissioned: { label: 'Archived', dot: '#A1A1AA', bg: '#F4F4F5', color: '#52525B' },
 };
 const STATUSES: InvStatus[] = ['available', 'booked', 'unavailable', 'decommissioned'];
 const VERIFICATIONS: VerificationStatus[] = ['pending', 'verified', 'partner_verified'];
@@ -458,7 +463,7 @@ function DupReview({ groups, byId, keepPick, busy, onPick, onOpen, rateText, can
 // ── Main ───────────────────────────────────────────────────────────────────
 
 export default function InventoryDatabase(props: Props) {
-  const { boards, ownerOf, reachable, brandOf, onStatus, onVerification, onEditDetails, onEditPhotos, onMovePin, onDelete, guideOf, onGuideHidden, dismissedPairs, onMerge, onDismissDuplicates } = props;
+  const { boards, ownerOf, reachable, brandOf, onStatus, onVerification, onEditDetails, onEditPhotos, onMovePin, onDelete, guideOf, onGuideHidden, dismissedPairs, onMerge, onDismissDuplicates, mediaOwners, onAssignOwner, onArchive } = props;
 
   const [prefs] = useState(readPrefs);
   const [view, setView] = useState<View>(prefs.view);
@@ -472,6 +477,8 @@ export default function InventoryDatabase(props: Props) {
   const [menu, setMenu] = useState<{ kind: 'filter' | 'sort' | 'group'; anchor: HTMLElement } | null>(null);
   const [filterSection, setFilterSection] = useState<FilterKey>('status');
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [ownerMenu, setOwnerMenu] = useState<HTMLElement | null>(null);
+  const [ownerQuery, setOwnerQuery] = useState('');
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropCol, setDropCol] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -603,6 +610,29 @@ export default function InventoryDatabase(props: Props) {
       if (action.status && b.status !== 'booked' && b.status !== action.status) await onStatus(b, action.status);
       if (action.verification && verificationOf(b) !== action.verification) await onVerification(b, action.verification);
     }
+    setBulkBusy(false);
+    setSelected(new Set());
+  }
+
+  async function bulkAssign(ownerId: string | null) {
+    if (!onAssignOwner) return;
+    const targets = boards.filter(b => selectedShown.has(b.id));
+    const name = ownerId ? mediaOwners?.find(o => o.id === ownerId)?.name : null;
+    if (!window.confirm(ownerId ? `Assign ${targets.length} board${targets.length !== 1 ? 's' : ''} to ${name}?` : `Mark the owner as unknown on ${targets.length} board${targets.length !== 1 ? 's' : ''}?`)) return;
+    setOwnerMenu(null);
+    setBulkBusy(true);
+    await onAssignOwner(targets, ownerId);
+    setBulkBusy(false);
+    setSelected(new Set());
+  }
+
+  async function bulkArchive(archive: boolean) {
+    if (!onArchive) return;
+    const targets = boards.filter(b => selectedShown.has(b.id) && (archive ? b.status !== 'decommissioned' : b.status === 'decommissioned'));
+    if (!targets.length) return;
+    if (archive && !window.confirm(`Archive ${targets.length} board${targets.length !== 1 ? 's' : ''}? Buyers stop seeing them. You can restore them later.`)) return;
+    setBulkBusy(true);
+    await onArchive(targets, archive);
     setBulkBusy(false);
     setSelected(new Set());
   }
@@ -1005,6 +1035,17 @@ export default function InventoryDatabase(props: Props) {
           <button type="button" disabled={bulkBusy} onClick={() => bulk({ verification: 'pending' })}>Mark pending</button>
           <button type="button" disabled={bulkBusy} onClick={() => bulk({ status: 'available' })}>Available</button>
           <button type="button" disabled={bulkBusy} onClick={() => bulk({ status: 'unavailable' })}>Unavailable</button>
+          {onAssignOwner && (
+            <>
+              <span className="invdb-bulk-sep" />
+              <button type="button" disabled={bulkBusy} onClick={e => { setOwnerQuery(''); setOwnerMenu(ownerMenu ? null : e.currentTarget); }} data-bulk-owner>Assign owner…</button>
+            </>
+          )}
+          {onArchive && (
+            boards.some(b => selectedShown.has(b.id) && b.status === 'decommissioned')
+              ? <button type="button" disabled={bulkBusy} onClick={() => bulkArchive(false)}>Restore</button>
+              : <button type="button" disabled={bulkBusy} onClick={() => bulkArchive(true)}>Archive</button>
+          )}
           {onGuideHidden && <>
             <span className="invdb-bulk-sep" />
             <button type="button" disabled={bulkBusy} onClick={() => bulkGuide(true)}>Hide prices</button>
@@ -1014,6 +1055,20 @@ export default function InventoryDatabase(props: Props) {
           <button type="button" disabled={bulkBusy || intelBusy} onClick={() => refreshIntel([...selectedShown])}>{intelBusy ? 'Refreshing…' : 'Refresh area data'}</button>
           <button type="button" className="invdb-bulk-x" onClick={() => setSelected(new Set())} aria-label="Clear selection"><Ico d={I.close} size={14} stroke={2.2} /></button>
         </div>
+      )}
+      {ownerMenu && selectedShown.size > 0 && (
+        <Popover anchor={ownerMenu} onClose={() => setOwnerMenu(null)} width={280}>
+          <p className="invdb-menu-title">Owner for {selectedShown.size} board{selectedShown.size !== 1 ? 's' : ''}</p>
+          <input className="invdb-owner-search" value={ownerQuery} onChange={e => setOwnerQuery(e.target.value)} placeholder="Search owners" aria-label="Search owners" autoFocus />
+          <div className="invdb-owner-list">
+            {(mediaOwners ?? []).filter(o => o.name.toLowerCase().includes(ownerQuery.trim().toLowerCase())).slice(0, 40).map(o => (
+              <button key={o.id} type="button" className="invdb-menu-item" onClick={() => bulkAssign(o.id)}>{o.name}</button>
+            ))}
+            {(mediaOwners ?? []).length === 0 && <p className="invdb-owner-empty">No owner records yet. Run migration 063, or add owners on the Media Owners page.</p>}
+          </div>
+          <button type="button" className="invdb-menu-item" onClick={() => bulkAssign(null)} style={{ color: '#8A94A6' }}>Owner not known</button>
+          <a className="invdb-menu-item" href="/dashboard/admin/owners" style={{ color: '#1B4F8A', textDecoration: 'none' }}>+ New owner on the Owners page</a>
+        </Popover>
       )}
 
       {/* ── Side peek ── */}
@@ -1370,6 +1425,9 @@ const CSS = `
 .invdb-menu-item:hover:not(:disabled) { background:#F1F3F6; }
 .invdb-menu-item:disabled { opacity:.5; cursor:not-allowed; }
 .invdb-menu-check { margin-left:auto; display:flex; color:#1B4F8A; }
+.invdb-owner-search { width:100%; height:32px; border:1px solid #E4E7EC; border-radius:8px; padding:0 9px; font:inherit; font-size:13px; margin:0 0 4px; box-sizing:border-box; }
+.invdb-owner-list { max-height:240px; overflow-y:auto; border-bottom:1px solid #F0F1F4; margin-bottom:4px; padding-bottom:4px; }
+.invdb-owner-empty { font-size:12px; color:#8A94A6; margin:6px 8px; line-height:1.45; }
 .invdb-menu-note { margin-left:auto; font-size:11px; color:#8A94A6; }
 .invdb-filter { display:flex; min-height:220px; max-height:360px; }
 .invdb-filter-nav { width:128px; flex-shrink:0; border-right:1px solid #F0F1F4; padding-right:5px; display:flex; flex-direction:column; gap:1px; }

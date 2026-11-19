@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
   const { data: b } = await db.from('boards')
     .select('id, name, city, state, area, address, format, photo_urls')
-    .eq('id', id).maybeSingle();
+    .eq('id', id).neq('status', 'decommissioned').maybeSingle();
   if (!b) return { title: 'Board not found', robots: { index: false } };
 
   const format = FORMAT_LABELS[b.format] ?? 'Billboard';

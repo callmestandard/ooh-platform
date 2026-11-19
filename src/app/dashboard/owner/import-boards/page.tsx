@@ -456,6 +456,7 @@ export default function ImportBoardsPage() {
   // Admin mode: our team imports a deck or list for an owner, or as unclaimed boards.
   const [adminMode, setAdminMode] = useState(false);
   const [owners, setOwners] = useState<OwnerAccount[]>([]);
+  const [knownOwnerNames, setKnownOwnerNames] = useState<string[]>([]);
   const [adminOwner, setAdminOwner] = useState<OwnerChoice>({ ownerId: null, ownerName: '' });
   const [adminSource, setAdminSource] = useState('');
   const [adminVerification, setAdminVerification] = useState<'pending' | 'verified'>('pending');
@@ -471,6 +472,7 @@ export default function ImportBoardsPage() {
       const { data: me } = await supabase.from('profiles').select('role').eq('id', uid).maybeSingle();
       if ((me as { role?: string } | null)?.role === 'admin') {
         setAdminMode(true);
+        supabase.rpc('admin_media_owners').then(({ data, error }) => { if (!error) setKnownOwnerNames(((data ?? []) as { name: string }[]).map(o => o.name)); });
         const { data } = await supabase.from('profiles').select('id, full_name, company_name, email').eq('role', 'owner').order('company_name');
         setOwners(((data as { id: string; full_name: string | null; company_name: string | null; email: string | null }[]) || [])
           .map(o => ({ id: o.id, label: o.company_name || o.full_name || o.email || o.id, email: o.email })));
@@ -1008,7 +1010,7 @@ export default function ImportBoardsPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
             <div style={{ gridColumn: '1 / -1', fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'flex', flexDirection: 'column', gap: 4 }}>
               Owner
-              <OwnerPicker owners={owners} value={adminOwner} onChange={setAdminOwner} disabled={step > 1} compact />
+              <OwnerPicker owners={owners} knownNames={knownOwnerNames} value={adminOwner} onChange={setAdminOwner} disabled={step > 1} compact />
             </div>
             <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#475569', display: 'flex', flexDirection: 'column', gap: 4 }}>
               Source (required)

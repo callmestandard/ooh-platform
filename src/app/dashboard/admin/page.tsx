@@ -228,6 +228,9 @@ function AdminContent() {
   const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
   // Owners (by owner key, as in 053) that have a sales contact on file.
   const [salesContactKeys, setSalesContactKeys] = useState<Set<string>>(new Set());
+  // Media owner records (063) and which owner each board belongs to. Empty until 063 is run.
+  const [mediaOwners, setMediaOwners] = useState<{ id: string; name: string; reachable: boolean }[]>([]);
+  const [boardOwnerIds, setBoardOwnerIds] = useState<Record<string, string>>({});
   // The brand on each board now and when their campaign ends (migration 049).
   const [currentBrands, setCurrentBrands] = useState<Record<string, { brand: string | null; ends_on: string | null }>>({});
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
@@ -326,6 +329,7 @@ function AdminContent() {
       if (bRes.data) setBoards(await attachVisibleRates(await withBoardPrivate(bRes.data as Board[])));
       supabase.from('board_owner_names').select('board_id, owner_name').then(({ data }) =>
         setOwnerNames(Object.fromEntries(((data as { board_id: string; owner_name: string }[]) || []).map(r => [r.board_id, r.owner_name]))));
+      loadMediaOwners();
       supabase.from('owner_sales_contacts').select('owner_key, contact_phone').then(({ data }) =>
         setSalesContactKeys(new Set(((data as { owner_key: string; contact_phone: string | null }[]) || []).filter(r => r.contact_phone?.trim()).map(r => r.owner_key))));
       supabase.from('board_current_brand').select('board_id, brand, ends_on').then(({ data }) =>
@@ -524,10 +528,69 @@ function AdminContent() {
 
   async function setBoardStatus(board: Board, next: Exclude<Board['status'], 'booked'>) {
     if (board.status === next || board.status === 'booked') return;
+    // Archiving and restoring go through 063 so the board's previous status is kept.
+    if (next === 'decommissioned' || board.status === 'decommissioned') {
+      const archive = next === 'decommissioned';
+      const r = await supabase.rpc('admin_archive_boards', { p_board_ids: [board.id], p_archive: archive });
+      if (!r.error) {
+        if (!archive && next !== 'available') await supabase.from('boards').update({ status: next }).eq('id', board.id);
+        await reloadBoardStatuses([board.id]);
+        showToast(archive ? `${board.name} archived: hidden from buyers` : `${board.name} restored`);
+        return;
+      }
+      if (!r.error.message.includes('admin_archive_boards')) { showToast(`Could not update ${board.name}: ${r.error.message}`, 'error'); return; }
+    }
     const { error } = await supabase.from('boards').update({ status: next }).eq('id', board.id);
     if (error) { showToast(`Could not update ${board.name}: ${error.message}`, 'error'); return; }
     setBoards(prev => prev.map(b => b.id === board.id ? { ...b, status: next } : b));
     showToast(`${board.name} → ${next}`);
+  }
+
+  async function reloadBoardStatuses(ids: string[]) {
+    const { data } = await supabase.from('boards').select('id, status').in('id', ids);
+    const s = new Map(((data ?? []) as { id: string; status: Board['status'] }[]).map(r => [r.id, r.status]));
+    setBoards(prev => prev.map(b => (s.has(b.id) ? { ...b, status: s.get(b.id)! } : b)));
+  }
+
+  async function loadMediaOwners() {
+    const [o, m] = await Promise.all([
+      supabase.rpc('admin_media_owners'),
+      supabase.from('boards').select('id, media_owner_id').not('media_owner_id', 'is', null).limit(5000),
+    ]);
+    if (o.error || m.error) return; // 063 not run yet: owners stay as typed names
+    type Row = { id: string; name: string; reminder_email: string | null; contacts: { phone: string; email: string | null }[] };
+    setMediaOwners(((o.data ?? []) as Row[]).map(x => ({ id: x.id, name: x.name, reachable: !!x.reminder_email || x.contacts.some(c => c.phone?.trim() || c.email) })));
+    setBoardOwnerIds(Object.fromEntries(((m.data ?? []) as { id: string; media_owner_id: string }[]).map(r => [r.id, r.media_owner_id])));
+  }
+
+  async function assignOwner(list: Board[], ownerId: string | null) {
+    const { data, error } = await supabase.rpc('admin_assign_owner', { p_board_ids: list.map(b => b.id), p_owner_id: ownerId });
+    if (error) {
+      showToast(error.message.includes('admin_assign_owner') ? 'Run migration 063 in Supabase to assign owners.' : `Could not assign: ${error.message}`, 'error');
+      return;
+    }
+    const name = ownerId ? mediaOwners.find(o => o.id === ownerId)?.name ?? '' : '';
+    setOwnerNames(prev => {
+      const n = { ...prev };
+      for (const b of list) { if (name) n[b.id] = name; else delete n[b.id]; }
+      return n;
+    });
+    setBoardOwnerIds(prev => {
+      const n = { ...prev };
+      for (const b of list) { if (ownerId) n[b.id] = ownerId; else delete n[b.id]; }
+      return n;
+    });
+    showToast(ownerId ? `${data ?? list.length} board${list.length !== 1 ? 's' : ''} assigned to ${name}` : `Owner removed from ${list.length} board${list.length !== 1 ? 's' : ''}`);
+  }
+
+  async function archiveBoards(list: Board[], archive: boolean) {
+    const { data, error } = await supabase.rpc('admin_archive_boards', { p_board_ids: list.map(b => b.id), p_archive: archive });
+    if (error) {
+      showToast(error.message.includes('admin_archive_boards') ? 'Run migration 063 in Supabase to archive boards.' : `Could not ${archive ? 'archive' : 'restore'}: ${error.message}`, 'error');
+      return;
+    }
+    await reloadBoardStatuses(list.map(b => b.id));
+    showToast(`${data ?? 0} board${data === 1 ? '' : 's'} ${archive ? 'archived: hidden from buyers' : 'restored'}`);
   }
 
   function saveSettings() {
@@ -902,7 +965,7 @@ function AdminContent() {
                 { label: 'Available',      count: boards.filter(b => b.status === 'available').length,      color: '#10B981' },
                 { label: 'Booked',         count: boards.filter(b => b.status === 'booked').length,         color: '#3B82F6' },
                 { label: 'Unavailable',    count: boards.filter(b => b.status === 'unavailable').length,    color: '#F59E0B' },
-                { label: 'Decommissioned', count: boards.filter(b => b.status === 'decommissioned').length, color: '#94A3B8' },
+                { label: 'Archived', count: boards.filter(b => b.status === 'decommissioned').length, color: '#94A3B8' },
               ].map(({ label, count, color }) => {
                 const pct = boards.length > 0 ? Math.round((count / boards.length) * 100) : 0;
                 return (
@@ -980,10 +1043,12 @@ function AdminContent() {
           boards={boards}
           ownerOf={board => {
             const acct = board.owner_id ? profiles.find(p => p.id === board.owner_id) : null;
-            return { name: acct ? acct.company_name || acct.full_name : board.owner_id ? null : ownerNames[board.id] ?? null, hasAccount: !!board.owner_id };
+            const mo = boardOwnerIds[board.id] ? mediaOwners.find(o => o.id === boardOwnerIds[board.id]) : undefined;
+            return { name: acct ? acct.company_name || acct.full_name : board.owner_id ? null : mo?.name ?? ownerNames[board.id] ?? null, hasAccount: !!board.owner_id };
           }}
           reachable={board => {
             if (board.owner_id || board.contact_phone?.trim()) return true;
+            if (boardOwnerIds[board.id] && mediaOwners.find(o => o.id === boardOwnerIds[board.id])?.reachable) return true;
             const name = ownerNames[board.id];
             return !!name && salesContactKeys.has('name:' + name.trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 200));
           }}
@@ -999,6 +1064,9 @@ function AdminContent() {
           dismissedPairs={dupDismissed}
           onMerge={(keep, drop) => mergeBoards(keep as Board, drop as Board[])}
           onDismissDuplicates={list => dismissDuplicates(list as Board[])}
+          mediaOwners={mediaOwners}
+          onAssignOwner={(list, ownerId) => assignOwner(list as Board[], ownerId)}
+          onArchive={(list, archive) => archiveBoards(list as Board[], archive)}
         />
       )}
 
