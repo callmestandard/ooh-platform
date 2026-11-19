@@ -14,6 +14,12 @@ export const MVP_HANDOFF_TEXT = 'Request accepted. Our team will check with the 
 // Available filter on the marketplace.
 export const SHOW_AVAILABILITY = false;
 
+// Buyers don't see board prices (exact or guide): every board shows "Price on
+// request" and the owner quotes when a buyer sends a request. Turn this on to
+// bring back prices on the marketplace, map pins, board pages, city pages,
+// the shortlist and share links. Admin and owner dashboards always show rates.
+export const SHOW_PRICES = false;
+
 type RoleRules = {
   /** Where the role lands; hidden pages send people here. */
   home: string;

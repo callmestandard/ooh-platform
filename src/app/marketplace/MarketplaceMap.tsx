@@ -7,6 +7,7 @@ import { VerificationBadge, VERIFICATION_META, verificationOf, type Verification
 import { boardFormatLabel } from '@/lib/board-formats';
 import type { MapStyleKey } from '@/components/map/ooh-map-shared';
 import { PhotoStepper, StreetViewButton } from './BoardLook';
+import { SHOW_PRICES } from '@/lib/mvp';
 
 export type MapBoard = {
   /** The pin is rough (shared by several boards, or few decimals): don't stand Street View on it. */
@@ -213,7 +214,7 @@ export default function MarketplaceMap({
           onPinClick={id => select(id === selId ? null : id)}
           onPinHover={onHover}
           onStackClick={(ids, at) => { select(null); setStack({ ids, at }); }}
-          prices={!verificationColors}
+          prices={!verificationColors && SHOW_PRICES}
         />
 
         {open && (

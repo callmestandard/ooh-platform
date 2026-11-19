@@ -19,7 +19,7 @@ import { sinceText } from '@/lib/owner-links';
 import ShortlistTray from '@/components/shortlist/ShortlistTray';
 import Board3DMap from '@/components/map/Board3DMapLoader';
 import type { NearbyBoard } from '@/components/map/Board3DMap';
-import { SHOW_AVAILABILITY } from '@/lib/mvp';
+import { SHOW_AVAILABILITY, SHOW_PRICES } from '@/lib/mvp';
 
 type Board = {
   id: string;
@@ -87,7 +87,9 @@ export default function PublicBoardPage() {
       supabase.from('boards').select('*').eq('id', id).single(),
       supabase.from('listings').select('sell_price, agent_id, board_authorizations(owner_verified)').eq('board_id', id).eq('status', 'active').maybeSingle(),
     ]).then(async ([{ data }, { data: listing }]) => {
-      const [b, guides] = data
+      const [b, guides] = data && !SHOW_PRICES
+        ? [{ ...(data as Board), asking_rate: null }, {} as Record<string, GuidePrice>]
+        : data
         ? await Promise.all([attachVisibleRates([data as Board]).then(r => r[0]), fetchGuidePrices([(data as Board).id])])
         : [null, {} as Record<string, GuidePrice>];
       setBoard(b);
@@ -116,7 +118,7 @@ export default function PublicBoardPage() {
     });
   }, [id]);
 
-  const effectiveRate = activeListing ? activeListing.sell_price : (board?.asking_rate ?? 0);
+  const effectiveRate = !SHOW_PRICES ? 0 : activeListing ? activeListing.sell_price : (board?.asking_rate ?? 0);
   const openRequest = () => window.dispatchEvent(new Event(OPEN_REQUEST_EVENT));
 
   function shareBoard() {
@@ -189,7 +191,7 @@ export default function PublicBoardPage() {
           : 'On request'}
       </p>
       {!effectiveRate && <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: '#64748B' }}>
-        {guide ? 'From the owner’s rate card. Your quote confirms the final price.' : <>Set by the board&apos;s owner. Request it to get a quote.</>}
+        {guide ? 'From the owner’s rate card. Your quote confirms the final price.' : <>Send a request and the media owner replies with a price for your dates.</>}
       </p>}
       {fresh && <p data-fresh style={{ margin: '10px 0 0', display: 'flex', alignItems: 'center', gap: 7, fontSize: '0.8125rem', fontWeight: 600, color: '#047857' }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', flexShrink: 0 }} />{fresh}

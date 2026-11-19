@@ -15,6 +15,7 @@ import { attachGuidePrices, compactNaira, guideText, GUIDE_NOTE, type GuidePrice
 import { boardFormatLabel } from '@/lib/board-formats';
 import { dimensionsText } from '@/lib/board-verification';
 import type { MapBoard } from '../../marketplace/MarketplaceMap';
+import { SHOW_PRICES } from '@/lib/mvp';
 
 const MarketplaceMap = dynamic(() => import('../../marketplace/MarketplaceMap'), {
   ssr: false,
@@ -55,7 +56,7 @@ export default function ProposalPage() {
         .select('id, name, address, area, city, state, format, width, height, illuminated, face_count, photo_urls, verification_status, latitude, longitude')
         .in('id', prop.board_ids);
       const base = (rows ?? []) as Omit<PBoard, 'guide'>[];
-      const withGuide: PBoard[] = prop.show_prices ? await attachGuidePrices(base) : base.map(b => ({ ...b, guide: null }));
+      const withGuide: PBoard[] = prop.show_prices && SHOW_PRICES ? await attachGuidePrices(base) : base.map(b => ({ ...b, guide: null }));
       const order = new Map(prop.board_ids.map((id, i) => [id, i]));
       if (!cancelled) setBoards(withGuide.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)));
     })();

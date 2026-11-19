@@ -14,6 +14,7 @@ import SiteHeader from '@/components/public/SiteHeader';
 import WhatsAppButton from '@/components/WhatsAppButton';
 import SaveButton from '@/components/shortlist/SaveButton';
 import ShortlistTray from '@/components/shortlist/ShortlistTray';
+import { SHOW_PRICES } from '@/lib/mvp';
 
 export const revalidate = 3600;
 
@@ -87,7 +88,7 @@ async function fetchCityData(slug: string) {
     .eq('status', 'available')
     .not('city', 'is', null);
   // Exact rates are private; buyers see rounded guide ranges (migration 051).
-  const guides = await fetchGuidePrices((allCitiesRes.data || []).map(r => r.id as string), db);
+  const guides: Record<string, GuidePrice> = SHOW_PRICES ? await fetchGuidePrices((allCitiesRes.data || []).map(r => r.id as string), db) : {};
   // Find the city by its slug, so "benin-city" finds "Benin City".
   const cityName = (allCitiesRes.data || []).map(r => r.city as string).find(c => c && toSlug(c) === slug) ?? fromSlug(slug);
   const boardsRes = await db.from('boards')

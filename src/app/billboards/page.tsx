@@ -6,6 +6,7 @@ import { citySlug } from '@/lib/public-links';
 import SiteHeader from '@/components/public/SiteHeader';
 import WhatsAppButton from '@/components/WhatsAppButton';
 import ShortlistTray from '@/components/shortlist/ShortlistTray';
+import { SHOW_PRICES } from '@/lib/mvp';
 
 export const revalidate = 3600;
 
@@ -64,7 +65,7 @@ async function fetchCities(): Promise<CityRow[]> {
 
   if (!data?.length) return [];
   // Exact rates are private; ranges come from the public guide prices (migration 051).
-  const guides = await fetchGuidePrices((data as { id: string }[]).map(r => r.id), db);
+  const guides = SHOW_PRICES ? await fetchGuidePrices((data as { id: string }[]).map(r => r.id), db) : {};
 
   const map: Record<string, { state: string; count: number; lows: number[]; highs: number[]; formats: Set<string> }> = {};
   for (const row of data as { id: string; city: string; state: string | null; format: string }[]) {

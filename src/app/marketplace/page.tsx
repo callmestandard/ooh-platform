@@ -11,7 +11,7 @@ import SiteHeader from '@/components/public/SiteHeader';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 import { VerificationBadge, dimensionsText, illuminationText, locationText, verificationOf, UNKNOWN } from '@/lib/board-verification';
 import { FORMAT_GROUPS, formatGroup } from '@/lib/board-formats';
-import { MVP_MODE, SHOW_AVAILABILITY } from '@/lib/mvp';
+import { MVP_MODE, SHOW_AVAILABILITY, SHOW_PRICES } from '@/lib/mvp';
 import { boardPath } from '@/lib/public-links';
 import { displayName } from '@/lib/display-name';
 import WhatsAppButton from '@/components/WhatsAppButton';
@@ -49,6 +49,7 @@ type Board = {
 /** The price an agency actually pays: the agent's sell price when the
  * board has an active listing, otherwise the owner's own asking rate. */
 function effectiveRate(board: Board): number | null {
+  if (!SHOW_PRICES) return null;
   return board.activeListing ? board.activeListing.sell_price : (board.asking_rate || null);
 }
 
@@ -56,7 +57,7 @@ function effectiveRate(board: Board): number | null {
 function rateText(board: Board): string {
   const r = effectiveRate(board);
   if (r) return formatNaira(r);
-  return board.guide ? guideText(board.guide) : 'Request quote';
+  return board.guide ? guideText(board.guide) : 'Price on request';
 }
 
 /** True when a monthly figure (exact or guide) is shown. */
@@ -425,7 +426,8 @@ function MarketplaceContent() {
         return { ...b, activeListing: { id: l.id, sell_price: l.sell_price, badge } };
       });
 
-      setBoards(await attachGuidePrices(await attachVisibleRates(withBadges)));
+      // Prices off: no rates or guide ranges reach the page at all.
+      setBoards(SHOW_PRICES ? await attachGuidePrices(await attachVisibleRates(withBadges)) : withBadges.map(b => ({ ...b, asking_rate: null, guide: null })));
       setLoading(false);
     }
     load();
@@ -629,7 +631,7 @@ function MarketplaceContent() {
             Find a billboard{' '}<br />anywhere in Nigeria
           </h1>
           <p className="mk-hero-sub" style={{ fontSize: '1rem', color: 'rgba(255,255,255,0.6)', margin: '0 0 28px', maxWidth: 480, lineHeight: 1.6 }}>
-            Photos, locations and guide prices from the media owners. Request a board and get a quote.
+            {SHOW_PRICES ? 'Photos, locations and guide prices from the media owners. Request a board and get a quote.' : 'Photos and locations from the media owners. Request a board and the owner sends you a price.'}
           </p>
 
           {/* Search bar */}

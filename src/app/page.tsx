@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, MouseEvent as RMouseEvent } f
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getSession, getCurrentProfile } from '@/lib/auth';
-import { MVP_MODE, roleHome } from '@/lib/mvp';
+import { MVP_MODE, SHOW_PRICES, roleHome } from '@/lib/mvp';
 import { supabase } from '@/lib/supabase';
 import { boardPath, citySlug } from '@/lib/public-links';
 import { fetchGuidePrices, guideText, type GuidePrice } from '@/lib/guide-prices';
@@ -510,7 +510,7 @@ function Hero() {
             <div style={{ position: 'relative', height: 340, overflow: 'hidden' }}>
               <CityMapSVG h={340}/>
               {BOARDS_DATA.map((b, i) => (
-                <MapPin key={b.name} x={b.x} y={b.y} price={b.rate} tone={b.tone} delay={i * 0.1} pulse={i === 0}/>
+                <MapPin key={b.name} x={b.x} y={b.y} price={SHOW_PRICES ? b.rate : b.loc.split(' · ')[0]} tone={b.tone} delay={i * 0.1} pulse={i === 0}/>
               ))}
               {!MVP_MODE && <LiveTicker/>}
             </div>
@@ -546,7 +546,7 @@ function FeaturedBoard() {
       const rows = ((data ?? []) as (Omit<HeroBoard, 'photo' | 'guide'> & { photo_urls: string[] | null })[])
         .filter(b => b.photo_urls?.[0] && /^[A-Za-z0-9]/.test(displayName(b.name)));
       if (!rows.length || cancelled) return;
-      const guides = await fetchGuidePrices(rows.map(b => b.id));
+      const guides: Record<string, GuidePrice> = SHOW_PRICES ? await fetchGuidePrices(rows.map(b => b.id)) : {};
       const pick = rows.find(b => guides[b.id] && b.area) ?? rows.find(b => guides[b.id]) ?? rows[0];
       if (!cancelled) setBoard({ ...pick, photo: pick.photo_urls![0], guide: guides[pick.id] ?? null });
     })();
@@ -889,7 +889,7 @@ function Marketplace() {
               <div style={{ position: 'relative', flex: 1, minHeight: 360, overflow: 'hidden', background: 'linear-gradient(160deg,#eef1f6,#e6eaf1)' }}>
                 <CityMapSVG h={360}/>
                 {matches.map((b, i) => (
-                  <MapPin key={b.name} x={b.x} y={b.y} price={b.rate} tone={b.tone} delay={i * 0.08}/>
+                  <MapPin key={b.name} x={b.x} y={b.y} price={SHOW_PRICES ? b.rate : b.loc.split(' · ')[0]} tone={b.tone} delay={i * 0.08}/>
                 ))}
               </div>
             )}

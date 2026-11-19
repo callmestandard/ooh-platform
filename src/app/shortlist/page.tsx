@@ -19,6 +19,7 @@ import { sendBoardRequests } from '@/lib/availability-requests';
 import { track } from '@/lib/track';
 import SiteHeader from '@/components/public/SiteHeader';
 import type { MapBoard } from '../marketplace/MarketplaceMap';
+import { SHOW_PRICES } from '@/lib/mvp';
 
 const MarketplaceMap = dynamic(() => import('../marketplace/MarketplaceMap'), {
   ssr: false,
@@ -65,7 +66,8 @@ export default function ShortlistPage() {
       const { data } = await supabase.from('boards')
         .select('id, name, address, area, city, state, format, width, height, illuminated, photo_urls, verification_status, latitude, longitude')
         .in('id', want);
-      const rows = await attachGuidePrices((data ?? []) as Omit<SBoard, 'guide'>[]);
+      const base = (data ?? []) as Omit<SBoard, 'guide'>[];
+      const rows = SHOW_PRICES ? await attachGuidePrices(base) : base.map(b => ({ ...b, guide: null }));
       if (cancelled) return;
       setById(prev => {
         const next = { ...prev };
@@ -344,7 +346,7 @@ function RequestPanel({ viewer, boards }: { viewer: Viewer; boards: SBoard[] }) 
 
 // ── Share as a proposal link ────────────────────────────────────────────────
 function SharePanel({ viewer, boards }: { viewer: Viewer; boards: SBoard[] }) {
-  const [f, setF] = useState({ client: '', title: '', note: '', prices: true });
+  const [f, setF] = useState({ client: '', title: '', note: '', prices: SHOW_PRICES });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
@@ -369,7 +371,7 @@ function SharePanel({ viewer, boards }: { viewer: Viewer; boards: SBoard[] }) {
           <a href={`https://wa.me/?text=${encodeURIComponent(msg)}`} target="_blank" rel="noopener noreferrer" className="sl-btn-2">WhatsApp</a>
           <a href={link} target="_blank" rel="noopener noreferrer" className="sl-btn-2">Open</a>
         </div>
-        <button type="button" className="sl-link" style={{ marginTop: 12 }} onClick={() => { setLink(null); setF({ client: '', title: '', note: '', prices: true }); }}>Make another</button>
+        <button type="button" className="sl-link" style={{ marginTop: 12 }} onClick={() => { setLink(null); setF({ client: '', title: '', note: '', prices: SHOW_PRICES }); }}>Make another</button>
       </div>
     );
   }
@@ -403,10 +405,10 @@ function SharePanel({ viewer, boards }: { viewer: Viewer; boards: SBoard[] }) {
       <label className="sl-lbl" htmlFor="sp-note">Note to your client</label>
       <textarea id="sp-note" rows={3} maxLength={1000} value={f.note} onChange={e => setF(p => ({ ...p, note: e.target.value }))}
         placeholder="e.g. Shortlisted for the Q1 launch. All lit, high-traffic sites." className="sl-field" style={{ resize: 'vertical' }} />
-      <label className="sl-toggle">
+      {SHOW_PRICES && <label className="sl-toggle">
         <input type="checkbox" checked={f.prices} onChange={e => setF(p => ({ ...p, prices: e.target.checked }))} />
         <span><strong>Show guide prices</strong><br />Rounded monthly ranges, not exact rates.</span>
-      </label>
+      </label>}
       {error && <p role="alert" className="sl-err">{error}</p>}
       <button type="submit" disabled={saving || boards.length === 0} className="sl-btn sl-block" style={{ opacity: saving ? 0.7 : 1 }}>
         {saving ? 'Creating…' : 'Create proposal link'}
