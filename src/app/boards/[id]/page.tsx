@@ -364,7 +364,7 @@ export default function PublicBoardPage() {
               </div>
               <div className="bp-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {priceBlock}
-                <RequestLocation board={{ id: board.id, name, status: board.status }} compact />
+                <RequestLocation board={{ id: board.id, name, status: board.status, photo: photos[0] ?? null, place }} compact />
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <SaveButton boardId={board.id} name={name} variant="pill" />
                   <button type="button" onClick={shareBoard} className="bp-ghost">
