@@ -8,6 +8,8 @@
  */
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import CompareBoards from '@/components/intel/CompareBoards';
+import { trackMap } from '@/lib/map-track';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
@@ -54,6 +56,7 @@ export default function ShortlistPage() {
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<'request' | 'share'>('request');
   const [showMap, setShowMap] = useState(false);
+  const [showCompare, setShowCompare] = useState(false);
 
   // Fetch only boards we haven't loaded yet, so removing one doesn't reload the list.
   const missing = ids.filter(id => !(id in byId));
@@ -150,6 +153,12 @@ export default function ShortlistPage() {
                   {showMap ? 'Hide map' : 'Map'}
                 </button>
               )}
+              {boards.length > 1 && (
+                <button type="button" className={`sl-chip${showCompare ? ' is-on' : ''}`} onClick={() => { setShowCompare(v => !v); if (!showCompare) trackMap('compare', String(Math.min(boards.length, 20))); }} data-compare-toggle>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h7v18H3zM14 3h7v18h-7z" /></svg>
+                  {showCompare ? 'Hide comparison' : 'Compare'}
+                </button>
+              )}
               <button type="button" className="sl-chip" onClick={() => { if (confirmClear()) clearShortlist(); }}>Clear all</button>
             </div>
           )}
@@ -178,6 +187,7 @@ export default function ShortlistPage() {
                   <MarketplaceMap boards={mapBoards} onOpen={id => document.getElementById(`sl-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
                 </div>
               )}
+              {showCompare && boards.length > 1 && <CompareBoards boards={boards} />}
               {gone.length > 0 && (
                 <p className="sl-note sl-noprint">
                   {gone.length} saved board{gone.length !== 1 ? 's are' : ' is'} no longer listed.{' '}

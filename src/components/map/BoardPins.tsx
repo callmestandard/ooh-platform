@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Source, Layer, useMap, type MapMouseEvent, type GeoJSONSource } from './engine';
 import { MAP_LABEL_FONT } from './ooh-map-shared';
 
-export type BoardPin = { id: string; lng: number; lat: number; /** Short price for the pin, e.g. "₦1.2M". */ label: string; /** Dot colour (when prices are off). */ color?: string };
+export type BoardPin = { id: string; lng: number; lat: number; /** Short price for the pin, e.g. "₦1.2M". */ label: string; /** Dot colour (when prices are off). */ color?: string; /** Digital screen: drawn as a ringed dot (◉) instead of a solid one. */ digital?: boolean };
 
 type Props = {
   sourceId: string;
@@ -65,7 +65,7 @@ export default function BoardPins({ sourceId, pins, activeIds, onPinClick, onPin
   const { current: mapRef } = useMap();
   const ids = {
     cluster: `${sourceId}-clusters`, count: `${sourceId}-count`,
-    dot: `${sourceId}-dots`, dotOn: `${sourceId}-dots-on`,
+    dot: `${sourceId}-dots`, dotOn: `${sourceId}-dots-on`, core: `${sourceId}-digital`, coreOn: `${sourceId}-digital-on`,
     pill: `${sourceId}-pills`, pillOn: `${sourceId}-pills-on`,
   };
   const cb = useRef({ onPinClick, onPinHover, onStackClick });
@@ -89,7 +89,7 @@ export default function BoardPins({ sourceId, pins, activeIds, onPinClick, onPin
   useEffect(() => {
     const map = mapRef?.getMap();
     if (!map) return;
-    const pinLayers = [ids.pill, ids.pillOn, ids.dot, ids.dotOn];
+    const pinLayers = [ids.pill, ids.pillOn, ids.dot, ids.dotOn, ids.core, ids.coreOn];
     let hovered: string | null = null;
 
     function clusterClick(e: MapMouseEvent) {
@@ -150,9 +150,9 @@ export default function BoardPins({ sourceId, pins, activeIds, onPinClick, onPin
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapRef, sourceId]);
 
-  const geojson = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; label: string; color: string }>>(() => ({
+  const geojson = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point, { id: string; label: string; color: string; digital: boolean }>>(() => ({
     type: 'FeatureCollection',
-    features: pins.map(p => ({ type: 'Feature', properties: { id: p.id, label: p.label, color: p.color ?? BRAND }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] } })),
+    features: pins.map(p => ({ type: 'Feature', properties: { id: p.id, label: p.label, color: p.color ?? BRAND, digital: !!p.digital }, geometry: { type: 'Point', coordinates: [p.lng, p.lat] } })),
   }), [pins]);
 
   // Highlighted boards come from their own small source, so they show on top
@@ -193,6 +193,14 @@ export default function BoardPins({ sourceId, pins, activeIds, onPinClick, onPin
         filter={notCluster as never}
         paint={{ 'circle-color': ['get', 'color'], 'circle-radius': prices ? 6 : 7, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' }}
       />
+      {/* Digital screens: a white core makes the dot a ring (◉) */}
+      <Layer
+        id={ids.core}
+        type="circle"
+        maxzoom={prices ? PILL_ZOOM : 24}
+        filter={['all', notCluster, ['==', ['get', 'digital'], true]] as never}
+        paint={{ 'circle-color': '#fff', 'circle-radius': prices ? 2.2 : 2.6 }}
+      />
       {/* Zoomed in: price pills */}
       {prices && <Layer
         id={ids.pill}
@@ -212,6 +220,13 @@ export default function BoardPins({ sourceId, pins, activeIds, onPinClick, onPin
         type="circle"
         maxzoom={prices ? PILL_ZOOM : 24}
         paint={{ 'circle-color': INK, 'circle-radius': 9, 'circle-stroke-width': 3, 'circle-stroke-color': '#fff' }}
+      />
+      <Layer
+        id={ids.coreOn}
+        type="circle"
+        maxzoom={prices ? PILL_ZOOM : 24}
+        filter={['==', ['get', 'digital'], true] as never}
+        paint={{ 'circle-color': '#fff', 'circle-radius': 3.4 }}
       />
 
       {prices && <Layer

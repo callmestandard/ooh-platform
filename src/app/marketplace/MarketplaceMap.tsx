@@ -8,6 +8,9 @@ import { boardFormatLabel } from '@/lib/board-formats';
 import type { MapStyleKey } from '@/components/map/ooh-map-shared';
 import { PhotoStepper, StreetViewButton } from './BoardLook';
 import { SHOW_PRICES } from '@/lib/mvp';
+import IntelLayers, { POP_RAMP, type PlacesStatus } from '@/components/map/IntelLayers';
+import { LAYER_CATEGORIES, PLACE_META, intelSummary, type BoardIntel, type PlaceCategory } from '@/lib/intel';
+import { trackMap } from '@/lib/map-track';
 
 export type MapBoard = {
   /** The pin is rough (shared by several boards, or few decimals): don't stand Street View on it. */
@@ -27,6 +30,12 @@ export type MapBoard = {
   guide?: boolean;
   /** Short price on the map pin ("₦1.2M"); falls back to the rate. */
   pin?: string;
+  /** Public page of the board (for "Request pricing"). */
+  href?: string;
+  /** Digital screen (drawn as a ringed dot). */
+  digital?: boolean;
+  /** Width × height, e.g. "12m × 4m". */
+  size?: string | null;
 };
 
 export type MapView = { bounds: [number, number, number, number]; lng: number; lat: number; zoom: number };
@@ -78,6 +87,8 @@ type Props = {
   focus?: { id: string; padRight: number } | null;
   /** Space kept clear at the edges when fitting (e.g. a card row on phones). */
   fitPadding?: { top: number; bottom: number; left: number; right: number };
+  /** What is around each board (shown on the card). */
+  intel?: Map<string, BoardIntel>;
 };
 
 /** Boards near where most of them are: drops strays far from the middle. */
@@ -94,8 +105,14 @@ function coreOf(boards: MapBoard[]): MapBoard[] {
 
 export default function MarketplaceMap({
   boards, onOpen, hoveredId = null, onHover, selectedId, onSelect, onView, initialCamera,
-  fitKey, trimOutliers, cooperative = true, preview = true, explorer, verificationColors, focus, fitPadding,
+  fitKey, trimOutliers, cooperative = true, preview = true, explorer, verificationColors, focus, fitPadding, intel,
 }: Props) {
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [showPop, setShowPop] = useState(false);
+  const [showPlaces, setShowPlaces] = useState(false);
+  const [cats, setCats] = useState<PlaceCategory[]>(LAYER_CATEGORIES);
+  const [placesStatus, setPlacesStatus] = useState<{ s: PlacesStatus; n: number }>({ s: 'off', n: 0 });
+  const onPlacesStatus = useCallback((st: PlacesStatus, n: number) => setPlacesStatus({ s: st, n }), []);
   const mapRef = useRef<MapRef>(null);
   const [ready, setReady] = useState(false);
   const [ownSelected, setOwnSelected] = useState<string | null>(null);
@@ -140,7 +157,7 @@ export default function MarketplaceMap({
     if (!b) return;
     const p = map.project([b.longitude, b.latitude]);
     const { clientWidth: w, clientHeight: h } = map.getContainer();
-    const CARD_H = 350, HALF_W = 150, EDGE = 14;
+    const CARD_H = 420, HALF_W = 150, EDGE = 14;
     const dx = p.x < HALF_W + EDGE ? p.x - HALF_W - EDGE : p.x > w - HALF_W - EDGE ? p.x - (w - HALF_W - EDGE) : 0;
     const dy = p.y < CARD_H ? p.y - CARD_H : p.y > h - 40 ? p.y - (h - 40) : 0;
     if (dx || dy) map.panBy([dx, dy], { duration: 300 });
@@ -172,7 +189,7 @@ export default function MarketplaceMap({
   const pins = useMemo<BoardPin[]>(
     () => boards.map(b => ({
       id: b.id, lng: b.longitude, lat: b.latitude, label: b.pin ?? (b.perMonth ? b.rate : 'Quote'),
-      color: verificationColors ? VERIFY_PIN[verificationOf(b)] : undefined,
+      color: verificationColors ? VERIFY_PIN[verificationOf(b)] : undefined, digital: !!b.digital,
     })),
     [boards, verificationColors],
   );
@@ -206,12 +223,16 @@ export default function MarketplaceMap({
         search
         searchWidth={explorer ? 260 : 280}
         searchPlaceholder="Go to a place or street…"
+        onSearchResult={() => trackMap('map_search', 'place')}
       >
+        {explorer && (
+          <IntelLayers population={showPop} places={showPlaces} categories={cats} beforeId="marketplace-boards-clusters" onPlacesStatus={onPlacesStatus} />
+        )}
         <BoardPins
           sourceId="marketplace-boards"
           pins={pins}
           activeIds={activeIds}
-          onPinClick={id => select(id === selId ? null : id)}
+          onPinClick={id => { if (id !== selId) trackMap('board_click', 'pin', id); select(id === selId ? null : id); }}
           onPinHover={onHover}
           onStackClick={(ids, at) => { select(null); setStack({ ids, at }); }}
           prices={!verificationColors && SHOW_PRICES}
@@ -224,7 +245,17 @@ export default function MarketplaceMap({
               <div style={{ padding: '11px 13px 12px' }}>
                 <button type="button" onClick={() => onOpen(open.id)} style={{ all: 'unset', display: 'block', width: '100%', cursor: 'pointer' }} aria-label={`Open ${open.name}`}>
                   <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{open.name}</p>
-                  <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 8px' }}>{[open.area, open.city].filter(Boolean).join(', ')} · {boardFormatLabel(open.format)}</p>
+                  <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 8px' }}>{[open.area, open.city].filter(Boolean).join(', ')} · {[open.size, boardFormatLabel(open.format)].filter(Boolean).join(' · ')}</p>
+                  {(() => {
+                    const sm = intelSummary(intel?.get(open.id));
+                    if (!sm.people && !sm.places) return null;
+                    return (
+                      <div data-card-intel style={{ margin: '0 0 9px', padding: '7px 9px', borderRadius: 9, background: '#F8FAFC', display: 'grid', gap: 2 }}>
+                        {sm.people && <p style={{ margin: 0, fontSize: '0.75rem', color: '#0F172A', fontWeight: 600 }}>{sm.people}</p>}
+                        {sm.places && <p style={{ margin: 0, fontSize: '0.6875rem', color: '#64748B', lineHeight: 1.35 }}>{sm.places}</p>}
+                      </div>
+                    );
+                  })()}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <div>
                       {open.perMonth ? (
@@ -240,8 +271,14 @@ export default function MarketplaceMap({
                   </div>
                 </button>
                 <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                  <button type="button" onClick={() => onOpen(open.id)} style={{ flex: 1, padding: '8px 0', border: 'none', background: '#1B4F8A', color: '#fff', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>View board</button>
-                  {explorer && <StreetViewButton board={open} />}
+                  {open.href ? (
+                    <a href={`${open.href}?request=1`} onClick={() => trackMap('pricing_click', 'map_card', open.id)} data-request-pricing
+                      style={{ flex: 1, padding: '8px 0', border: 'none', background: '#1B4F8A', color: '#fff', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center', textDecoration: 'none' }}>Request pricing</a>
+                  ) : null}
+                  <button type="button" onClick={() => onOpen(open.id)} style={open.href
+                    ? { flex: 1, padding: '8px 0', border: '1px solid #E2E8F0', background: '#fff', color: '#0F172A', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }
+                    : { flex: 1, padding: '8px 0', border: 'none', background: '#1B4F8A', color: '#fff', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>View board</button>
+                  {explorer && !open.href && <StreetViewButton board={open} />}
                 </div>
               </div>
               <button type="button" onClick={() => select(null)} aria-label="Close" style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.94)', boxShadow: '0 1px 4px rgba(15,23,42,0.2)', cursor: 'pointer', display: 'grid', placeItems: 'center', color: '#0F172A' }}>
@@ -285,12 +322,63 @@ export default function MarketplaceMap({
       )}
 
       {explorer && (
-        <div className="ooh-style-switch" role="group" aria-label="Map style">
-          {(['light', 'satellite'] as const).map(k => (
-            <button key={k} type="button" aria-pressed={style === k} className={style === k ? 'on' : ''} onClick={() => setStyle(k)}>
-              {k === 'light' ? 'Map' : 'Satellite'}
+        <div className="ooh-map-tools">
+          <div className="ooh-tool-row">
+            <div className="ooh-style-switch" role="group" aria-label="Map style">
+              {(['light', 'satellite'] as const).map(k => (
+                <button key={k} type="button" aria-pressed={style === k} className={style === k ? 'on' : ''} onClick={() => setStyle(k)}>
+                  {k === 'light' ? 'Map' : 'Satellite'}
+                </button>
+              ))}
+            </div>
+            <button type="button" className={`ooh-layers-btn${layersOpen || showPop || showPlaces ? ' on' : ''}`} aria-expanded={layersOpen} onClick={() => setLayersOpen(o => !o)} data-layers-btn>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/></svg>
+              Layers{showPop || showPlaces ? <b>{(showPop ? 1 : 0) + (showPlaces ? 1 : 0)}</b> : null}
             </button>
-          ))}
+          </div>
+          {layersOpen && (
+            <div className="ooh-layers" role="dialog" aria-label="Map layers" data-layers-panel>
+              <p className="ooh-layers-h">Layers</p>
+              <label className="ooh-layer">
+                <span className="ooh-layer-ico" style={{ background: `linear-gradient(135deg, ${POP_RAMP[2]}, ${POP_RAMP[5]})` }} />
+                <span><b>Population</b><small>Where people live · WorldPop 2020</small></span>
+                <input type="checkbox" role="switch" checked={showPop} data-layer="population"
+                  onChange={e => { setShowPop(e.target.checked); if (e.target.checked) trackMap('layer', 'population'); }} />
+              </label>
+              <label className="ooh-layer">
+                <span className="ooh-layer-ico ooh-layer-dots"><i style={{ background: PLACE_META.mall.color }} /><i style={{ background: PLACE_META.bank.color }} /><i style={{ background: PLACE_META.restaurant.color }} /></span>
+                <span><b>Places</b><small>Malls, banks, offices… · OpenStreetMap</small></span>
+                <input type="checkbox" role="switch" checked={showPlaces} data-layer="places"
+                  onChange={e => { setShowPlaces(e.target.checked); if (e.target.checked) trackMap('layer', 'places'); }} />
+              </label>
+              {showPlaces && (
+                <div className="ooh-cats" role="group" aria-label="Kinds of place">
+                  {LAYER_CATEGORIES.map(c => {
+                    const on = cats.includes(c);
+                    return (
+                      <button key={c} type="button" aria-pressed={on} className={on ? 'on' : ''}
+                        onClick={() => { setCats(cs => (on ? cs.filter(x => x !== c) : [...cs, c])); trackMap('layer', `places_${c}`); }}>
+                        <i style={{ background: PLACE_META[c].color }} />{PLACE_META[c].many.replace(/^./, m => m.toUpperCase())}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="ooh-layers-key"><span className="ooh-key-dot" /> Static board <span className="ooh-key-dot ring" /> Digital screen</p>
+            </div>
+          )}
+          {(showPop || (showPlaces && placesStatus.s !== 'ready' && placesStatus.s !== 'off')) && (
+            <div className="ooh-legends">
+              {showPop && (
+                <div className="ooh-legend-pop" data-pop-legend>
+                  <span>Residents</span><i style={{ background: `linear-gradient(90deg, ${POP_RAMP.slice(1).join(',')})` }} /><span className="lh"><small>Low</small><small>High</small></span>
+                </div>
+              )}
+              {showPlaces && placesStatus.s === 'zoom' && <p className="ooh-hint" data-places-hint>Zoom in to see places</p>}
+              {showPlaces && placesStatus.s === 'loading' && <p className="ooh-hint">Loading places…</p>}
+              {showPlaces && placesStatus.s === 'error' && <p className="ooh-hint">Places could not load</p>}
+            </div>
+          )}
         </div>
       )}
 
@@ -299,14 +387,51 @@ export default function MarketplaceMap({
         .ooh-map-card .mapboxgl-popup-tip { border-top-color: #fff; }
         .ooh-map-card { animation: oohCardIn .16s ease-out; }
         @keyframes oohCardIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
-        .ooh-style-switch { position: absolute; left: 10px; bottom: 34px; z-index: 5; display: flex; padding: 3px; gap: 2px; background: rgba(255,255,255,.96); border-radius: 10px; box-shadow: 0 2px 10px rgba(15,23,42,.14), 0 0 0 1px rgba(15,23,42,.06); }
+        .ooh-map-tools { position: absolute; left: 10px; bottom: 34px; z-index: 5; display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 8px; font-family: 'Inter', sans-serif; }
+        .ooh-tool-row { display: flex; gap: 6px; align-items: center; }
+        .ooh-style-switch { display: flex; padding: 3px; gap: 2px; background: rgba(255,255,255,.96); border-radius: 10px; box-shadow: 0 2px 10px rgba(15,23,42,.14), 0 0 0 1px rgba(15,23,42,.06); }
+        .ooh-layers-btn { display: inline-flex; align-items: center; gap: 6px; height: 33px; padding: 0 11px; border: none; border-radius: 10px; background: rgba(255,255,255,.96); color: #0F172A; font: 600 12px/1 'Inter', sans-serif; cursor: pointer; box-shadow: 0 2px 10px rgba(15,23,42,.14), 0 0 0 1px rgba(15,23,42,.06); }
+        .ooh-layers-btn.on { color: #1B4F8A; }
+        .ooh-layers-btn b { min-width: 16px; height: 16px; border-radius: 8px; background: #1B4F8A; color: #fff; font-size: 10px; display: inline-grid; place-items: center; padding: 0 4px; }
+        .ooh-layers { width: 268px; background: #fff; border-radius: 14px; padding: 12px; box-shadow: 0 16px 40px -14px rgba(15,23,42,.35), 0 0 0 1px rgba(15,23,42,.07); animation: oohCardIn .14s ease-out; }
+        .ooh-layers-h { margin: 0 0 6px 2px; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: .05em; }
+        .ooh-layer { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-radius: 10px; cursor: pointer; }
+        .ooh-layer:hover { background: #F8FAFC; }
+        .ooh-layer > span:nth-child(2) { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .ooh-layer b { font-size: 13px; color: #0F172A; font-weight: 600; }
+        .ooh-layer small { font-size: 11px; color: #64748B; }
+        .ooh-layer-ico { width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; }
+        .ooh-layer-dots { background: #F1F5F9; display: grid; grid-template-columns: repeat(3, 6px); gap: 2px; place-content: center; }
+        .ooh-layer-dots i { width: 6px; height: 6px; border-radius: 50%; }
+        .ooh-layer input { appearance: none; width: 32px; height: 19px; border-radius: 10px; background: #CBD5E1; position: relative; cursor: pointer; transition: background .15s; flex-shrink: 0; margin: 0; }
+        .ooh-layer input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.25); transition: transform .15s; }
+        .ooh-layer input:checked { background: #1B4F8A; }
+        .ooh-layer input:checked::after { transform: translateX(13px); }
+        .ooh-layer input:focus-visible { outline: 2px solid #1B4F8A; outline-offset: 2px; }
+        .ooh-cats { display: flex; flex-wrap: wrap; gap: 5px; padding: 2px 4px 6px 44px; }
+        .ooh-cats button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #E2E8F0; background: #fff; color: #94A3B8; border-radius: 999px; padding: 4px 8px; font: 500 11px/1 'Inter', sans-serif; cursor: pointer; }
+        .ooh-cats button.on { color: #0F172A; border-color: #CBD5E1; }
+        .ooh-cats button i { width: 7px; height: 7px; border-radius: 50%; opacity: .3; }
+        .ooh-cats button.on i { opacity: 1; }
+        .ooh-layers-key { margin: 6px 4px 0; padding-top: 8px; border-top: 1px solid #F1F5F9; font-size: 11px; color: #64748B; display: flex; align-items: center; gap: 6px; }
+        .ooh-key-dot { width: 10px; height: 10px; border-radius: 50%; background: #1B4F8A; box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px rgba(15,23,42,.12); display: inline-block; }
+        .ooh-key-dot.ring { background: radial-gradient(circle, #fff 0 2.5px, #1B4F8A 3px); margin-left: 8px; }
+        .ooh-legends { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+        .ooh-legend-pop { display: grid; grid-template-columns: auto 90px; align-items: center; column-gap: 8px; padding: 6px 10px; background: rgba(255,255,255,.96); border-radius: 9px; box-shadow: 0 2px 8px rgba(15,23,42,.1), 0 0 0 1px rgba(15,23,42,.06); font: 600 11px/1 'Inter', sans-serif; color: #334155; }
+        .ooh-legend-pop i { height: 6px; border-radius: 3px; display: block; }
+        .ooh-legend-pop .lh { grid-column: 2; display: flex; justify-content: space-between; margin-top: 3px; }
+        .ooh-legend-pop small { font-size: 9.5px; font-weight: 500; color: #94A3B8; }
+        .ooh-hint { margin: 0; padding: 6px 10px; background: rgba(15,23,42,.82); color: #fff; border-radius: 9px; font: 600 11px/1.2 'Inter', sans-serif; }
         .ooh-style-switch button { border: none; background: none; font: 600 12px/1 'Inter', sans-serif; color: #475569; padding: 7px 11px; border-radius: 7px; cursor: pointer; }
         .ooh-style-switch button.on { background: #0F172A; color: #fff; }
         [data-map-explorer] .mapboxgl-ctrl-top-right { margin-top: 2px; }
         .ooh-legend { position: absolute; left: 12px; bottom: 30px; z-index: 5; display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: rgba(255,255,255,.96); border-radius: 10px; box-shadow: 0 2px 8px rgba(15,23,42,.1), 0 0 0 1px rgba(15,23,42,.06); font: 500 11px/1.2 'Inter', sans-serif; color: #475569; }
         .ooh-legend span { display: flex; align-items: center; gap: 6px; }
         .ooh-legend i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(15,23,42,.12); }
-        @media (max-width: 900px) { [data-map-explorer] .ooh-style-switch { bottom: auto; top: 58px; left: 10px; } }
+        @media (max-width: 900px) {
+          [data-map-explorer] .ooh-map-tools { bottom: auto; top: 58px; flex-direction: column; }
+          [data-map-explorer] .ooh-layers { width: min(268px, calc(100vw - 20px)); }
+        }
       `}</style>
     </div>
   );

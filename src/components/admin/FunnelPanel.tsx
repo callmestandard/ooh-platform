@@ -169,13 +169,68 @@ export default function FunnelPanel() {
             </div>
             <div className="fn-axis"><span>{f.weeks[0] ? fmtWeek(f.weeks[0].week) : ''}</span><span>this week</span></div>
           </div>
+          <MapUsage days={days} />
         </>
       )}
     </section>
   );
 }
 
+type Usage = { event: string; detail: string; visitors: number };
+
+const EVENT_LABEL: Record<string, string> = {
+  map_view: 'Opened the map', board_click: 'Clicked a board on the map', map_search: 'Searched a place on the map',
+  pricing_click: 'Pressed Request pricing on the map', compare: 'Compared shortlisted boards',
+};
+function usageLabel(u: Usage): string {
+  if (u.event === 'layer') return u.detail === 'population' ? 'Population layer' : u.detail === 'places' ? 'Places layer' : `Places layer: ${u.detail.replace('places_', '')}`;
+  if (u.event === 'filter') return `Filter: ${u.detail.replace(/_/g, ' ')}`;
+  if (u.event === 'intel_open') return u.detail === 'map_panel' ? 'Saw area details (map panel)' : 'Saw area details (board page)';
+  if (u.event === 'intel_detail') return `Opened ${u.detail === 'sources' ? 'data sources' : u.detail === 'age' ? 'age of residents' : u.detail.replace(/_/g, ' ')}`;
+  return EVENT_LABEL[u.event] ?? u.event;
+}
+
+/** Which map and area-data features visitors use (migration 062). */
+function MapUsage({ days }: { days: number }) {
+  const [rows, setRows] = useState<Usage[] | null>(null);
+  const [off, setOff] = useState(false);
+  useEffect(() => {
+    let live = true;
+    supabase.rpc('admin_map_usage', { p_days: days }).then(({ data, error }) => {
+      if (!live) return;
+      if (error) { setOff(true); return; }
+      setRows((data ?? []) as Usage[]);
+    });
+    return () => { live = false; };
+  }, [days]);
+  if (off) return null;
+  const top = Math.max(1, ...(rows ?? []).map(r => r.visitors));
+  return (
+    <div className="fn-weeks" data-map-usage>
+      <div className="fn-weeks-head"><h3>What people use on the map</h3><span>visitors · last {days} days</span></div>
+      {!rows ? <div className="fn-skel" style={{ height: 80 }} /> : rows.length === 0 ? (
+        <p className="fn-note" style={{ margin: 0 }}>No map activity recorded yet. Counting started when this went live.</p>
+      ) : (
+        <ul className="fn-usage">
+          {rows.slice(0, 12).map(r => (
+            <li key={`${r.event}:${r.detail}`}>
+              <span>{usageLabel(r)}</span>
+              <i style={{ width: `${(r.visitors / top) * 100}%` }} />
+              <b>{r.visitors}</b>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 const CSS = `
+.fn-usage { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.fn-usage li { display: grid; grid-template-columns: minmax(0, 220px) 1fr 36px; align-items: center; gap: 10px; font-size: .75rem; color: #334155; }
+.fn-usage li span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fn-usage li i { height: 8px; border-radius: 0 4px 4px 0; background: ${BAR}; opacity: .85; min-width: 2px; }
+.fn-usage li b { text-align: right; font-variant-numeric: tabular-nums; }
 .fn { background: #fff; border: 1px solid #E8EDF2; border-radius: 14px; padding: 18px 20px 20px; margin-bottom: 16px; color: #0F172A; }
 .fn-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
 .fn-head h2 { font-size: 1rem; font-weight: 700; margin: 0 0 2px; letter-spacing: -.01em; }

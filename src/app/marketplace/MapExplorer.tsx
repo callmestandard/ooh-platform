@@ -5,6 +5,8 @@ import dynamic from 'next/dynamic';
 import SaveButton from '@/components/shortlist/SaveButton';
 import BoardLook from './BoardLook';
 import type { MapBoard, MapView } from './MarketplaceMap';
+import { intelSummary, type BoardIntel } from '@/lib/intel';
+import { trackMap } from '@/lib/map-track';
 
 export const loadMap = () => import('./MarketplaceMap');
 
@@ -27,6 +29,8 @@ type Props = {
   onGrid: () => void;
   initialCamera: Camera | null;
   onCamera: (c: Camera) => void;
+  /** What is around each board, by board id. */
+  intel?: Map<string, BoardIntel>;
 };
 
 const PHONE = '(max-width: 900px)';
@@ -41,7 +45,8 @@ function usePhone() {
 const inside = (b: MapBoard, [w, s, e, n]: [number, number, number, number]) =>
   b.latitude >= s && b.latitude <= n && b.longitude >= w && b.longitude <= e;
 
-export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initialCamera, onCamera }: Props) {
+export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initialCamera, onCamera, intel }: Props) {
+  useEffect(() => { trackMap('map_view'); }, []);
   const phone = usePhone();
   const pinned = useMemo(() => boards.filter(b => Number.isFinite(b.latitude) && Number.isFinite(b.longitude)), [boards]);
   const unpinned = boards.length - pinned.length;
@@ -120,6 +125,7 @@ export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initial
           <span className="mx-name">{b.name}</span>
           <span className="mx-place">{b.place}</span>
           <span className="mx-spec">{b.spec}</span>
+          {(() => { const p = intelSummary(intel?.get(b.id)).people; return p ? <span className="mx-intel" data-list-intel>{p.replace(' residents within ', ' residents · ')}</span> : null; })()}
           <span className="mx-foot">
             {b.priceText
               ? <span className="mx-price">{b.priceText}<small> /mo{b.guide ? ' · guide' : ''}</small></span>
@@ -189,6 +195,7 @@ export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initial
           preview={!phone && !lookId}
           focus={!phone && lookId ? { id: lookId, padRight: 470 } : null}
           explorer
+          intel={intel}
           fitPadding={fitPadding}
         />
 
@@ -233,6 +240,7 @@ const CSS = `
 .mx-name { font-size: 0.875rem; font-weight: 700; color: #0F172A; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .mx-place { font-size: 0.75rem; color: #64748B; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mx-spec { font-size: 0.6875rem; color: #94A3B8; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mx-intel { font-size: 0.6875rem; color: #1B4F8A; font-weight: 600; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mx-foot { margin-top: auto; padding-top: 6px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .mx-price { font-size: 0.9375rem; font-weight: 800; color: #0F172A; letter-spacing: -0.02em; white-space: nowrap; }
 .mx-price small { font-size: 0.6875rem; font-weight: 500; color: #94A3B8; letter-spacing: 0; }

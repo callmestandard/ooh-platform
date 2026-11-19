@@ -13,7 +13,7 @@ export type FunnelEvent = 'site_visit' | 'search' | 'board_view' | 'shortlist_ad
 const KEY = 'ooh_vid';
 const sent = new Set<string>();
 
-function visitorId(): string | null {
+export function visitorId(): string | null {
   try {
     let id = localStorage.getItem(KEY);
     if (!id || !/^[A-Za-z0-9_-]{12,64}$/.test(id)) {

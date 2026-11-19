@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { MapBoard } from './MarketplaceMap';
+import AroundBoard from '@/components/intel/AroundBoard';
 import { streetViewFor, plainStreetViewUrl, placeSearchUrl, pinMapUrl, type StreetViewLinks } from '@/lib/street-view';
 
 // Loaded only when someone opens the panel (it pulls in the tile decoder).
@@ -120,6 +121,8 @@ export default function BoardLook({ board, onClose, onOpen }: { board: MapBoard;
       <div className="bl-scroll">
         <p className="bl-label">Photos of the board</p>
         <PhotoStepper photos={photos} alt={board.name} height={220} rounded={12} />
+        <p className="bl-label">Around this board</p>
+        <AroundBoard boardId={board.id} lat={board.latitude} lng={board.longitude} compactView where="map_panel" />
         <p className="bl-label">On Google</p>
         <a className="bl-google" href={sv.kind === 'search' ? sv.url : pinMapUrl(board.latitude, board.longitude)} target="_blank" rel="noopener noreferrer" data-google-sv data-sv-kind={sv.kind}
           data-road-mismatch={sv.kind === 'facing' && sv.links.roadMismatch ? '' : undefined}>
@@ -152,7 +155,7 @@ export default function BoardLook({ board, onClose, onOpen }: { board: MapBoard;
             Also show community street photos <span>(Mapillary, may be older)</span>
           </button>
         )}
-        <button type="button" className="bl-open" onClick={() => onOpen(board.id)}>View board and request a quote</button>
+        <button type="button" className="bl-open" onClick={() => onOpen(board.id)}>View board and request pricing</button>
       </div>
       <style>{`
         .bl { position: absolute; top: 12px; right: 12px; bottom: 12px; width: min(440px, calc(100% - 24px)); z-index: 8; background: #fff; border-radius: 16px; box-shadow: 0 24px 60px -18px rgba(15,23,42,.45), 0 0 0 1px rgba(15,23,42,.06); display: flex; flex-direction: column; overflow: hidden; font-family: 'Inter', -apple-system, sans-serif; animation: blIn .2s cubic-bezier(.2,.9,.3,1); }

@@ -41,3 +41,8 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# board intelligence pipeline outputs
+scripts/intel/out/
+scripts/geo/data/
+scripts/geo/out/

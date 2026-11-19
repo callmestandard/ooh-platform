@@ -20,6 +20,8 @@ import { track } from '@/lib/track';
 import ShortlistTray from '@/components/shortlist/ShortlistTray';
 import { sinceText } from '@/lib/owner-links';
 import MapExplorer, { loadMap, type ExplorerBoard } from './MapExplorer';
+import { INTEL_FILTERS, intelSummary, loadAllIntel, type BoardIntel, type IntelFilter } from '@/lib/intel';
+import { trackMap } from '@/lib/map-track';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -238,7 +240,8 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Detail Modal ───────────────────────────────────────────────────────────
 
-function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose: () => void; onRequestQuote: () => void }) {
+function BoardModal({ board, onClose, onRequestQuote, intel }: { board: Board; onClose: () => void; onRequestQuote: () => void; intel?: BoardIntel | null }) {
+  const around = intelSummary(intel);
   return (
     <div
       style={{
@@ -301,6 +304,16 @@ function BoardModal({ board, onClose, onRequestQuote }: { board: Board; onClose:
             ))}
           </div>
 
+          {(around.people || around.places) && (
+            <div data-modal-intel style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', borderRadius: 10, border: '1px solid #E8EDF2', marginBottom: 14 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B4F8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" strokeDasharray="2 3"/></svg>
+              <div style={{ minWidth: 0 }}>
+                {around.people && <p style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>{around.people}</p>}
+                {around.places && <p style={{ margin: '1px 0 0', fontSize: '0.75rem', color: '#64748B' }}>{around.places}</p>}
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
             {(SHOW_AVAILABILITY || board.status !== 'available') && <StatusBadge status={board.status} />}
             <VerificationBadge status={board.verification_status} small />
@@ -357,6 +370,9 @@ function MarketplaceContent() {
   const [areaFilter, setAreaFilter] = useState('all');
   const [kindFilter, setKindFilter] = useState<'all' | 'static' | 'digital'>('all');
   const [verifyFilter, setVerifyFilter] = useState('all');
+  const [nearFilter, setNearFilter] = useState<IntelFilter | 'all'>('all');
+  const [intel, setIntel] = useState<Map<string, BoardIntel>>(() => new Map());
+  useEffect(() => { loadAllIntel().then(setIntel); }, []);
   const [view, setView]             = useState<'grid' | 'map'>('grid');
   const [selected, setSelected]     = useState<Board | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -403,7 +419,7 @@ function MarketplaceContent() {
 
   function clearFilters() {
     setSearch(''); setStateFilter('all'); setAreaFilter('all'); setFormatFilter('all');
-    setKindFilter('all'); setVerifyFilter('all'); setStatusFilter('available'); setPriceMax(Infinity);
+    setKindFilter('all'); setVerifyFilter('all'); setStatusFilter('available'); setPriceMax(Infinity); setNearFilter('all');
   }
 
   useEffect(() => {
@@ -449,6 +465,11 @@ function MarketplaceContent() {
         if (group ? !(group.formats as readonly string[]).includes(b.format) : b.format !== formatFilter) return false;
       }
       if (kindFilter !== 'all' && DIGITAL_FORMATS.includes(b.format) !== (kindFilter === 'digital')) return false;
+      if (nearFilter !== 'all') {
+        const i = intel.get(b.id);
+        const f = INTEL_FILTERS.find(x => x.key === nearFilter);
+        if (!i || !f || !f.test(i)) return false;
+      }
       if (verifyFilter !== 'all') {
         const v = verificationOf(b);
         if (verifyFilter === 'any_verified' ? v === 'pending' : v !== verifyFilter) return false;
@@ -460,7 +481,7 @@ function MarketplaceContent() {
       }
       return true;
     });
-  }, [boards, statusFilter, stateFilter, areaFilter, formatFilter, kindFilter, verifyFilter, priceMax, search]);
+  }, [boards, statusFilter, stateFilter, areaFilter, formatFilter, kindFilter, verifyFilter, priceMax, search, nearFilter, intel]);
 
   // States come from the listings themselves, busiest first.
   const stateOptions = useMemo(() => {
@@ -501,18 +522,19 @@ function MarketplaceContent() {
       latitude: typeof b.latitude === 'number' ? b.latitude : NaN, longitude: typeof b.longitude === 'number' ? b.longitude : NaN,
       rate: rateText(b), perMonth: priced, guide: !effectiveRate(b) && !!b.guide, pin: pinText(b), pinVague: vaguePins.has(b.id),
       href: boardPath(b),
+      digital: DIGITAL_FORMATS.includes(b.format), size: b.width && b.height ? `${b.width}m × ${b.height}m` : null,
       place: [b.area, b.city].filter(Boolean).join(', ') || UNKNOWN,
       spec: [FORMAT_LABELS[b.format] ?? b.format, b.width && b.height ? `${b.width}m × ${b.height}m` : null, b.illuminated ? 'Lit' : null].filter(Boolean).join(' · '),
       priceText: priced ? rateText(b) : null,
     };
   }), [filtered, vaguePins]);
-  const filterKey = JSON.stringify([search, stateFilter, areaFilter, formatFilter, kindFilter, verifyFilter, statusFilter, priceMax === Infinity ? 0 : priceMax]);
+  const filterKey = JSON.stringify([search, stateFilter, areaFilter, formatFilter, kindFilter, verifyFilter, statusFilter, priceMax === Infinity ? 0 : priceMax, nearFilter]);
   const openBoard = useCallback((id: string) => setSelected(filtered.find(b => b.id === id) ?? null), [filtered]);
 
   const filtersActive = !!search || stateFilter !== 'all' || areaFilter !== 'all' || formatFilter !== 'all'
-    || kindFilter !== 'all' || verifyFilter !== 'all' || statusFilter !== 'available' || priceMax !== Infinity;
+    || kindFilter !== 'all' || verifyFilter !== 'all' || statusFilter !== 'available' || priceMax !== Infinity || nearFilter !== 'all';
 
-  const filterCount = [stateFilter !== 'all', areaFilter !== 'all', formatFilter !== 'all', kindFilter !== 'all', verifyFilter !== 'all', statusFilter !== 'available', priceMax !== Infinity].filter(Boolean).length;
+  const filterCount = [stateFilter !== 'all', areaFilter !== 'all', formatFilter !== 'all', kindFilter !== 'all', verifyFilter !== 'all', statusFilter !== 'available', priceMax !== Infinity, nearFilter !== 'all'].filter(Boolean).length;
 
   const availableCount = boards.filter(b => b.status === 'available').length;
 
@@ -780,6 +802,11 @@ function MarketplaceContent() {
           <select aria-label="Verification" data-filter="verification" className={`mk-select${verifyFilter !== 'all' ? ' on' : ''}`} value={verifyFilter} onChange={e => setVerifyFilter(e.target.value)}>
             {VERIFICATION_FILTERS.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
           </select>
+          <select aria-label="What's nearby" data-filter="nearby" className={`mk-select${nearFilter !== 'all' ? ' on' : ''}`} value={nearFilter}
+            onChange={e => { const v = e.target.value as IntelFilter | 'all'; setNearFilter(v); if (v !== 'all') trackMap('filter', v); }}>
+            <option value="all">Any surroundings</option>
+            {INTEL_FILTERS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+          </select>
           {/* Most rates are private in MVP ("Request quote"), so a budget filter would mislead. */}
           {!MVP_MODE && <select aria-label="Budget" className={`mk-select${priceMax !== Infinity ? ' on' : ''}`} value={priceMax === Infinity ? '' : priceMax} onChange={e => setPriceMax(e.target.value ? Number(e.target.value) : Infinity)}>
             {BUDGET_BANDS.map(b => (
@@ -939,12 +966,13 @@ function MarketplaceContent() {
           onGrid={() => changeView('grid')}
           initialCamera={camera}
           onCamera={saveCamera}
+          intel={intel}
         />
       )}
 
       {/* Board detail modal */}
       {selected && (
-        <BoardModal board={selected} onClose={() => setSelected(null)} onRequestQuote={handleQuote} />
+        <BoardModal board={selected} onClose={() => setSelected(null)} onRequestQuote={handleQuote} intel={intel.get(selected.id)} />
       )}
       {!selected && <WhatsAppButton message="Hi, I'm looking at billboards on OOH Platform and I'd like some help choosing." bottom={view === 'map' ? 40 : 20} mobileBottom={view === 'map' ? 172 : undefined} />}
       {!selected && <ShortlistTray bottom={view === 'map' ? 16 : 20} mobileBottom={view === 'map' ? 172 : undefined} />}

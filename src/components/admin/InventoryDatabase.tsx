@@ -18,6 +18,8 @@ import { boardPath } from '@/lib/public-links';
 import { displayName } from '@/lib/display-name';
 import type { MapBoard } from '@/app/marketplace/MarketplaceMap';
 import { findDuplicateGroups, type DupGroup } from '@/lib/board-duplicates';
+import { supabase } from '@/lib/supabase';
+import { intelMatchesPin } from '@/lib/intel';
 
 const MarketplaceMap = dynamic(() => import('@/app/marketplace/MarketplaceMap'), {
   ssr: false,
@@ -84,11 +86,14 @@ const STATUSES: InvStatus[] = ['available', 'booked', 'unavailable', 'decommissi
 const VERIFICATIONS: VerificationStatus[] = ['pending', 'verified', 'partner_verified'];
 const VER_DOT: Record<VerificationStatus, string> = { pending: '#A1A1AA', verified: '#2563EB', partner_verified: '#059669' };
 
-type Issue = 'photo' | 'pin' | 'pinoff' | 'rate' | 'owner' | 'contact' | 'size' | 'place' | 'pending' | 'dupes';
+type Issue = 'photo' | 'pin' | 'pinbad' | 'pinoff' | 'intel' | 'stale' | 'rate' | 'owner' | 'contact' | 'size' | 'place' | 'pending' | 'dupes';
 const ISSUES: { key: Issue; label: string; done: string; hint: string }[] = [
   { key: 'photo',   label: 'No photo',      done: 'All have photos',  hint: 'Buyers skip boards without a photo' },
   { key: 'pin',     label: 'No map pin',    done: 'All pinned',       hint: 'Not shown on the map' },
+  { key: 'pinbad',  label: 'Pin outside Nigeria', done: 'Pins inside Nigeria', hint: 'The coordinates fall outside Nigeria: probably swapped or mistyped' },
   { key: 'pinoff',  label: 'Pin may be off', done: 'Pins match roads', hint: 'The board’s name mentions a road that isn’t near its pin' },
+  { key: 'intel',   label: 'No area data', done: 'Area data for all pins', hint: 'Pinned, but residents and nearby places are not calculated yet' },
+  { key: 'stale',   label: 'Area data out of date', done: 'Area data up to date', hint: 'The pin moved after the residents and places were calculated' },
   { key: 'rate',    label: 'No rate',       done: 'All priced',       hint: 'Buyers see “Request quote”' },
   { key: 'owner',   label: 'Owner unknown', done: 'All owners known', hint: 'No owner account or name' },
   { key: 'contact', label: 'No reachable contact', done: 'All reachable', hint: 'No owner account, no phone on the board and no sales contact for its owner: a request for it can’t be passed on' },
@@ -150,6 +155,9 @@ function hasIssue(b: InvBoard, issue: Issue, ownerOf: Props['ownerOf']): boolean
   switch (issue) {
     case 'photo': return !b.photo_urls?.length;
     case 'pin': return b.latitude == null || b.longitude == null;
+    case 'pinbad': return b.latitude != null && b.longitude != null && !(b.latitude >= 4 && b.latitude <= 14 && b.longitude >= 2.6 && b.longitude <= 14.8);
+    case 'intel': return false; // needs the area data, in the component
+    case 'stale': return false;
     case 'rate': return !b.asking_rate;
     case 'owner': return !b.owner_id && !ownerOf(b).name;
     case 'size': return sizeLooksWrong(b);
@@ -475,13 +483,36 @@ export default function InventoryDatabase(props: Props) {
   const dupIds = useMemo(() => new Set(dupGroups.flatMap(g => g.ids)), [dupGroups]);
   // Pins whose board name mentions a road that isn't near the pin (board id → road the pin is on).
   const pinOff = usePinChecks(boards);
+  // Area data (migration 062): residents and places around each pinned board.
+  const [intel, setIntel] = useState<Map<string, AdminIntel> | null>(null);
+  const [intelBusy, setIntelBusy] = useState(false);
+  const [intelMsg, setIntelMsg] = useState<string | null>(null);
+  const loadIntel = useCallback(async () => {
+    const { data, error } = await supabase.from('board_intelligence').select(INTEL_COLS).limit(20000);
+    return error ? null : new Map((data as AdminIntel[]).map(r => [r.board_id, r]));
+  }, []);
+  useEffect(() => {
+    let live = true;
+    loadIntel().then(m => { if (live && m) setIntel(m); });
+    return () => { live = false; };
+  }, [loadIntel]);
+  async function refreshIntel(ids: string[] | null) {
+    setIntelBusy(true); setIntelMsg(null);
+    const { data, error } = await supabase.rpc('admin_refresh_intelligence', { p_board_ids: ids, p_city: null });
+    setIntelBusy(false);
+    setIntelMsg(error ? `Could not refresh: ${error.message}` : `Area data refreshed for ${data ?? 0} board${data === 1 ? '' : 's'}`);
+    const m = await loadIntel();
+    if (m) setIntel(m);
+  }
   const isIssue = useCallback(
     (b: InvBoard, k: Issue) => (
       k === 'dupes' ? dupIds.has(b.id)
       : k === 'pinoff' ? pinOff.has(b.id)
+      : k === 'intel' ? (!!intel && b.latitude != null && b.longitude != null && !intel.has(b.id))
+      : k === 'stale' ? (!!intel && intel.has(b.id) && !intelMatchesPin(intel.get(b.id)!, b.latitude, b.longitude))
       : k === 'contact' ? (reachable ? !reachable(b) : !b.owner_id && !b.contact_phone?.trim())
       : hasIssue(b, k, ownerOf)),
-    [dupIds, pinOff, ownerOf, reachable],
+    [dupIds, pinOff, ownerOf, reachable, intel],
   );
 
   // Remember the view, sort and grouping for this browser.
@@ -502,7 +533,7 @@ export default function InventoryDatabase(props: Props) {
 
   // Counts for the attention strip.
   const issueCounts = useMemo(() => {
-    const c = { photo: 0, pin: 0, pinoff: 0, rate: 0, owner: 0, contact: 0, size: 0, place: 0, pending: 0, dupes: 0 } as Record<Issue, number>;
+    const c = { photo: 0, pin: 0, pinbad: 0, pinoff: 0, intel: 0, stale: 0, rate: 0, owner: 0, contact: 0, size: 0, place: 0, pending: 0, dupes: 0 } as Record<Issue, number>;
     for (const b of boards) for (const { key } of ISSUES) if (isIssue(b, key)) c[key]++;
     return c;
   }, [boards, isIssue]);
@@ -738,9 +769,16 @@ export default function InventoryDatabase(props: Props) {
             </button>
           )))}
           <button type="button" className="invdb-chip-clear" onClick={clearAll}>Clear all</button>
+          {(issue === 'intel' || issue === 'stale') && shown.length > 0 && (
+            <button type="button" className="invdb-chip" disabled={intelBusy} onClick={() => refreshIntel(shown.map(b => b.id))} data-refresh-intel>
+              {intelBusy ? 'Refreshing…' : `Refresh area data for these ${shown.length}`}
+            </button>
+          )}
           <span className="invdb-chips-count">{shown.length} of {boards.length}</span>
         </div>
       )}
+
+      {intelMsg && <p className="invdb-intel-msg" role="status">{intelMsg} <button type="button" onClick={() => setIntelMsg(null)} aria-label="Dismiss">×</button></p>}
 
       {/* Menus */}
       {menu?.kind === 'sort' && (
@@ -972,6 +1010,8 @@ export default function InventoryDatabase(props: Props) {
             <button type="button" disabled={bulkBusy} onClick={() => bulkGuide(true)}>Hide prices</button>
             <button type="button" disabled={bulkBusy} onClick={() => bulkGuide(false)}>Show prices</button>
           </>}
+          <span className="invdb-bulk-sep" />
+          <button type="button" disabled={bulkBusy || intelBusy} onClick={() => refreshIntel([...selectedShown])}>{intelBusy ? 'Refreshing…' : 'Refresh area data'}</button>
           <button type="button" className="invdb-bulk-x" onClick={() => setSelected(new Set())} aria-label="Clear selection"><Ico d={I.close} size={14} stroke={2.2} /></button>
         </div>
       )}
@@ -980,6 +1020,9 @@ export default function InventoryDatabase(props: Props) {
       {peek && (
         <Peek
           b={peek}
+          intel={intel ? intel.get(peek.id) ?? null : undefined}
+          intelBusy={intelBusy}
+          onRefreshIntel={() => refreshIntel([peek.id])}
           index={peekIndex}
           total={shown.length}
           onPrev={peekIndex > 0 ? () => setPeekId(shown[peekIndex - 1].id) : undefined}
@@ -1054,6 +1097,37 @@ function usePinChecks(boards: InvBoard[]) {
 
 // ── Side peek ──────────────────────────────────────────────────────────────
 
+const INTEL_COLS = 'board_id, latitude, longitude, pop_1km, population_method, places_1km, buildings_1km, traffic_level, computed_at';
+type AdminIntel = {
+  board_id: string; latitude: number; longitude: number; pop_1km: number | null; population_method: string | null;
+  places_1km: Record<string, number> | null; buildings_1km: number | null; traffic_level: string | null; computed_at: string;
+};
+
+/** Which area figures a board has: residents, places, buildings, traffic. */
+function AreaDataCell({ b, intel, busy, onRefresh }: { b: InvBoard; intel?: AdminIntel | null; busy: boolean; onRefresh?: () => void }) {
+  if (b.latitude == null || b.longitude == null) return <span className="invdb-muted">Needs a map pin first</span>;
+  if (intel === undefined) return <span className="invdb-muted">Loading…</span>;
+  const tick = (ok: boolean, label: string) => <span className={`invdb-ad${ok ? ' ok' : ''}`}>{ok ? '✓' : '—'} {label}</span>;
+  const stale = intel ? !intelMatchesPin(intel, b.latitude, b.longitude) : false;
+  return (
+    <span className="invdb-ad-wrap" data-area-data>
+      {intel ? (
+        <>
+          {tick(intel.pop_1km != null, 'Residents')}
+          {tick(intel.places_1km != null, 'Places')}
+          {tick(intel.buildings_1km != null, 'Buildings')}
+          {tick(intel.traffic_level != null, 'Traffic')}
+          <span className="invdb-muted invdb-ad-when">
+            {stale ? 'Pin moved since · ' : intel.population_method === 'h3_r9' ? 'Rough residents (350 m cells) · ' : ''}
+            Updated {new Date(intel.computed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </span>
+        </>
+      ) : <span className="invdb-muted">Not calculated yet</span>}
+      {onRefresh && <button type="button" className="invdb-ad-btn" disabled={busy} onClick={onRefresh}>{busy ? 'Refreshing…' : 'Refresh'}</button>}
+    </span>
+  );
+}
+
 function Row({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
   return (
     <div className="invdb-prop">
@@ -1063,8 +1137,10 @@ function Row({ icon, label, children }: { icon: string; label: string; children:
   );
 }
 
-function Peek({ b, index, total, onPrev, onNext, onClose, statusCell, verCell, owner, brand, guide, onGuideHidden, onEditDetails, onEditPhotos, onMovePin, onDelete, pinOffRoad }: {
+function Peek({ b, index, total, onPrev, onNext, onClose, statusCell, verCell, owner, brand, guide, onGuideHidden, onEditDetails, onEditPhotos, onMovePin, onDelete, pinOffRoad, intel, intelBusy, onRefreshIntel }: {
   b: InvBoard; index: number; total: number; onPrev?: () => void; onNext?: () => void; onClose: () => void;
+  /** undefined while loading; null when the board has no area data. */
+  intel?: AdminIntel | null; intelBusy?: boolean; onRefreshIntel?: () => void;
   statusCell: React.ReactNode; verCell: React.ReactNode; owner: React.ReactNode;
   brand: { brand: string | null; ends_on: string | null } | undefined;
   guide?: { text: string | null; hidden: boolean };
@@ -1153,6 +1229,9 @@ function Peek({ b, index, total, onPrev, onNext, onClose, statusCell, verCell, o
                     The name mentions a road that isn’t near this pin (the pin is on {pinOffRoad}). Check it with Move.
                   </span>
                 )}
+              </Row>
+              <Row icon={I.place} label="Area data">
+                <AreaDataCell b={b} intel={intel} busy={!!intelBusy} onRefresh={onRefreshIntel} />
               </Row>
               <Row icon={I.format} label="Format">{boardFormatLabel(b.format)}</Row>
               <Row icon={I.size} label="Size">{size ?? <span className="invdb-muted">Not listed</span>}</Row>
@@ -1258,6 +1337,14 @@ const CSS = `
 .invdb-chip-clear { border:none; background:none; color:var(--mute); font-size:12.5px; font-weight:500; cursor:pointer; padding:0 6px; }
 .invdb-chip-clear:hover { color:var(--ink); }
 .invdb-chips-count { margin-left:auto; font-size:12.5px; color:var(--mute); }
+.invdb-intel-msg { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: #EFF6FF; color: #1E3A8A; font-size: 12.5px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.invdb-intel-msg button { border: none; background: none; font-size: 16px; line-height: 1; color: inherit; cursor: pointer; }
+.invdb-ad-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.invdb-ad { font-size: 12px; color: var(--mute); white-space: nowrap; }
+.invdb-ad.ok { color: #047857; font-weight: 600; }
+.invdb-ad-when { width: 100%; font-size: 11.5px; }
+.invdb-ad-btn { border: 1px solid var(--line, #E5E7EB); background: #fff; border-radius: 7px; padding: 3px 9px; font-size: 11.5px; font-weight: 600; line-height: 1.3; font-family: inherit; cursor: pointer; color: #0F172A; }
+.invdb-ad-btn:disabled { opacity: .6; cursor: default; }
 
 /* Pills and selects */
 .invdb-pill { display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 9px 0 8px; border-radius:6px; font-size:12px; font-weight:500; white-space:nowrap; }

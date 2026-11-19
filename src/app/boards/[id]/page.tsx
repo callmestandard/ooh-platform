@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { attachVisibleRates } from '@/lib/board-rates';
 import { fetchGuidePrices, guideText, type GuidePrice } from '@/lib/guide-prices';
 import RequestLocation, { OPEN_REQUEST_EVENT } from '@/components/boards/RequestLocation';
+import AroundBoard from '@/components/intel/AroundBoard';
 import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-listings';
 import { VerificationBadge, VERIFICATION_META, verificationOf, formatVerifiedDate, dimensionsText, UNKNOWN } from '@/lib/board-verification';
 import { boardIdFromParam, boardPath, citySlug } from '@/lib/public-links';
@@ -320,6 +321,12 @@ export default function PublicBoardPage() {
                 {hasPin && <p style={{ margin: '8px 2px 0', fontSize: '0.75rem', color: '#94A3B8' }}>Press <b>+ 3D view</b> to see the board drawn to its listed size on the street.</p>}
               </section>
 
+              {/* What is around it */}
+              <section aria-labelledby="bp-around">
+                <h2 id="bp-around" className="bp-h2">Around this board</h2>
+                <AroundBoard boardId={board.id} lat={hasPin ? (board.latitude as number) : null} lng={hasPin ? (board.longitude as number) : null} />
+              </section>
+
               {/* Details */}
               <section aria-labelledby="bp-details">
                 <h2 id="bp-details" className="bp-h2">About this board</h2>
@@ -340,8 +347,8 @@ export default function PublicBoardPage() {
                 <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 12 }}>
                   {[
                     ['Request it', 'Send your campaign dates. It takes a minute.'],
-                    ['Get a quote', 'The media owner replies with availability and a price. You can make an offer.'],
-                    ['We complete the booking', 'Once you agree, our team contacts you and the owner to finish it.'],
+                    ['Get a quotation', 'We check availability with the media owner and send you a quotation.'],
+                    ['Accept and we book it', 'Accept the quotation online and our team confirms the booking.'],
                   ].map(([t, d], i) => (
                     <li key={t} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                       <span style={{ flexShrink: 0, width: 26, height: 26, borderRadius: '50%', background: '#EFF6FF', color: '#1B4F8A', fontWeight: 700, fontSize: '0.8125rem', display: 'grid', placeItems: 'center' }}>{i + 1}</span>
