@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { MapBoard } from './MarketplaceMap';
+import { streetViewFor, plainStreetViewUrl, placeSearchUrl, pinMapUrl, type StreetViewLinks } from '@/lib/street-view';
 
 // Loaded only when someone opens the panel (it pulls in the tile decoder).
 const StreetLevelView = dynamic(() => import('@/components/map/StreetLevelView'), {
@@ -10,9 +11,41 @@ const StreetLevelView = dynamic(() => import('@/components/map/StreetLevelView')
   loading: () => <div style={{ height: 300, background: '#F1F5F9' }} />,
 });
 
-/** Google's documented Maps URL for the panorama nearest a point: a plain link, no API or key. */
-export function googleStreetViewUrl(lat: number, lng: number) {
-  return `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
+type SvLinks = { kind: 'facing'; links: StreetViewLinks } | { kind: 'near'; url: string } | { kind: 'search'; url: string };
+
+/**
+ * The best Google link for a board: Street View from the road facing it when
+ * the pin is precise, the plain nearest-panorama link while that loads (or if
+ * no road is found), and a Google Maps search by name when the pin is rough.
+ */
+export function useStreetViewLinks(board: MapBoard): SvLinks {
+  const [found, setFound] = useState<{ key: string; links: StreetViewLinks | null } | null>(null);
+  const hint = [board.name, board.area].filter(Boolean).join(' ');
+  const key = `${board.latitude},${board.longitude}|${hint}`;
+  useEffect(() => {
+    if (board.pinVague) return;
+    let live = true;
+    streetViewFor(board.latitude, board.longitude, hint).then(links => { if (live) setFound({ key, links }); });
+    return () => { live = false; };
+  }, [board.latitude, board.longitude, board.pinVague, hint, key]);
+  if (board.pinVague) return { kind: 'search', url: placeSearchUrl([board.name, board.area, board.city].filter(Boolean).join(', ')) };
+  if (found?.key === key && found.links) return { kind: 'facing', links: found.links };
+  return { kind: 'near', url: plainStreetViewUrl(board.latitude, board.longitude) };
+}
+
+const PIN = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>;
+const PERSON = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M9.5 21v-6l-2-1V10a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v4l-2 1v6"/></svg>;
+
+/** Compact Google button for the map card. */
+export function StreetViewButton({ board }: { board: MapBoard }) {
+  const href = board.pinVague ? placeSearchUrl([board.name, board.area, board.city].filter(Boolean).join(', ')) : pinMapUrl(board.latitude, board.longitude);
+  return (
+    <a data-street-btn href={href} target="_blank" rel="noopener noreferrer"
+      title={board.pinVague ? 'This pin is approximate: search Google Maps by name' : "Open Google Maps at the board's exact spot"}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 10px', border: '1px solid #E2E8F0', background: '#fff', color: '#0F172A', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap', textDecoration: 'none' }}>
+      {PIN}Google Maps ↗
+    </a>
+  );
 }
 
 /** Board photos you can step through: arrows, a counter, and swipe on phones. */
@@ -63,6 +96,7 @@ export function PhotoStepper({ photos, alt, height, rounded = 0 }: { photos: str
 export default function BoardLook({ board, onClose, onOpen }: { board: MapBoard; onClose: () => void; onOpen: (id: string) => void }) {
   const photos = (board.photo_urls ?? []).filter(Boolean);
   const [community, setCommunity] = useState(false);
+  const sv = useStreetViewLinks(board);
   // One listener for the panel's lifetime: re-adding it on every render could
   // drop the key press when another Escape handler re-renders the page first.
   const closeRef = useRef(onClose);
@@ -86,12 +120,29 @@ export default function BoardLook({ board, onClose, onOpen }: { board: MapBoard;
       <div className="bl-scroll">
         <p className="bl-label">Photos of the board</p>
         <PhotoStepper photos={photos} alt={board.name} height={220} rounded={12} />
-        <p className="bl-label">Street level</p>
-        <a className="bl-google" href={googleStreetViewUrl(board.latitude, board.longitude)} target="_blank" rel="noopener noreferrer" data-google-sv>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M9.5 21v-6l-2-1V10a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v4l-2 1v6"/></svg>
-          <span><b>Open in Google Street View</b><small>See the board from the road, in a new tab</small></span>
+        <p className="bl-label">On Google</p>
+        <a className="bl-google" href={sv.kind === 'search' ? sv.url : pinMapUrl(board.latitude, board.longitude)} target="_blank" rel="noopener noreferrer" data-google-sv data-sv-kind={sv.kind}
+          data-road-mismatch={sv.kind === 'facing' && sv.links.roadMismatch ? '' : undefined}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/></svg>
+          {sv.kind === 'search' ? (
+            <span><b>Find it on Google Maps</b><small>This board&apos;s pin is approximate, so we search by its name</small></span>
+          ) : (
+            <span><b>See the exact spot on Google Maps</b><small>Pinned where the board stands. Switch to satellite, or tap Street View if Google shows a photo there.</small></span>
+          )}
           <svg className="bl-ext" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg>
         </a>
+        {sv.kind !== 'search' && (
+          <p className="bl-sv">
+            {PERSON}
+            <a href={sv.kind === 'facing' ? sv.links.url : sv.url} target="_blank" rel="noopener noreferrer" data-sv-facing>
+              Street View{sv.kind === 'facing' && sv.links.road ? ` from ${sv.links.road}` : ''}, facing the board ↗
+            </a>
+            {sv.kind === 'facing' && sv.links.otherUrl && (
+              <> · <a href={sv.links.otherUrl} target="_blank" rel="noopener noreferrer" data-sv-other>other direction ↗</a></>
+            )}
+            <small>Google has Street View on some Nigerian roads only.</small>
+          </p>
+        )}
         {community ? (
           <div className="bl-street">
             <StreetLevelView key={board.id} lat={board.latitude} lng={board.longitude} height={280} showGoogle={false} />
@@ -120,6 +171,11 @@ export default function BoardLook({ board, onClose, onOpen }: { board: MapBoard;
         .bl-google span { flex: 1; display: flex; flex-direction: column; gap: 2px; }
         .bl-google b { font-size: 0.875rem; font-weight: 700; }
         .bl-google small { font-size: 0.75rem; color: #CBD5E1; }
+        .bl-sv { margin: 10px 2px 0; font-size: 0.75rem; color: #475569; line-height: 1.5; }
+        .bl-sv svg { vertical-align: -2px; margin-right: 5px; color: #64748B; }
+        .bl-sv a { color: #1B4F8A; font-weight: 600; text-decoration: none; }
+        .bl-sv a:hover { text-decoration: underline; }
+        .bl-sv small { display: block; color: #94A3B8; font-size: 0.6875rem; margin-top: 2px; }
         .bl-more { margin-top: 10px; width: 100%; padding: 9px; border: 1px dashed #CBD5E1; border-radius: 10px; background: #fff; color: #334155; font: 600 0.8125rem/1.3 'Inter', sans-serif; cursor: pointer; }
         .bl-more span { font-weight: 500; color: #94A3B8; }
         .bl-more:hover { border-color: #94A3B8; background: #F8FAFC; }

@@ -467,19 +467,37 @@ function MarketplaceContent() {
     boards.filter(b => stateFilter === 'all' || b.state === stateFilter).map(b => (b.area ?? '').trim()).filter(Boolean),
   )).sort(), [boards, stateFilter]);
 
+  // Rough pins: few decimals, or one spot shared by 3+ differently named boards
+  // (an area centre from an address lookup). Street View can't stand on those.
+  const vaguePins = useMemo(() => {
+    const names = new Map<string, Set<string>>();
+    for (const b of boards) {
+      if (typeof b.latitude !== 'number' || typeof b.longitude !== 'number') continue;
+      const k = `${b.latitude.toFixed(4)},${b.longitude.toFixed(4)}`;
+      if (!names.has(k)) names.set(k, new Set());
+      names.get(k)!.add(b.name.trim().toLowerCase());
+    }
+    const decimals = (n: number) => (String(n).split('.')[1] ?? '').length;
+    return new Set(boards.filter(b => {
+      if (typeof b.latitude !== 'number' || typeof b.longitude !== 'number') return false;
+      if (Math.min(decimals(b.latitude), decimals(b.longitude)) < 4) return true;
+      return (names.get(`${b.latitude.toFixed(4)},${b.longitude.toFixed(4)}`)?.size ?? 0) >= 3;
+    }).map(b => b.id));
+  }, [boards]);
+
   const explorerBoards: ExplorerBoard[] = useMemo(() => filtered.map(b => {
     const priced = hasPrice(b);
     return {
       id: b.id, name: displayName(b.name), area: b.area, city: b.city, format: b.format, photo_urls: b.photo_urls,
       verification_status: b.verification_status,
       latitude: typeof b.latitude === 'number' ? b.latitude : NaN, longitude: typeof b.longitude === 'number' ? b.longitude : NaN,
-      rate: rateText(b), perMonth: priced, guide: !effectiveRate(b) && !!b.guide, pin: pinText(b),
+      rate: rateText(b), perMonth: priced, guide: !effectiveRate(b) && !!b.guide, pin: pinText(b), pinVague: vaguePins.has(b.id),
       href: boardPath(b),
       place: [b.area, b.city].filter(Boolean).join(', ') || UNKNOWN,
       spec: [FORMAT_LABELS[b.format] ?? b.format, b.width && b.height ? `${b.width}m × ${b.height}m` : null, b.illuminated ? 'Lit' : null].filter(Boolean).join(' · '),
       priceText: priced ? rateText(b) : null,
     };
-  }), [filtered]);
+  }), [filtered, vaguePins]);
   const filterKey = JSON.stringify([search, stateFilter, areaFilter, formatFilter, kindFilter, verifyFilter, statusFilter, priceMax === Infinity ? 0 : priceMax]);
   const openBoard = useCallback((id: string) => setSelected(filtered.find(b => b.id === id) ?? null), [filtered]);
 

@@ -6,9 +6,11 @@ import BoardPins, { type BoardPin } from '@/components/map/BoardPins';
 import { VerificationBadge, VERIFICATION_META, verificationOf, type VerificationStatus } from '@/lib/board-verification';
 import { boardFormatLabel } from '@/lib/board-formats';
 import type { MapStyleKey } from '@/components/map/ooh-map-shared';
-import { PhotoStepper, googleStreetViewUrl } from './BoardLook';
+import { PhotoStepper, StreetViewButton } from './BoardLook';
 
 export type MapBoard = {
+  /** The pin is rough (shared by several boards, or few decimals): don't stand Street View on it. */
+  pinVague?: boolean;
   id: string;
   name: string;
   area: string | null;
@@ -238,13 +240,7 @@ export default function MarketplaceMap({
                 </button>
                 <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
                   <button type="button" onClick={() => onOpen(open.id)} style={{ flex: 1, padding: '8px 0', border: 'none', background: '#1B4F8A', color: '#fff', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>View board</button>
-                  {explorer && (
-                    <a data-street-btn href={googleStreetViewUrl(open.latitude, open.longitude)} target="_blank" rel="noopener noreferrer" title="Open Google Street View in a new tab"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 10px', border: '1px solid #E2E8F0', background: '#fff', color: '#0F172A', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', textDecoration: 'none' }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M9.5 21v-6l-2-1V10a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v4l-2 1v6"/></svg>
-                      Street View ↗
-                    </a>
-                  )}
+                  {explorer && <StreetViewButton board={open} />}
                 </div>
               </div>
               <button type="button" onClick={() => select(null)} aria-label="Close" style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.94)', boxShadow: '0 1px 4px rgba(15,23,42,0.2)', cursor: 'pointer', display: 'grid', placeItems: 'center', color: '#0F172A' }}>
