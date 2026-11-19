@@ -915,7 +915,7 @@ export default function InventoryDatabase(props: Props) {
         </div>
       ) : (
         <div className="invdb-map">
-          <MarketplaceMap boards={mapBoards} onOpen={id => setPeekId(id)} />
+          <MarketplaceMap boards={mapBoards} onOpen={id => setPeekId(id)} verificationColors />
           {shown.length > mapBoards.length && (
             <button type="button" className="invdb-map-note" onClick={() => setIssue('pin')}>
               {shown.length - mapBoards.length} {shown.length - mapBoards.length === 1 ? 'board has' : 'boards have'} no pin · Show them

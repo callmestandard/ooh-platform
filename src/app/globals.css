@@ -78,6 +78,7 @@ html, body {
 body > * { flex-shrink: 0; }
 
 body {
+  margin: 0;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 14px;
   color: var(--text-primary);

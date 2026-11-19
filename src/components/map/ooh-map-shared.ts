@@ -14,6 +14,7 @@ export const NIGERIA_CENTER = { longitude: 8.6753, latitude: 9.0820 };
 
 export const MAP_STYLES = {
   streets:   { label: 'Streets',   icon: '🗺️', url: 'mapbox://styles/mapbox/streets-v12' },
+  light:     { label: 'Light',     icon: '🗺️', url: 'mapbox://styles/mapbox/light-v11' },
   dark:      { label: 'Dark',      icon: '🌙', url: 'mapbox://styles/mapbox/dark-v11' },
   satellite: { label: 'Satellite', icon: '🛰️', url: 'mapbox://styles/mapbox/satellite-streets-v12' },
 } as const;

@@ -2,7 +2,7 @@
 
 import { forwardRef, useState } from 'react';
 import type { ComponentProps } from 'react';
-import { MapGL, Marker, Popup, NavigationControl, Source, Layer, useMap, type MapRef } from './engine';
+import { MapGL, Marker, Popup, NavigationControl, GeolocateControl, Source, Layer, useMap, type MapRef } from './engine';
 import MapSearchBar from './MapSearchBar';
 import { MAPBOX_TOKEN, MAP_STYLES, LAGOS_CENTER, type MapStyleKey } from './ooh-map-shared';
 
@@ -10,7 +10,7 @@ import { MAPBOX_TOKEN, MAP_STYLES, LAGOS_CENTER, type MapStyleKey } from './ooh-
 // (Mapbox GL JS via react-map-gl, named only in ./engine.ts) — instead of
 // each page importing a map library directly with its own copy of the style
 // URL and token constants.
-export { Marker, Popup, NavigationControl, Source, Layer };
+export { Marker, Popup, NavigationControl, GeolocateControl, Source, Layer };
 export type { MapRef };
 
 type MapProps = ComponentProps<typeof MapGL>;
@@ -23,6 +23,12 @@ type Props = Omit<MapProps, 'mapStyle' | 'mapboxAccessToken'> & {
   /** Escape hatch for a page that already computed a style URL (e.g. mid-toggle state) instead of a styleKey. */
   mapStyleUrl?: string;
   hideNavControl?: boolean;
+  /** Where the zoom buttons sit. Defaults to bottom-right. */
+  navPosition?: 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left';
+  /** Adds a "near me" button that centres the map on the visitor. */
+  geolocate?: boolean;
+  /** Width of the place search box. */
+  searchWidth?: number;
   /** Renders the shared geocoding search bar (top-left) that flies the map to the chosen place. */
   search?: boolean;
   searchPlaceholder?: string;
@@ -30,7 +36,7 @@ type Props = Omit<MapProps, 'mapStyle' | 'mapboxAccessToken'> & {
 };
 
 /** Search bar + result pin. Lives inside the map so it can fly it via useMap(). */
-function SearchControl({ placeholder, onResult }: { placeholder?: string; onResult?: (r: SearchResult) => void }) {
+function SearchControl({ placeholder, width = 280, onResult }: { placeholder?: string; width?: number; onResult?: (r: SearchResult) => void }) {
   const { current: map } = useMap();
   const [pin, setPin] = useState<SearchResult | null>(null);
 
@@ -43,7 +49,7 @@ function SearchControl({ placeholder, onResult }: { placeholder?: string; onResu
   return (
     <>
       <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 10 }}>
-        <MapSearchBar placeholder={placeholder} width={280} onResult={handleResult} />
+        <MapSearchBar placeholder={placeholder} width={width} onResult={handleResult} />
       </div>
       {pin && (
         <Marker longitude={pin.lng} latitude={pin.lat} anchor="center">
@@ -55,7 +61,7 @@ function SearchControl({ placeholder, onResult }: { placeholder?: string; onResu
 }
 
 const OOHMap = forwardRef<MapRef, Props>(function OOHMap(
-  { styleKey = 'streets', mapStyleUrl, hideNavControl, search, searchPlaceholder, onSearchResult, initialViewState, attributionControl, children, ...rest },
+  { styleKey = 'streets', mapStyleUrl, hideNavControl, navPosition = 'bottom-right', geolocate, search, searchPlaceholder, searchWidth, onSearchResult, initialViewState, attributionControl, children, ...rest },
   ref,
 ) {
   // Without a token Mapbox GL renders nothing at all — say so instead of
@@ -79,8 +85,9 @@ const OOHMap = forwardRef<MapRef, Props>(function OOHMap(
       attributionControl={attributionControl ?? true}
       {...rest}
     >
-      {!hideNavControl && <NavigationControl position="bottom-right" showCompass={false} />}
-      {search && <SearchControl placeholder={searchPlaceholder} onResult={onSearchResult} />}
+      {!hideNavControl && <NavigationControl position={navPosition} showCompass={false} />}
+      {geolocate && <GeolocateControl position={navPosition} showAccuracyCircle={false} fitBoundsOptions={{ maxZoom: 13 }} />}
+      {search && <SearchControl placeholder={searchPlaceholder} width={searchWidth} onResult={onSearchResult} />}
       {children}
     </MapGL>
   );

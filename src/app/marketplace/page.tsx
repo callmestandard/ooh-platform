@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import { attachVisibleRates } from '@/lib/board-rates';
-import { attachGuidePrices, guideText, GUIDE_NOTE, type GuidePrice } from '@/lib/guide-prices';
+import { attachGuidePrices, guideText, compactNaira, GUIDE_NOTE, type GuidePrice } from '@/lib/guide-prices';
 import RequirePlatformAuth from '@/components/layout/RequirePlatformAuth';
 import Link from 'next/link';
 import SiteHeader from '@/components/public/SiteHeader';
@@ -20,16 +19,7 @@ import SaveButton from '@/components/shortlist/SaveButton';
 import { track } from '@/lib/track';
 import ShortlistTray from '@/components/shortlist/ShortlistTray';
 import { sinceText } from '@/lib/owner-links';
-import type { MapBoard } from './MarketplaceMap';
-
-const MarketplaceMap = dynamic(() => import('./MarketplaceMap'), {
-  ssr: false,
-  loading: () => (
-    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F1F5F9' }}>
-      <div style={{ width: 24, height: 24, border: '2px solid #E2E8F0', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-    </div>
-  ),
-});
+import MapExplorer, { loadMap, type ExplorerBoard } from './MapExplorer';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -72,6 +62,20 @@ function rateText(board: Board): string {
 /** True when a monthly figure (exact or guide) is shown. */
 function hasPrice(board: Board): boolean {
   return !!effectiveRate(board) || !!board.guide;
+}
+
+/** Short price for a map pin: "₦1.2M", "~₦1.5M" for a guide range, or "Quote". */
+function pinText(board: Board): string {
+  const r = effectiveRate(board);
+  if (r) return compactNaira(r);
+  return board.guide ? `~${compactNaira((board.guide.low + board.guide.high) / 2)}` : 'Quote';
+}
+
+/** "?at=6.5244,3.3792,12.5" → the map camera a shared link points at. */
+function cameraFromUrl(): { lng: number; lat: number; zoom: number } | null {
+  const at = new URLSearchParams(window.location.search).get('at')?.split(',').map(Number);
+  if (!at || at.length !== 3 || at.some(n => !Number.isFinite(n))) return null;
+  return { lat: at[0], lng: at[1], zoom: at[2] };
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -355,6 +359,7 @@ function MarketplaceContent() {
   const [view, setView]             = useState<'grid' | 'map'>('grid');
   const [selected, setSelected]     = useState<Board | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [camera, setCamera]         = useState<{ lng: number; lat: number; zoom: number } | null>(null);
   useEffect(() => { if (selected) track('board_view', selected.id); }, [selected]);
 
   // Deep links: /marketplace?format=unipole (formats guide), ?state=Oyo and
@@ -367,14 +372,27 @@ function MarketplaceContent() {
     if (st) setStateFilter(st);
     const text = q.get('q');
     if (text) setSearch(text);
-    if (q.get('view') === 'map') setView('map');
+    if (q.get('view') === 'map') { setView('map'); setCamera(cameraFromUrl()); loadMap(); }
+  }, []);
+
+  // Keep the map position in the link (shareable, survives Back), without flooding history.
+  const cameraTimer = useRef<number | undefined>(undefined);
+  const saveCamera = useCallback((c: { lng: number; lat: number; zoom: number }) => {
+    window.clearTimeout(cameraTimer.current);
+    cameraTimer.current = window.setTimeout(() => {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get('view') !== 'map') return;
+      url.searchParams.set('at', `${c.lat.toFixed(4)},${c.lng.toFixed(4)},${c.zoom.toFixed(1)}`);
+      window.history.replaceState(null, '', url);
+    }, 400);
   }, []);
 
   function changeView(v: 'grid' | 'map') {
     setView(v);
     const url = new URL(window.location.href);
-    if (v === 'map') url.searchParams.set('view', 'map'); else url.searchParams.delete('view');
+    if (v === 'map') { url.searchParams.set('view', 'map'); loadMap(); } else { url.searchParams.delete('view'); url.searchParams.delete('at'); }
     window.history.replaceState(null, '', url);
+    window.scrollTo(0, 0);
   }
 
   function changeState(st: string) {
@@ -449,14 +467,21 @@ function MarketplaceContent() {
     boards.filter(b => stateFilter === 'all' || b.state === stateFilter).map(b => (b.area ?? '').trim()).filter(Boolean),
   )).sort(), [boards, stateFilter]);
 
-  const mapBoards: MapBoard[] = useMemo(() => filtered
-    .filter(b => typeof b.latitude === 'number' && typeof b.longitude === 'number')
-    .map(b => ({
-      id: b.id, name: b.name, area: b.area, city: b.city, format: b.format, photo_urls: b.photo_urls,
-      verification_status: b.verification_status, latitude: b.latitude as number, longitude: b.longitude as number,
-      rate: rateText(b), perMonth: hasPrice(b), guide: !effectiveRate(b) && !!b.guide,
-    })), [filtered]);
-  const unmapped = filtered.length - mapBoards.length;
+  const explorerBoards: ExplorerBoard[] = useMemo(() => filtered.map(b => {
+    const priced = hasPrice(b);
+    return {
+      id: b.id, name: displayName(b.name), area: b.area, city: b.city, format: b.format, photo_urls: b.photo_urls,
+      verification_status: b.verification_status,
+      latitude: typeof b.latitude === 'number' ? b.latitude : NaN, longitude: typeof b.longitude === 'number' ? b.longitude : NaN,
+      rate: rateText(b), perMonth: priced, guide: !effectiveRate(b) && !!b.guide, pin: pinText(b),
+      href: boardPath(b),
+      place: [b.area, b.city].filter(Boolean).join(', ') || UNKNOWN,
+      spec: [FORMAT_LABELS[b.format] ?? b.format, b.width && b.height ? `${b.width}m × ${b.height}m` : null, b.illuminated ? 'Lit' : null].filter(Boolean).join(' · '),
+      priceText: priced ? rateText(b) : null,
+    };
+  }), [filtered]);
+  const filterKey = JSON.stringify([search, stateFilter, areaFilter, formatFilter, kindFilter, verifyFilter, statusFilter, priceMax === Infinity ? 0 : priceMax]);
+  const openBoard = useCallback((id: string) => setSelected(filtered.find(b => b.id === id) ?? null), [filtered]);
 
   const filtersActive = !!search || stateFilter !== 'all' || areaFilter !== 'all' || formatFilter !== 'all'
     || kindFilter !== 'all' || verifyFilter !== 'all' || statusFilter !== 'available' || priceMax !== Infinity;
@@ -473,7 +498,7 @@ function MarketplaceContent() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', flexShrink: 0, background: '#F8FAFC', fontFamily: "'Inter', -apple-system, sans-serif" }}>
+    <div className={view === 'map' ? 'mk-root mk-root-map' : 'mk-root'} style={{ minHeight: '100vh', flexShrink: 0, background: '#F8FAFC', fontFamily: "'Inter', -apple-system, sans-serif" }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes modalIn { from { opacity:0; transform:translateY(12px) scale(0.97); } to { opacity:1; transform:none; } }
@@ -522,6 +547,15 @@ function MarketplaceContent() {
         .bc-price-sub { font-size: 0.6875rem; color: #94A3B8; margin: 1px 0 0; }
         .bc-go { font-size: 0.8125rem; font-weight: 600; color: #1B4F8A; white-space: nowrap; }
         .mk-cities { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+        .mk-root-map { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+        .mk-root-map .mk-body { max-width: none !important; width: 100%; box-sizing: border-box; padding: 10px 16px 0 !important; flex-shrink: 0; background: #fff; }
+        .mk-root-map .mk-toolbar { margin-bottom: 8px !important; }
+        .mk-root-map .mk-filters { margin-bottom: 10px !important; box-shadow: none !important; border: none !important; padding: 0 !important; background: none !important; }
+        .mk-search-inline { position: relative; flex: 1 1 220px; max-width: 300px; }
+        .mk-search-inline svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94A3B8; pointer-events: none; }
+        .mk-search-inline input { width: 100%; box-sizing: border-box; padding: 7px 10px 7px 32px; border-radius: 8px; border: 1px solid #E2E8F0; font: inherit; font-size: 0.8125rem; color: #0F172A; outline: none; background: #fff; }
+        .mk-search-inline input:focus { border-color: #1B4F8A; box-shadow: 0 0 0 3px rgba(27,79,138,0.1); }
+        .mk-search-inline input.on { border-color: #1B4F8A; background: #EFF6FF; }
         @media (max-width: 640px) {
           .mk-hero { padding: 22px 16px 18px !important; }
           .mk-hero h1 { font-size: 1.5rem !important; margin-bottom: 14px !important; }
@@ -536,6 +570,9 @@ function MarketplaceContent() {
           .mk-filters.open { display: flex !important; }
           .mk-filters .mk-select { flex: 1 1 calc(50% - 4px); min-width: 0; }
           .mk-map { height: 64vh; }
+          .mk-root-map .mk-body { padding: 10px 12px 0 !important; }
+          .mk-root-map .mk-filters.open { padding-bottom: 10px !important; }
+          .mk-search-inline { flex-basis: 100%; max-width: none; }
           .mk-grid { grid-template-columns: 1fr; gap: 10px; }
           .bc { display: flex; border-radius: 14px; }
           .bc-photo { width: 116px; height: auto; min-height: 116px; flex-shrink: 0; }
@@ -554,8 +591,8 @@ function MarketplaceContent() {
       {/* ── Navbar ── */}
       <SiteHeader active="boards" />
 
-      {/* ── Hero ── */}
-      <div style={{
+      {/* ── Hero (grid only: the map is a full-screen tool) ── */}
+      {view === 'grid' && <div style={{
         background: 'linear-gradient(135deg, #0F172A 0%, #1B4F8A 100%)',
         padding: '52px 24px 40px',
       }} className="mk-hero">
@@ -617,7 +654,7 @@ function MarketplaceContent() {
             ))}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* ── Body ── */}
       <div className="mk-body" style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 24px' }}>
@@ -642,7 +679,7 @@ function MarketplaceContent() {
         </div>}
 
         {/* Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
+        <div className="mk-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
             <p data-result-count style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#0F172A', margin: 0 }}>
               {loading ? 'Loading...' : `${filtered.length} board${filtered.length !== 1 ? 's' : ''}`}
@@ -667,7 +704,7 @@ function MarketplaceContent() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
               Grid
             </button>
-            <button role="tab" aria-selected={view === 'map'} className={view === 'map' ? 'on' : ''} onClick={() => changeView('map')} data-view="map">
+            <button role="tab" aria-selected={view === 'map'} className={view === 'map' ? 'on' : ''} onClick={() => changeView('map')} onPointerEnter={() => loadMap()} onFocus={() => loadMap()} onTouchStart={() => loadMap()} data-view="map">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
               Map
             </button>
@@ -681,6 +718,12 @@ function MarketplaceContent() {
           background: '#fff', border: '1px solid #E8EDF2', borderRadius: 14, padding: 10,
           boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
         }}>
+          {view === 'map' && (
+            <div className="mk-search-inline">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="search" aria-label="Search boards" placeholder="Search boards by name, area or road" value={search} onChange={e => setSearch(e.target.value)} className={search ? 'on' : ''} />
+            </div>
+          )}
           {SHOW_AVAILABILITY && <div className="mk-seg" aria-label="Availability">
             {(['available', 'all'] as const).map(st => (
               <button key={st} className={statusFilter === st ? 'on' : ''} onClick={() => setStatusFilter(st)}>
@@ -764,23 +807,6 @@ function MarketplaceContent() {
           </div>
         )}
 
-        {/* Map */}
-        {!loading && filtered.length > 0 && view === 'map' && (
-          <div data-marketplace-map>
-            <div className="mk-map" style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid #E8EDF2', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', background: '#F1F5F9' }}>
-              <MarketplaceMap boards={mapBoards} onOpen={id => setSelected(filtered.find(b => b.id === id) ?? null)} />
-            </div>
-            {unmapped > 0 && (
-              <p style={{ fontSize: '0.8125rem', color: '#64748B', margin: '12px 2px 0' }}>
-                {unmapped} board{unmapped !== 1 ? 's' : ''} {unmapped !== 1 ? "don't" : "doesn't"} have a map location yet.{' '}
-                <button onClick={() => changeView('grid')} style={{ background: 'none', border: 'none', padding: 0, color: '#1B4F8A', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit' }}>
-                  See all in the grid →
-                </button>
-              </p>
-            )}
-          </div>
-        )}
-
         {/* Grid */}
         {!loading && filtered.length > 0 && view === 'grid' && (
           <div className="mk-grid">
@@ -829,7 +855,7 @@ function MarketplaceContent() {
         )}
 
         {/* Footer CTA */}
-        {!loading && (
+        {!loading && view === 'grid' && (
           <div id="how" style={{
             marginTop: 60, background: '#0F172A', borderRadius: 20,
             padding: '40px 32px', textAlign: 'center',
@@ -878,12 +904,24 @@ function MarketplaceContent() {
         )}
       </div>
 
+      {/* Map explorer: list + map filling the rest of the screen */}
+      {!loading && filtered.length > 0 && view === 'map' && (
+        <MapExplorer
+          boards={explorerBoards}
+          filterKey={filterKey}
+          onOpen={openBoard}
+          onGrid={() => changeView('grid')}
+          initialCamera={camera}
+          onCamera={saveCamera}
+        />
+      )}
+
       {/* Board detail modal */}
       {selected && (
         <BoardModal board={selected} onClose={() => setSelected(null)} onRequestQuote={handleQuote} />
       )}
-      {!selected && <WhatsAppButton message="Hi, I'm looking at billboards on OOH Platform and I'd like some help choosing." />}
-      {!selected && <ShortlistTray />}
+      {!selected && <WhatsAppButton message="Hi, I'm looking at billboards on OOH Platform and I'd like some help choosing." bottom={view === 'map' ? 40 : 20} mobileBottom={view === 'map' ? 172 : undefined} />}
+      {!selected && <ShortlistTray bottom={view === 'map' ? 16 : 20} mobileBottom={view === 'map' ? 172 : undefined} />}
     </div>
   );
 }
