@@ -1,7 +1,7 @@
 // Billboard pricing questions buyers ask first. Shared by the homepage and the
 // city pages (which also publish them to Google as FAQ data).
-// Prices are set by each board's media owner; the ranges below are a rough
-// guide drawn from boards listed on the platform, never one board's rate.
+// No price figures here: prices aren't shown to buyers (SHOW_PRICES), and any
+// figure would have to be backed by confirmed, current rates.
 
 export type Faq = { q: string; a: string };
 
@@ -10,27 +10,27 @@ export function pricingFaqs(city?: string): Faq[] {
   return [
     {
       q: `How much does a billboard cost ${where}?`,
-      a: `Every board's price is set by its media owner. It depends on the city, the road, the size and the format. As a rough guide from boards listed with us: billboards and unipoles in cities like Ibadan, Port Harcourt, Kano or Enugu usually start from about ₦400,000 to ₦850,000 a month. Prime roads and LED screens in Lagos and Abuja often cost ₦2 million to ₦7 million a month. To get the exact price for your dates, request the board and the owner will send you a quote.`,
+      a: `It depends on the board: the city, the road, the size, the format (a printed board or a digital screen) and how long you book. Rates also change during the year. Send a request with your dates and our team checks availability with the media owner and sends you a written quotation. Requesting is free and doesn't commit you to anything.`,
     },
     {
-      q: 'What is a guide price?',
-      a: 'Where we have the owner’s rate card, the board shows a guide range, such as ₦1.3M–1.7M a month. It tells you roughly what the board costs before you ask. The final price depends on your dates, how long you book and how many boards you take, so the owner confirms it in their quote. Boards without a guide show “Request quote”: send your dates and the owner replies with availability and a price.',
+      q: 'Why don’t you show prices on the site?',
+      a: 'Because a price is only reliable once the board is confirmed free for your dates. Rather than show a figure that might be out of date, we check with the media owner first and give you an exact quotation for your dates, with everything it includes.',
     },
     {
       q: 'What other costs should I plan for?',
-      a: 'Besides the monthly rate, plan for: printing the flex or vinyl (or making the video file for an LED screen); installation, also called flighting; and approval of your artwork by ARCON, the Advertising Regulatory Council of Nigeria (formerly APCON), which every outdoor ad needs. Food, drink and drug ads may also need NAFDAC approval. Some states charge signage permits or levies, such as LASAA in Lagos. Owners often include some of these in their quote, so ask the owner what their price covers. VAT may also apply.',
+      a: 'Besides the space itself, plan for: printing the flex or vinyl (or making the video file for a digital screen); installation, also called flighting; and approval of your artwork by ARCON, the Advertising Regulatory Council of Nigeria (formerly APCON), which every outdoor ad needs. Food, drink and drug ads may also need NAFDAC approval. Some states charge signage permits or levies, such as LASAA in Lagos. VAT may also apply. Your quotation shows which of these are included.',
     },
     {
       q: 'Can I negotiate the price?',
-      a: "Yes. When the owner sends a quote, you can accept it or reply with your own offer in the same conversation, until you both agree.",
+      a: 'Yes. If a quotation doesn’t work for you, tell us your budget or what you’d like to change (dates, length, number of boards) and we’ll see what the media owner can do.',
     },
     {
       q: 'Who owns the boards, and who do I pay?',
-      a: "The boards are listed by the media owners who own them. We work directly with the owners, and each listing shows whether and when it was last verified. Once you accept a quote, our team confirms with the owner and contacts you to complete the booking and payment. Nothing is booked until the owner confirms.",
+      a: 'The boards belong to media owners across Nigeria. We check availability with the owner, send you the quotation, and once you accept it we confirm the booking with the owner. You pay as set out in your quotation and invoice, and only into an account our team has confirmed to you. Nothing is booked until we confirm it.',
     },
     {
       q: 'How long can I book a board for?',
-      a: 'Most boards are booked by the month. If you need a shorter or longer run, put your dates in the request and the owner will tell you what they can do.',
+      a: 'Most boards are booked by the month. If you need a shorter or longer run, put your dates in the request and we’ll tell you what’s possible.',
     },
   ];
 }

@@ -13,6 +13,7 @@ import { displayName } from '@/lib/display-name';
 import PricingFaqList, { pricingFaqs } from '@/components/PricingFaq';
 import SiteHeader, { OOHLogo } from '@/components/public/SiteHeader';
 import WhatsAppButton from '@/components/WhatsAppButton';
+import { teamWhatsAppLink } from '@/lib/public-links';
 
 /* ═══════════════════════════════════════════════════════════
    DATA
@@ -63,16 +64,16 @@ const MVP_ROLES = {
     label: 'Buyers',
     steps: [
       { ico: 'search', n: '01', title: 'Find the right locations', body: 'Browse billboards by city and area, with photos, size, format and how recently each listing was verified.', link: 'Find a board', href: '/marketplace' },
-      { ico: 'msg', n: '02', title: 'Ask for availability and a price', body: 'Pick your dates and send an enquiry. We ask the media owner whether the board is free and what it costs, and you can negotiate in one conversation.', link: 'Create a buyer account', href: '/signup?role=agency' },
-      { ico: 'shield', n: '03', title: 'We confirm the booking with you', body: 'Once you accept a quote, our team confirms with the owner and contacts you to finalise the booking. Nothing is booked until the owner confirms.', link: 'Get started', href: '/signup?role=agency' },
+      { ico: 'msg', n: '02', title: 'Get a quotation', body: 'Pick your dates and send an enquiry. We check with the media owner that the board is free, then send you a written quotation for your dates.', link: 'Create a buyer account', href: '/signup?role=agency' },
+      { ico: 'shield', n: '03', title: 'We confirm the booking with you', body: 'Accept the quotation online and our team confirms the booking with the owner. Nothing is booked until we confirm it.', link: 'Get started', href: '/signup?role=agency' },
     ],
   },
   owners: {
     label: 'Media Owners',
     steps: [
       { ico: 'pin', n: '01', title: 'List your locations', body: 'Add your boards with location, size, photos and format — or import your whole inventory from a spreadsheet.', link: 'List your locations', href: '/signup?role=owner' },
-      { ico: 'msg', n: '02', title: 'Answer real buyer requests', body: 'Buyers request specific boards for specific dates. Reply available with a quote, or not available — in a click.', link: 'Create an owner account', href: '/signup?role=owner' },
-      { ico: 'trend', n: '03', title: 'Agree terms, we handle the rest', body: 'Negotiate in one thread. When a deal is agreed, our team works with you and the buyer to complete the booking.', link: 'Get started', href: '/signup?role=owner' },
+      { ico: 'msg', n: '02', title: 'Answer real buyer requests', body: 'Buyers request specific boards for specific dates. Tell us whether each board is free and at what rate, in a click. Your rate stays private to our team.', link: 'Create an owner account', href: '/signup?role=owner' },
+      { ico: 'trend', n: '03', title: 'We handle the buyer', body: 'Our team quotes the buyer and, once they accept, confirms the booking with you and arranges the campaign.', link: 'Get started', href: '/signup?role=owner' },
     ],
   },
 };
@@ -399,7 +400,7 @@ function Hero() {
           {/* Subhead */}
           <p style={{ marginTop: 22, fontSize: 19, color: '#475569', maxWidth: 480, lineHeight: 1.55 }}>
             {MVP_MODE
-              ? 'See photos, locations and guide prices. Send an enquiry for the boards you want, and our team checks with the owner and confirms the booking with you.'
+              ? 'See photos and locations. Send an enquiry for the boards you want: our team checks availability with the owner, sends you a quotation and confirms the booking with you.'
               : 'Billboard owners list space. Agencies plan and book campaigns. Brands track results in real time. One platform — the whole transaction.'}
           </p>
 
@@ -683,7 +684,7 @@ function HowItWorks() {
         <div ref={ref} className={`lp-section-head${inView ? ' lp-in' : ''}`}>
           <span className="lp-eyebrow">How it works</span>
           <h2>{MVP_MODE ? 'From search to booking, in one place' : 'Built for everyone in OOH'}</h2>
-          <p>{MVP_MODE ? 'Buyers find locations and send enquiries. Media owners reply with availability and a price. Our team confirms each booking with the owner.' : 'Whether you own billboards, buy media space, or approve campaign spend — OOH has a workspace built for you.'}</p>
+          <p>{MVP_MODE ? 'Buyers find locations and send enquiries. We check availability with the media owner and send a quotation. Once it is accepted, our team confirms the booking with the owner.' : 'Whether you own billboards, buy media space, or approve campaign spend — OOH has a workspace built for you.'}</p>
         </div>
 
         {/* Tabs */}
@@ -1264,7 +1265,7 @@ function FinalCTA() {
             </h2>
 
             <p style={{ color: 'rgba(255,255,255,.65)', fontSize: 18, maxWidth: 520, margin: '0 auto 32px', lineHeight: 1.55 }}>
-              {MVP_MODE ? <>Browse locations for free. Request the ones you want and get a price from the media owner.</> : <>Join the platform connecting Nigeria&apos;s billboard owners, agencies and brands — one transaction at a time.</>}
+              {MVP_MODE ? <>Browse locations for free. Request the ones you want and we send you a quotation.</> : <>Join the platform connecting Nigeria&apos;s billboard owners, agencies and brands — one transaction at a time.</>}
             </p>
 
             {MVP_MODE ? (
@@ -1306,6 +1307,8 @@ function FinalCTA() {
    FOOTER
 ═══════════════════════════════════════════════════════════ */
 
+const CONTACT_LINK = teamWhatsAppLink('Hi, I have a question about OOH Platform.');
+
 function Footer() {
   return (
     <footer style={{ borderTop: '1px solid rgba(15,23,42,.10)', padding: '60px 0 40px', background: '#F8FAFC' }}>
@@ -1315,28 +1318,24 @@ function Footer() {
           <div>
             <Link href="/" style={{ display: 'inline-flex', textDecoration: 'none', marginBottom: 16 }}><OOHLogo /></Link>
             <p style={{ color: '#64748B', fontSize: 14, maxWidth: 280, lineHeight: 1.6 }}>
-              Nigeria&apos;s billboard marketplace. Find a board, get a price from its owner, and book it with our team.
+              Nigeria&apos;s billboard marketplace. Find a board, request it, and our team sends you a quotation and books it.
             </p>
           </div>
 
           {/* Product */}
           <div>
             <h6 style={{ fontFamily: 'inherit', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#64748B', marginBottom: 16, fontWeight: 600 }}>Product</h6>
-            {['Marketplace','For agencies','For board owners','For brands','Pricing'].map(l => (
-              <a key={l} href="/signup" style={{ display: 'block', color: '#475569', fontSize: 14, marginBottom: 11, textDecoration: 'none', transition: 'color .15s' }}
-                onMouseEnter={e => (e.target as HTMLElement).style.color='#0F172A'}
-                onMouseLeave={e => (e.target as HTMLElement).style.color='#475569'}>{l}</a>
+            {[['Find a board', '/marketplace'], ['Billboards by city', '/billboards'], ['List your boards', '/signup?role=owner'], ['Sign in', '/auth/login']].map(([l, href]) => (
+              <Link key={href} href={href} style={{ display: 'block', color: '#475569', fontSize: 14, marginBottom: 11, textDecoration: 'none' }}>{l}</Link>
             ))}
           </div>
 
           {/* Company */}
           <div>
             <h6 style={{ fontFamily: 'inherit', fontSize: 11, letterSpacing: '.14em', textTransform: 'uppercase', color: '#64748B', marginBottom: 16, fontWeight: 600 }}>Company</h6>
-            {['About','Careers','Blog','Contact'].map(l => (
-              <a key={l} href="/signup" style={{ display: 'block', color: '#475569', fontSize: 14, marginBottom: 11, textDecoration: 'none', transition: 'color .15s' }}
-                onMouseEnter={e => (e.target as HTMLElement).style.color='#0F172A'}
-                onMouseLeave={e => (e.target as HTMLElement).style.color='#475569'}>{l}</a>
-            ))}
+            {CONTACT_LINK && <a href={CONTACT_LINK} target="_blank" rel="noopener noreferrer" style={{ display: 'block', color: '#475569', fontSize: 14, marginBottom: 11, textDecoration: 'none' }}>Contact us on WhatsApp</a>}
+            <Link href="/terms" style={{ display: 'block', color: '#475569', fontSize: 14, marginBottom: 11, textDecoration: 'none' }}>Terms of use</Link>
+            <Link href="/privacy" style={{ display: 'block', color: '#475569', fontSize: 14, marginBottom: 11, textDecoration: 'none' }}>Privacy notice</Link>
           </div>
 
           {/* Resources */}
@@ -1356,19 +1355,10 @@ function Footer() {
         {/* Bottom bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 48, paddingTop: 24, borderTop: '1px solid rgba(15,23,42,.10)', color: '#64748B', fontSize: 13, flexWrap: 'wrap', gap: 16 }}>
           <span>© 2026 OOH Platform. Built for Nigerian out-of-home.</span>
-          <div style={{ display: 'flex', gap: 10 }}>
-            {[
-              { n: 'twitter', href: '#' },
-              { n: 'linkedin', href: '#' },
-              { n: 'instagram', href: '#' },
-            ].map(({ n, href }) => (
-              <a key={n} href={href} style={{ width: 34, height: 34, borderRadius: 9, border: '1px solid rgba(15,23,42,.10)', display: 'grid', placeItems: 'center', color: '#475569', textDecoration: 'none', transition: 'all .15s' }}
-                onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.background='rgba(15,23,42,.05)'; el.style.color='#0F172A'; }}
-                onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.background=''; el.style.color='#475569'; }}>
-                <Ico n={n} size={16} color="currentColor"/>
-              </a>
-            ))}
-          </div>
+          <span style={{ display: 'flex', gap: 18 }}>
+            <Link href="/terms" style={{ color: '#64748B', textDecoration: 'none' }}>Terms</Link>
+            <Link href="/privacy" style={{ color: '#64748B', textDecoration: 'none' }}>Privacy</Link>
+          </span>
         </div>
       </div>
     </footer>

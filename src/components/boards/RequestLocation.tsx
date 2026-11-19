@@ -376,7 +376,8 @@ export function RequestDialog({ board, viewer, form: f, setForm: setF, sending, 
                 )}
                 <p className="rd-fine">
                   {viewer.kind === 'anon' && f.account === 'new' ? <>This creates your free buyer account, so you can track replies. </> : null}
-                  The owner sees your company and what you asked for. Your email and phone are shared only with our team.
+                  The owner sees your company and what you asked for. Your email and phone are shared only with our team.{' '}
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer" data-legal-notice>Privacy notice</a>
                 </p>
               </section>
             </div>
@@ -386,7 +387,7 @@ export function RequestDialog({ board, viewer, form: f, setForm: setF, sending, 
               <button type="submit" className="rd-primary" disabled={sending}>
                 {sending ? 'Sending…' : viewer.kind === 'anon' && f.account === 'new' ? 'Create account and send request' : viewer.kind === 'anon' ? 'Sign in and send request' : 'Send request'}
               </button>
-              <p className="rd-free">Free, and nothing is booked until you agree a price.</p>
+              <p className="rd-free">Free, and nothing is booked until you agree a price. By sending you agree to our <a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a>.</p>
             </footer>
           </form>
         )}
@@ -453,6 +454,7 @@ const DIALOG_CSS = `
 .rd-primary:hover { background: #163F70; }
 .rd-primary:disabled { opacity: .7; cursor: wait; }
 .rd-free { margin: 9px 0 0; text-align: center; font-size: 0.75rem; color: #64748B; }
+.rd-free a { color: #1B4F8A; font-weight: 600; }
 .rd-ghost { padding: 12px; border: none; background: none; color: #1B4F8A; font-family: inherit; font-weight: 600; font-size: 0.875rem; line-height: 1; cursor: pointer; text-decoration: none; text-align: center; }
 .rd-block { display: block; margin-top: 6px; }
 .rd-muted { margin: 16px 0 0; font-size: 0.875rem; color: #475569; line-height: 1.55; }

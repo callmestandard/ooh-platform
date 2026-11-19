@@ -27,6 +27,8 @@ export default function ContentPageShell({ eyebrow, title, intro, children }: Pr
       <footer style={{ borderTop: '1px solid #E2E8F0', padding: '24px', textAlign: 'center', fontSize: '0.8125rem', color: '#94A3B8' }}>
         <Link href="/formats" style={{ color: '#64748B', textDecoration: 'none', margin: '0 10px' }}>Formats guide</Link>
         <Link href="/glossary" style={{ color: '#64748B', textDecoration: 'none', margin: '0 10px' }}>Glossary</Link>
+        <Link href="/terms" style={{ color: '#64748B', textDecoration: 'none', margin: '0 10px' }}>Terms</Link>
+        <Link href="/privacy" style={{ color: '#64748B', textDecoration: 'none', margin: '0 10px' }}>Privacy</Link>
         <Link href="/" style={{ color: '#64748B', textDecoration: 'none', margin: '0 10px' }}>Home</Link>
       </footer>
     </div>

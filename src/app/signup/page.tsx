@@ -162,7 +162,7 @@ export default function SignupPage() {
           </p>
           {(MVP_MODE ? [
             { icon: '📍', text: 'Browse locations with photos, size and verification status' },
-            { icon: '📨', text: 'Request a location and get availability and a price from the owner' },
+            { icon: '📨', text: 'Request a location and we send you a quotation' },
             { icon: '🤝', text: 'Agree the terms in one conversation' },
             { icon: '✅', text: 'Our team confirms the booking with the owner' },
           ] : [
@@ -360,6 +360,12 @@ export default function SignupPage() {
                 </div>
               )}
 
+              <p data-legal-notice style={{ fontSize: '0.75rem', color: '#64748B', lineHeight: 1.55, margin: '0 0 12px' }}>
+                By creating an account you agree to our{' '}
+                <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#1B4F8A', fontWeight: 600 }}>Terms of use</a>
+                {' '}and confirm you have read our{' '}
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: '#1B4F8A', fontWeight: 600 }}>Privacy notice</a>.
+              </p>
               <button
                 type="submit" disabled={loading}
                 style={{ width: '100%', padding: '11px', background: loading ? '#94A3B8' : '#1B4F8A', color: '#fff', border: 'none', borderRadius: 8, fontSize: '0.875rem', fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}

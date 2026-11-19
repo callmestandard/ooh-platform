@@ -345,7 +345,7 @@ function RequestPanel({ viewer, boards }: { viewer: Viewer; boards: SBoard[] }) 
         <label className="sl-lbl" htmlFor="sr-extra">Other requirements</label>
         <textarea id="sr-extra" rows={2} value={f.extra} onChange={set('extra')} placeholder="e.g. printing included, lit boards only" className="sl-field" style={{ resize: 'vertical' }} />
       </details>
-      <p className="sl-fine" style={{ margin: '0 0 12px' }}>Owners see your company and request. Your email and phone are shared only with our team.</p>
+      <p className="sl-fine" style={{ margin: '0 0 12px' }} data-legal-notice>Owners see your company and request. Your email and phone are shared only with our team. By sending you agree to our <Link href="/terms" target="_blank">Terms</Link> and <Link href="/privacy" target="_blank">Privacy notice</Link>.</p>
       {error && <p role="alert" className="sl-err">{error}</p>}
       <button type="submit" disabled={sending || boards.length === 0} className="sl-btn sl-block" style={{ opacity: sending ? 0.7 : 1 }}>
         {sending ? 'Sending…' : `Request ${boards.length} board${boards.length !== 1 ? 's' : ''}`}

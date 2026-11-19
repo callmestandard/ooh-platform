@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth, unauthorized } from '@/lib/require-auth';
+import { bankDetails } from '@/lib/business';
 
 export const runtime = 'nodejs';
 
@@ -234,16 +235,17 @@ export async function GET(
     doc.font('Helvetica-Bold').fontSize(8).text('PAYMENT DETAILS', M, y);
     y += 14;
 
-    const bankDetails = [
-      { label: 'Bank',       value: process.env.BANK_NAME || 'Guaranty Trust Bank (GTB)' },
-      { label: 'Account No', value: process.env.BANK_ACCOUNT || '0123456789' },
-      { label: 'Account Name', value: process.env.BANK_ACCOUNT_NAME || 'OOH Platform Limited' },
+    const bank = bankDetails();
+    const payDetails = [
+      ...(bank
+        ? [{ label: 'Bank', value: bank.bank }, { label: 'Account No', value: bank.account }, { label: 'Account Name', value: bank.accountName }]
+        : [{ label: 'Payment', value: 'Our team sends confirmed details' }]),
       { label: 'Our Ref.',   value: invoice.invoice_number },
       ...(invoice.client_invoice_number ? [{ label: 'Client Ref. (Oracle)', value: invoice.client_invoice_number }] : []),
     ];
 
-    const detailColW = contentW / bankDetails.length;
-    bankDetails.forEach((d, i) => {
+    const detailColW = contentW / payDetails.length;
+    payDetails.forEach((d, i) => {
       const x = M + i * detailColW;
       setFill(doc, BRAND.slate);
       doc.font('Helvetica').fontSize(7).text(d.label, x, y);

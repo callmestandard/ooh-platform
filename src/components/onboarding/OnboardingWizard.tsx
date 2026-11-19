@@ -258,8 +258,8 @@ export default function OnboardingWizard({ role, userName }: { role: DemoRole; u
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {(MVP_MODE ? [
                       { icon: '📍', label: 'Find locations', desc: 'Browse billboards by city and area, with photos and verification status' },
-                      { icon: '📨', label: 'Request a location', desc: 'Pick your dates — the media owner replies with availability and a price' },
-                      { icon: '🤝', label: 'We complete the booking', desc: 'Accept a quote and our team contacts you to finalise it' },
+                      { icon: '📨', label: 'Request a location', desc: 'Pick your dates — we check availability and send you a quotation' },
+                      { icon: '🤝', label: 'We complete the booking', desc: 'Accept the quotation online and we confirm the booking' },
                     ] : [
                       { icon: '🗺️', label: 'Discover boards', desc: 'Search 143+ billboard locations across Nigeria' },
                       { icon: '📋', label: 'Plan campaigns', desc: 'Build media plans, negotiate rates, raise MPOs' },

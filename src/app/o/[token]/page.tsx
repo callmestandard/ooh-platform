@@ -205,6 +205,10 @@ export default function OwnerLinkPage() {
             )}
           </>
         )}
+        <p className="ol-legal" data-legal-notice>
+          What you send here goes to the OOH Platform team. Your contact details are never shown to buyers.{' '}
+          <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy notice</a> · <a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a>
+        </p>
       </main>
       {openBoard && <BoardSheet key={openBoard.id} token={token} b={openBoard} onClose={() => setOpenId(null)} onSent={onCorrected} />}
     </div>
@@ -458,6 +462,8 @@ function RequestCard({ token, r, onReplied }: { token: string; r: OwnerLinkReque
 }
 
 const CSS = `
+  .ol-legal { margin: 28px 0 8px; font-size: 12px; line-height: 1.6; color: #64748B; text-align: center; }
+  .ol-legal a { color: #1B4F8A; font-weight: 600; text-decoration: none; }
 .ol { min-height: 100vh; background: #F8FAFC; color: #0F172A; font-family: 'Inter', system-ui, sans-serif; padding-bottom: 110px; }
 .ol-in { max-width: 640px; margin: 0 auto; padding-left: 16px; padding-right: 16px; box-sizing: border-box; width: 100%; }
 .ol-bar { background: #fff; border-bottom: 1px solid #E2E8F0; }

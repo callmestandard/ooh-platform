@@ -138,7 +138,7 @@ export default async function BillboardsIndexPage() {
             color: '#94A3B8', fontSize: '1.0625rem', lineHeight: 1.65,
             margin: '0 0 32px', maxWidth: 560, marginLeft: 'auto', marginRight: 'auto',
           }}>
-            Billboards listed by the media owners who own them. Pick a city, see each board&apos;s photos and location, and request a price from the owner.
+            Billboards across Nigeria. Pick a city, see each board&apos;s photos and location, and request a quotation.
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link href="/marketplace" style={{
@@ -285,7 +285,7 @@ export default async function BillboardsIndexPage() {
             <span style={{ color: '#94A3B8', fontWeight: 600, fontSize: '0.875rem' }}>OOH Platform</span>
           </Link>
           <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-            {[['Find a board', '/marketplace'], ['Prices explained', '/#prices'], ['List your boards', '/signup?role=owner'], ['Sign in', '/auth/login']].map(([label, href]) => (
+            {[['Find a board', '/marketplace'], ['Prices explained', '/#prices'], ['List your boards', '/signup?role=owner'], ['Sign in', '/auth/login'], ['Terms', '/terms'], ['Privacy', '/privacy']].map(([label, href]) => (
               <Link key={href} href={href} style={{ color: '#64748B', textDecoration: 'none', fontSize: '0.8125rem' }}>{label}</Link>
             ))}
           </div>

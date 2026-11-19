@@ -394,7 +394,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
                 Advertise in {cityName}
               </h2>
               <p style={{ color: '#64748B', fontSize: '0.875rem', lineHeight: 1.6, margin: '0 0 20px' }}>
-                {minRate ? `Guide prices from ${fmtRate(minRate)} a month. ` : ''}Owners set their prices: request a board and they reply with a quote. Our team completes the booking with you.
+                {minRate ? `Guide prices from ${fmtRate(minRate)} a month. ` : ''}Request a board and our team checks availability with its owner and sends you a quotation. Nothing is booked until you accept and we confirm.
               </p>
 
               <Link
@@ -675,7 +675,7 @@ export default async function CityPage({ params }: { params: Promise<{ city: str
             <div style={{ display: 'flex', gap: 48, flexWrap: 'wrap' }}>
               <div>
                 <div style={{ color: '#94A3B8', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>Platform</div>
-                {[['Find a board', '/marketplace'], ['Billboards by city', '/billboards'], ['List your boards', '/signup?role=owner']].map(([label, href]) => (
+                {[['Find a board', '/marketplace'], ['Billboards by city', '/billboards'], ['List your boards', '/signup?role=owner'], ['Terms of use', '/terms'], ['Privacy notice', '/privacy']].map(([label, href]) => (
                   <div key={href} style={{ marginBottom: 10 }}>
                     <Link href={href} style={{ color: '#64748B', textDecoration: 'none', fontSize: '0.875rem' }}>{label}</Link>
                   </div>

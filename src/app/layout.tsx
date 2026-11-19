@@ -40,7 +40,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://ooh-platform-xi.vercel.app'),
   title: { default: 'OOH Platform', template: '%s · OOH Platform' },
-  description: "Nigeria's operating system for outdoor advertising. Book billboards, track campaigns, manage compliance.",
+  description: 'Find billboards and outdoor advertising sites across Nigeria, with photos and locations. Send an enquiry and get a quotation.',
   keywords: ['OOH', 'outdoor advertising', 'billboard', 'Nigeria', 'Lagos', 'media planning'],
   authors: [{ name: 'OOH Platform' }],
   manifest: '/manifest.webmanifest',
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'OOH Platform',
-    description: "Nigeria's operating system for outdoor advertising",
+    description: 'Find and book billboards across Nigeria.',
     type: 'website',
     locale: 'en_NG',
   },
