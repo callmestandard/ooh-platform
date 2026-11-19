@@ -6,6 +6,7 @@ import BoardPins, { type BoardPin } from '@/components/map/BoardPins';
 import { VerificationBadge, VERIFICATION_META, verificationOf, type VerificationStatus } from '@/lib/board-verification';
 import { boardFormatLabel } from '@/lib/board-formats';
 import type { MapStyleKey } from '@/components/map/ooh-map-shared';
+import { PhotoStepper } from './BoardLook';
 
 export type MapBoard = {
   id: string;
@@ -70,6 +71,10 @@ type Props = {
   explorer?: boolean;
   /** Admin view: dots coloured by verification, with a legend, instead of prices. */
   verificationColors?: boolean;
+  /** Centre this board in the part of the map a side panel leaves visible. */
+  focus?: { id: string; padRight: number } | null;
+  /** Adds a "Street view" button to the board card. */
+  onStreetView?: (id: string) => void;
   /** Space kept clear at the edges when fitting (e.g. a card row on phones). */
   fitPadding?: { top: number; bottom: number; left: number; right: number };
 };
@@ -88,7 +93,7 @@ function coreOf(boards: MapBoard[]): MapBoard[] {
 
 export default function MarketplaceMap({
   boards, onOpen, hoveredId = null, onHover, selectedId, onSelect, onView, initialCamera,
-  fitKey, trimOutliers, cooperative = true, preview = true, explorer, verificationColors, fitPadding,
+  fitKey, trimOutliers, cooperative = true, preview = true, explorer, verificationColors, onStreetView, focus, fitPadding,
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const [ready, setReady] = useState(false);
@@ -134,11 +139,27 @@ export default function MarketplaceMap({
     if (!b) return;
     const p = map.project([b.longitude, b.latitude]);
     const { clientWidth: w, clientHeight: h } = map.getContainer();
-    const CARD_H = 330, HALF_W = 150, EDGE = 14;
+    const CARD_H = 350, HALF_W = 150, EDGE = 14;
     const dx = p.x < HALF_W + EDGE ? p.x - HALF_W - EDGE : p.x > w - HALF_W - EDGE ? p.x - (w - HALF_W - EDGE) : 0;
     const dy = p.y < CARD_H ? p.y - CARD_H : p.y > h - 40 ? p.y - (h - 40) : 0;
     if (dx || dy) map.panBy([dx, dy], { duration: 300 });
   }, [selId, preview, boards]);
+
+  // A side panel opened: keep its board in view beside it; closed: undo the inset.
+  const focusId = focus?.id ?? null, focusPad = focus?.padRight ?? 0;
+  const wasFocused = useRef(false);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const b = focusId ? boards.find(x => x.id === focusId) : null;
+    if (b) {
+      wasFocused.current = true;
+      map.easeTo({ center: [b.longitude, b.latitude], padding: { top: 0, bottom: 0, left: 0, right: focusPad }, duration: 450 });
+    } else if (wasFocused.current) {
+      wasFocused.current = false;
+      map.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 300 });
+    }
+  }, [focusId, focusPad, ready, boards]);
 
   // Escape closes the card.
   useEffect(() => {
@@ -198,14 +219,9 @@ export default function MarketplaceMap({
         {open && (
           <Popup longitude={open.longitude} latitude={open.latitude} anchor="bottom" offset={18} closeButton={false} closeOnClick={false} onClose={() => select(null)} maxWidth="280px" className="ooh-map-card">
             <div data-map-card style={{ fontFamily: "'Inter', -apple-system, sans-serif", width: 256, borderRadius: 14, overflow: 'hidden', background: '#fff' }}>
-              <button type="button" onClick={() => onOpen(open.id)} style={{ all: 'unset', display: 'block', width: '100%', cursor: 'pointer' }} aria-label={`Open ${open.name}`}>
-                <div style={{ position: 'relative', height: 132, background: '#F1F5F9' }}>
-                  {open.photo_urls?.[0] && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={open.photo_urls[0]} alt="" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                  )}
-                </div>
-                <div style={{ padding: '11px 13px 12px' }}>
+              <PhotoStepper key={open.id} photos={(open.photo_urls ?? []).filter(Boolean)} alt={open.name} height={140} />
+              <div style={{ padding: '11px 13px 12px' }}>
+                <button type="button" onClick={() => onOpen(open.id)} style={{ all: 'unset', display: 'block', width: '100%', cursor: 'pointer' }} aria-label={`Open ${open.name}`}>
                   <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0F172A', margin: '0 0 2px', lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{open.name}</p>
                   <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 8px' }}>{[open.area, open.city].filter(Boolean).join(', ')} · {boardFormatLabel(open.format)}</p>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -221,9 +237,18 @@ export default function MarketplaceMap({
                     </div>
                     <VerificationBadge status={open.verification_status} small />
                   </div>
-                  <span style={{ display: 'block', marginTop: 10, padding: '8px 0', textAlign: 'center', background: '#1B4F8A', color: '#fff', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600 }}>View board</span>
+                </button>
+                <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                  <button type="button" onClick={() => onOpen(open.id)} style={{ flex: 1, padding: '8px 0', border: 'none', background: '#1B4F8A', color: '#fff', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>View board</button>
+                  {onStreetView && (
+                    <button type="button" data-street-btn onClick={() => onStreetView(open.id)} title="See the site at street level"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 10px', border: '1px solid #E2E8F0', background: '#fff', color: '#0F172A', borderRadius: 9, fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M9.5 21v-6l-2-1V10a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v4l-2 1v6"/></svg>
+                      Street view
+                    </button>
+                  )}
                 </div>
-              </button>
+              </div>
               <button type="button" onClick={() => select(null)} aria-label="Close" style={{ position: 'absolute', top: 8, right: 8, width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.94)', boxShadow: '0 1px 4px rgba(15,23,42,0.2)', cursor: 'pointer', display: 'grid', placeItems: 'center', color: '#0F172A' }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
               </button>

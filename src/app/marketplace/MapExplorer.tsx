@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import dynamic from 'next/dynamic';
 import SaveButton from '@/components/shortlist/SaveButton';
+import BoardLook from './BoardLook';
 import type { MapBoard, MapView } from './MarketplaceMap';
 
 export const loadMap = () => import('./MarketplaceMap');
@@ -44,12 +45,14 @@ export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initial
   const phone = usePhone();
   const pinned = useMemo(() => boards.filter(b => Number.isFinite(b.latitude) && Number.isFinite(b.longitude)), [boards]);
   const unpinned = boards.length - pinned.length;
+  const pinnedById = useMemo(() => new Map(pinned.map(b => [b.id, b])), [pinned]);
 
   const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
   const [follow, setFollow] = useState(true);
   const [hovered, setHovered] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [refit, setRefit] = useState(0);
+  const [lookId, setLookId] = useState<string | null>(null);
 
   const shown = useMemo(
     () => (follow && bounds ? pinned.filter(b => inside(b, bounds)) : pinned),
@@ -63,7 +66,7 @@ export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initial
 
   // A new filter clears the selection.
   const [seenKey, setSeenKey] = useState(filterKey);
-  if (seenKey !== filterKey) { setSeenKey(filterKey); setSelected(null); setHovered(null); }
+  if (seenKey !== filterKey) { setSeenKey(filterKey); setSelected(null); setHovered(null); setLookId(null); }
 
   // Selecting a pin brings its card into view (list on desktop, card row on phones).
   const listRef = useRef<HTMLDivElement>(null);
@@ -124,6 +127,13 @@ export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initial
           </span>
         </span>
         <span className="mx-save" onClick={e => { e.preventDefault(); e.stopPropagation(); }}><SaveButton boardId={b.id} name={b.name} /></span>
+        {Number.isFinite(b.latitude) && (
+          <span className="mx-street" role="button" tabIndex={0} title="See the site at street level" aria-label={`Street view of ${b.name}`}
+            onClick={e => { e.preventDefault(); e.stopPropagation(); setSelected(b.id); setLookId(b.id); }}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setSelected(b.id); setLookId(b.id); } }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="2.5"/><path d="M9.5 21v-6l-2-1V10a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v4l-2 1v6"/></svg>
+          </span>
+        )}
       </a>
     );
   };
@@ -176,12 +186,18 @@ export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initial
           fitKey={`${filterKey}#${refit}`}
           trimOutliers
           cooperative={false}
-          preview={!phone}
+          preview={!phone && !lookId}
+          onStreetView={id => { setSelected(id); setLookId(id); }}
+          focus={!phone && lookId ? { id: lookId, padRight: 470 } : null}
           explorer
           fitPadding={fitPadding}
         />
 
-        {phone && (
+        {lookId && pinnedById.get(lookId) && (
+          <BoardLook board={pinnedById.get(lookId)!} onClose={() => setLookId(null)} onOpen={id => { setLookId(null); onOpen(id); }} />
+        )}
+
+        {phone && !lookId && (
           <div className="mx-row-wrap">
             {shown.length > 0 ? (
               <div className="mx-row" ref={listRef} onScroll={onRowScroll} data-card-row>
@@ -223,6 +239,8 @@ const CSS = `
 .mx-price small { font-size: 0.6875rem; font-weight: 500; color: #94A3B8; letter-spacing: 0; }
 .mx-price.none { font-size: 0.8125rem; font-weight: 600; color: #64748B; letter-spacing: 0; }
 .mx-save { position: absolute; top: 6px; right: 6px; transform: scale(.82); transform-origin: top right; }
+.mx-street { position: absolute; right: 8px; bottom: 8px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #334155; background: #fff; border: 1px solid #E2E8F0; cursor: pointer; transition: background .12s, color .12s, border-color .12s; }
+.mx-street:hover, .mx-street:focus-visible { background: #0F172A; color: #fff; border-color: #0F172A; outline: none; }
 .mx-empty { text-align: center; padding: 40px 16px; color: #64748B; font-size: 0.875rem; }
 .mx-empty p { margin: 0 0 12px; }
 .mx-empty button, .mx-unpinned button { border: none; background: none; color: #1B4F8A; font: inherit; font-weight: 600; cursor: pointer; padding: 0; }
