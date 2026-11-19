@@ -8,7 +8,7 @@
 
 import { supabase } from './supabase';
 
-export type FunnelEvent = 'board_view' | 'shortlist_add' | 'request_open';
+export type FunnelEvent = 'site_visit' | 'search' | 'board_view' | 'shortlist_add' | 'request_open' | 'signup' | 'request_sent';
 
 const KEY = 'ooh_vid';
 const sent = new Set<string>();

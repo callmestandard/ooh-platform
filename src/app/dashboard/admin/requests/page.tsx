@@ -305,12 +305,12 @@ const ADMIN_CSS = `
 .ar-lane small em { font-style: normal; color: #B45309; font-weight: 700; }
 .ar-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
 .ar-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: #F1F5F9; }
-.ar-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border: none; border-radius: 8px; background: none; color: #64748B; font: 600 0.8125rem/1 inherit; font-family: inherit; cursor: pointer; }
+.ar-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border: none; border-radius: 8px; background: none; color: #64748B; font-family: inherit; font-weight: 600; font-size: 0.8125rem; line-height: 1; cursor: pointer; }
 .ar-tabs button span { font-size: 0.6875rem; padding: 2px 6px; border-radius: 6px; background: rgba(15,23,42,.06); }
 .ar-tabs button.on { background: #fff; color: #0F172A; box-shadow: 0 1px 3px rgba(15,23,42,.1); }
 .ar-search { flex: 1; min-width: 200px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 10px; border: 1.5px solid #E2E8F0; background: #fff; color: #94A3B8; }
 .ar-search:focus-within { border-color: #1B4F8A; }
-.ar-search input { flex: 1; border: none; outline: none; padding: 9px 0; font: 400 0.8125rem/1 inherit; font-family: inherit; color: #0F172A; background: none; }
+.ar-search input { flex: 1; border: none; outline: none; padding: 9px 0; font-family: inherit; font-weight: 400; font-size: 0.8125rem; line-height: 1; color: #0F172A; background: none; }
 .ar-card { background: #fff; border: 1px solid #E8EDF3; border-radius: 18px; padding: 16px; box-shadow: 0 1px 2px rgba(15,23,42,.04); transition: box-shadow .2s; }
 .ar-card:hover, .ar-card.open { box-shadow: 0 8px 28px -12px rgba(15,23,42,.18); }
 .ar-card.late { border-color: #FDE68A; }

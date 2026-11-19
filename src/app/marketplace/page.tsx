@@ -433,6 +433,12 @@ function MarketplaceContent() {
     load();
   }, []);
 
+  // Funnel: this visitor searched or filtered (counted once a day).
+  useEffect(() => {
+    const filtering = search.trim().length >= 2 || [stateFilter, areaFilter, formatFilter, kindFilter, verifyFilter].some(v => v !== 'all');
+    if (filtering) track('search');
+  }, [search, stateFilter, areaFilter, formatFilter, kindFilter, verifyFilter]);
+
   const filtered = useMemo(() => {
     return boards.filter(b => {
       if (statusFilter !== 'all' && b.status !== statusFilter) return false;

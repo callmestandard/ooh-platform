@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Archivo, Hanken_Grotesk } from "next/font/google";
 import { ToastProvider } from "@/components/ui/Toast";
+import VisitTracker from "@/components/layout/VisitTracker";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
@@ -85,6 +86,7 @@ export default function RootLayout({
         <ToastProvider>
         {children}
         </ToastProvider>
+        <VisitTracker />
         <script dangerouslySetInnerHTML={{ __html: `
           if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {

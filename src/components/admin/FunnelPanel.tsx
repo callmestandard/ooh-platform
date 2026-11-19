@@ -13,6 +13,8 @@ import { supabase } from '@/lib/supabase';
 
 type Window = {
   visitors: number; viewed: number; saved: number; started: number; signups: number;
+  /** 059: missing (undefined) until that migration is run. */
+  visited?: number; searched?: number; sent?: number; quoted?: number;
   buyers: number; requests: number; answered: number; accepted: number; confirmed: number;
   confirmed_value: number; median_answer_hours: number | null; proposals: number; proposals_opened: number;
 };
@@ -27,7 +29,9 @@ const PERIODS = [7, 30, 90] as const;
 const BAR = '#1B4F8A';
 
 const BUYER_STEPS: Step[] = [
-  { key: 'viewed', label: 'Viewed a board', unit: 'visitors' },
+  { key: 'visited', label: 'Visited the site', unit: 'visitors' },
+  { key: 'searched', label: 'Searched or filtered', unit: 'visitors', base: 'visited', of: 'of visitors' },
+  { key: 'viewed', label: 'Viewed a board', unit: 'visitors', base: 'visited', of: 'of visitors' },
   { key: 'saved', label: 'Saved a board', unit: 'visitors', base: 'viewed', of: 'of viewers' },
   { key: 'started', label: 'Started a request', unit: 'visitors', base: 'viewed', of: 'of viewers' },
   { key: 'buyers', label: 'Sent a request', unit: 'buyers', base: 'started', of: 'of those who started', sub: w => `${w.requests} request${w.requests !== 1 ? 's' : ''}` },
@@ -35,7 +39,8 @@ const BUYER_STEPS: Step[] = [
 const REQUEST_STEPS: Step[] = [
   { key: 'requests', label: 'Requests sent', unit: 'requests' },
   { key: 'answered', label: 'Owner answered', unit: 'requests', base: 'requests', of: 'of requests' },
-  { key: 'accepted', label: 'Buyer accepted', unit: 'requests', base: 'answered', of: 'of answered' },
+  { key: 'quoted', label: 'Quotation sent', unit: 'requests', base: 'requests', of: 'of requests' },
+  { key: 'accepted', label: 'Quotation accepted', unit: 'requests', base: 'quoted', of: 'of quotations' },
   { key: 'confirmed', label: 'Booking confirmed', unit: 'requests', base: 'accepted', of: 'of accepted', sub: w => (w.confirmed_value > 0 ? `${naira(w.confirmed_value)}/mo` : null) },
 ];
 

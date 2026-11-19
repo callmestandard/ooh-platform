@@ -9,10 +9,11 @@ import { Journey, fmtDate, spanText } from '@/components/requests/journey';
 
 /**
  * "Request this location" on a public board page (MVP core loop).
- * The button opens a dialog (a full-screen sheet on phones):
- * logged out → sign in / create a buyer account and come straight back with
- * the dialog open; buyer (agency role) → the request form; other roles → a
- * short explanation.
+ * The button opens a dialog (a full-screen sheet on phones) with the request
+ * form. A visitor who isn't signed in fills the same form plus a password:
+ * sending creates their free buyer account (or signs them in) and sends the
+ * request in one step, without leaving the board. Other roles see a short
+ * explanation.
  *
  * Opens when the URL has ?request=1 or #request, or when the page dispatches
  * the "ooh:request-location" event (the page's other CTA buttons do this).
@@ -27,7 +28,11 @@ export type Viewer =
 
 export type RequestBoard = { id: string; name: string; status: string; photo?: string | null; place?: string | null };
 
-export type RequestForm = { name: string; company: string; email: string; phone: string; start: string; end: string; message: string; budget: string; sites: string; extra: string };
+export type RequestForm = {
+  name: string; company: string; email: string; phone: string; start: string; end: string; message: string; budget: string; sites: string; extra: string;
+  /** Only for visitors who aren't signed in. */
+  password: string; account: 'new' | 'existing';
+};
 
 const todayStr = () => toStr(new Date());
 function toStr(d: Date) {
@@ -44,25 +49,29 @@ function endAfter(start: string, months: number) {
 const DURATIONS = [1, 3, 6, 12] as const;
 const IDEAS = ['Product launch', 'Brand awareness', 'Event or promotion', 'Seasonal campaign'];
 
+async function loadViewer(userId: string, email: string): Promise<Viewer> {
+  const { data: p } = await supabase.from('profiles').select('role, full_name, company_name, phone').eq('id', userId).maybeSingle();
+  if (p?.role !== 'agency') return { kind: 'other', role: p?.role ?? 'unknown' };
+  return { kind: 'buyer', name: p.full_name ?? '', company: p.company_name ?? '', email, phone: p.phone ?? '' };
+}
+
 export default function RequestLocation({ board, compact }: { board: RequestBoard; compact?: boolean }) {
   const [viewer, setViewer] = useState<Viewer>({ kind: 'loading' });
   const [open, setOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sentId, setSentId] = useState<string | null>(null);
-  const [f, setF] = useState<RequestForm>({ name: '', company: '', email: '', phone: '', start: '', end: '', message: '', budget: '', sites: '', extra: '' });
+  const [f, setF] = useState<RequestForm>({ name: '', company: '', email: '', phone: '', start: '', end: '', message: '', budget: '', sites: '', extra: '', password: '', account: 'new' });
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { if (!cancelled) setViewer({ kind: 'anon' }); return; }
-      const { data: p } = await supabase.from('profiles').select('role, full_name, company_name, phone').eq('id', session.user.id).maybeSingle();
+      const v = await loadViewer(session.user.id, session.user.email ?? '');
       if (cancelled) return;
-      if (p?.role !== 'agency') { setViewer({ kind: 'other', role: p?.role ?? 'unknown' }); return; }
-      const v = { kind: 'buyer' as const, name: p.full_name ?? '', company: p.company_name ?? '', email: session.user.email ?? '', phone: p.phone ?? '' };
       setViewer(v);
-      setF(prev => ({ ...prev, name: prev.name || v.name, company: prev.company || v.company, email: prev.email || v.email, phone: prev.phone || v.phone }));
+      if (v.kind === 'buyer') setF(prev => ({ ...prev, name: prev.name || v.name, company: prev.company || v.company, email: prev.email || v.email, phone: prev.phone || v.phone }));
     })();
     return () => { cancelled = true; };
   }, []);
@@ -81,9 +90,52 @@ export default function RequestLocation({ board, compact }: { board: RequestBoar
     return () => window.removeEventListener(OPEN_REQUEST_EVENT, onEvent);
   }, [start]);
 
+  /** Visitors: create the buyer account (or sign in) first. Returns false and shows why when it can't. */
+  async function ensureBuyer(): Promise<boolean> {
+    if (viewer.kind === 'buyer') return true;
+    const email = f.email.trim().toLowerCase();
+    if (f.account === 'existing') {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: f.password });
+      if (error || !data.session) { setError(error?.message === 'Invalid login credentials' ? 'That email and password don’t match. Try again, or reset your password from the sign-in page.' : error?.message ?? 'Could not sign in.'); return false; }
+      const v = await loadViewer(data.session.user.id, data.session.user.email ?? email);
+      setViewer(v);
+      if (v.kind !== 'buyer') return false;
+      setF(prev => ({ ...prev, name: prev.name || v.name, company: prev.company || v.company, phone: prev.phone || v.phone }));
+      if (!(f.name.trim() || v.name) || !(f.company.trim() || v.company) || !(f.phone.trim() || v.phone)) {
+        setError('You’re signed in. Add your name, company and phone, then send.');
+        return false;
+      }
+      return true;
+    }
+    const { data, error } = await supabase.auth.signUp({
+      email, password: f.password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/login?redirect=${encodeURIComponent(`/boards/${board.id}?request=1`)}`,
+        data: { full_name: f.name.trim(), company_name: f.company.trim(), role: 'agency' },
+      },
+    });
+    if (error) {
+      if (/already|registered|exists/i.test(error.message)) {
+        setF(prev => ({ ...prev, account: 'existing', password: '' }));
+        setError('There’s already an account with this email. Enter its password to sign in and send.');
+      } else setError(error.message);
+      return false;
+    }
+    if (!data.session) {
+      setError('We’ve emailed you a link to confirm your account. Open it, and you’ll come back here to send your request.');
+      return false;
+    }
+    track('signup', board.id);
+    // The phone isn't part of sign-up; save it on the new profile for next time.
+    await supabase.from('profiles').update({ phone: f.phone.trim() }).eq('id', data.session.user.id);
+    setViewer({ kind: 'buyer', name: f.name.trim(), company: f.company.trim(), email, phone: f.phone.trim() });
+    return true;
+  }
+
   async function submit() {
     setError(null);
     setSending(true);
+    if (!(await ensureBuyer())) { setSending(false); return; }
     const { id, error } = await sendBoardRequest({
       boardId: board.id, startDate: f.start, endDate: f.end,
       name: f.name.trim(), company: f.company.trim(), email: f.email.trim(), phone: f.phone.trim(), message: f.message.trim(),
@@ -93,6 +145,7 @@ export default function RequestLocation({ board, compact }: { board: RequestBoar
     });
     setSending(false);
     if (error) { setError(error); return; }
+    track('request_sent', board.id);
     setSentId(id);
   }
 
@@ -121,7 +174,6 @@ export default function RequestLocation({ board, compact }: { board: RequestBoar
           board={board} viewer={viewer} form={f} setForm={setF}
           sending={sending} error={error} sentId={sentId}
           onSubmit={submit} onClose={() => setOpen(false)}
-          returnTo={`/boards/${board.id}?request=1`}
         />
       )}
 
@@ -140,10 +192,10 @@ export default function RequestLocation({ board, compact }: { board: RequestBoar
 }
 
 /** The dialog itself: kept separate from the data loading so it can be previewed. */
-export function RequestDialog({ board, viewer, form: f, setForm: setF, sending, error, sentId, onSubmit, onClose, returnTo }: {
+export function RequestDialog({ board, viewer, form: f, setForm: setF, sending, error, sentId, onSubmit, onClose }: {
   board: RequestBoard; viewer: Viewer; form: RequestForm; setForm: React.Dispatch<React.SetStateAction<RequestForm>>;
   sending: boolean; error: string | null; sentId: string | null;
-  onSubmit: () => void; onClose: () => void; returnTo: string;
+  onSubmit: () => void; onClose: () => void;
 }) {
   const [months, setMonths] = useState<number | 'custom' | null>(f.start && f.end ? 'custom' : null);
   const [editMe, setEditMe] = useState(false);
@@ -161,7 +213,7 @@ export function RequestDialog({ board, viewer, form: f, setForm: setF, sending, 
     document.body.style.overflow = 'hidden';
     return () => { window.removeEventListener('keydown', key); document.body.style.overflow = prev; };
   }, []);
-  useEffect(() => { if (viewer.kind === 'buyer' && !sentId) firstRef.current?.focus({ preventScroll: true }); }, [viewer.kind, sentId]);
+  useEffect(() => { if ((viewer.kind === 'buyer' || viewer.kind === 'anon') && !sentId) firstRef.current?.focus({ preventScroll: true }); }, [viewer.kind, sentId]);
 
   const set = (k: keyof RequestForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF(prev => ({ ...prev, [k]: e.target.value }));
   const pickStart = (v: string) => setF(prev => ({ ...prev, start: v, end: v && typeof months === 'number' ? endAfter(v, months) : prev.end && prev.end < v ? '' : prev.end }));
@@ -179,7 +231,12 @@ export function RequestDialog({ board, viewer, form: f, setForm: setF, sending, 
     if (!f.end) { setLocalError(months === 'custom' ? 'Pick the date your campaign ends.' : 'Choose how long you need the board.'); return; }
     if (f.end < f.start) { setLocalError('The end date must be on or after the start date.'); return; }
     if (!f.message.trim()) { setLocalError('Add a line about your campaign, so the owner can price it.'); return; }
-    if (!f.name.trim() || !f.company.trim() || !f.email.trim() || !f.phone.trim()) { setEditMe(true); setLocalError('Add your name, company, email and phone.'); return; }
+    const anon = viewer.kind === 'anon';
+    if (anon && f.account === 'existing') {
+      if (!f.email.trim() || !f.password) { setLocalError('Enter your email and password.'); return; }
+    } else if (!f.name.trim() || !f.company.trim() || !f.email.trim() || !f.phone.trim()) { setEditMe(true); setLocalError('Add your name, company, email and phone.'); return; }
+    if (anon && f.account === 'new' && f.password.length < 8) { setLocalError('Choose a password of at least 8 characters.'); return; }
+    if (anon && !/^\S+@\S+\.\S+$/.test(f.email.trim())) { setLocalError('Check your email address.'); return; }
     onSubmit();
   }
 
@@ -216,13 +273,6 @@ export function RequestDialog({ board, viewer, form: f, setForm: setF, sending, 
           </div>
         ) : viewer.kind === 'loading' ? (
           <div className="rd-body"><p className="rd-muted">Loading…</p></div>
-        ) : viewer.kind === 'anon' ? (
-          <div className="rd-body">
-            <HowItWorks />
-            <p className="rd-muted" style={{ margin: '18px 0 14px' }}>Sign in or create a free buyer account to send your request. You&rsquo;ll come straight back here.</p>
-            <a href={`/signup?role=agency&redirect=${encodeURIComponent(returnTo)}`} className="rd-primary">Create a free buyer account</a>
-            <a href={`/auth/login?redirect=${encodeURIComponent(returnTo)}`} className="rd-ghost rd-block">I have an account. Sign in</a>
-          </div>
         ) : viewer.kind === 'other' ? (
           <div className="rd-body">
             <p className="rd-muted">Requests are sent from buyer accounts (agencies, brands and marketers). You&rsquo;re signed in with a {viewer.role} account.</p>
@@ -287,7 +337,18 @@ export function RequestDialog({ board, viewer, form: f, setForm: setF, sending, 
               {/* 3. Contact */}
               <section className="rd-sec">
                 <h3><span>3</span>Your details</h3>
-                {!showMe ? (
+                {viewer.kind === 'anon' && (
+                  <div className="rd-acct" role="tablist" aria-label="Account">
+                    <button type="button" role="tab" aria-selected={f.account === 'new'} className={f.account === 'new' ? 'on' : ''} onClick={() => setF(prev => ({ ...prev, account: 'new' }))}>I&rsquo;m new here</button>
+                    <button type="button" role="tab" aria-selected={f.account === 'existing'} className={f.account === 'existing' ? 'on' : ''} onClick={() => setF(prev => ({ ...prev, account: 'existing' }))}>I have an account</button>
+                  </div>
+                )}
+                {viewer.kind === 'anon' && f.account === 'existing' ? (
+                  <div className="rd-row">
+                    <label className="rd-field"><span>Email</span><input id="rq-email" type="email" value={f.email} onChange={set('email')} autoComplete="email" /></label>
+                    <label className="rd-field"><span>Password</span><input id="rq-password" type="password" value={f.password} onChange={set('password')} autoComplete="current-password" /></label>
+                  </div>
+                ) : !showMe ? (
                   <div className="rd-me" data-me-summary>
                     <div className="rd-av">{(f.name.trim()[0] ?? '?').toUpperCase()}</div>
                     <div style={{ minWidth: 0, flex: 1 }}>
@@ -306,15 +367,25 @@ export function RequestDialog({ board, viewer, form: f, setForm: setF, sending, 
                       <label className="rd-field"><span>Email</span><input id="rq-email" type="email" value={f.email} onChange={set('email')} autoComplete="email" /></label>
                       <label className="rd-field"><span>Phone</span><input id="rq-phone" type="tel" value={f.phone} onChange={set('phone')} autoComplete="tel" placeholder="080…" /></label>
                     </div>
+                    {viewer.kind === 'anon' && (
+                      <div className="rd-row">
+                        <label className="rd-field"><span>Create a password</span><input id="rq-password" type="password" value={f.password} onChange={set('password')} autoComplete="new-password" placeholder="At least 8 characters" /></label>
+                      </div>
+                    )}
                   </>
                 )}
-                <p className="rd-fine">The owner sees your company and what you asked for. Your email and phone are shared only with our team.</p>
+                <p className="rd-fine">
+                  {viewer.kind === 'anon' && f.account === 'new' ? <>This creates your free buyer account, so you can track replies. </> : null}
+                  The owner sees your company and what you asked for. Your email and phone are shared only with our team.
+                </p>
               </section>
             </div>
 
             <footer className="rd-foot">
               {shownError && <p role="alert" className="rd-err">{shownError}</p>}
-              <button type="submit" className="rd-primary" disabled={sending}>{sending ? 'Sending…' : 'Send request'}</button>
+              <button type="submit" className="rd-primary" disabled={sending}>
+                {sending ? 'Sending…' : viewer.kind === 'anon' && f.account === 'new' ? 'Create account and send request' : viewer.kind === 'anon' ? 'Sign in and send request' : 'Send request'}
+              </button>
               <p className="rd-free">Free, and nothing is booked until you agree a price.</p>
             </footer>
           </form>
@@ -325,21 +396,6 @@ export function RequestDialog({ board, viewer, form: f, setForm: setF, sending, 
   );
 
   return typeof document === 'undefined' ? null : createPortal(body, document.body);
-}
-
-function HowItWorks() {
-  const steps = [
-    ['Send your dates', 'Tell us when you need the board. It’s free.'],
-    ['Get the owner’s price', 'The media owner replies with a price for your dates.'],
-    ['Agree and book', 'Accept or negotiate. Our team then completes the booking with you.'],
-  ];
-  return (
-    <ol className="rd-how">
-      {steps.map(([t, d], i) => (
-        <li key={t}><span>{i + 1}</span><div><b>{t}</b><small>{d}</small></div></li>
-      ))}
-    </ol>
-  );
 }
 
 const DIALOG_CSS = `
@@ -365,12 +421,12 @@ const DIALOG_CSS = `
 .rd-row + .rd-row, .rd-more .rd-field { margin-top: 10px; }
 .rd-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .rd-field > span { font-size: 0.75rem; font-weight: 600; color: #475569; }
-.rd-field input, .rd-field textarea { width: 100%; box-sizing: border-box; padding: 11px 12px; border-radius: 10px; border: 1.5px solid #E2E8F0; font: 400 0.9375rem/1.4 inherit; font-family: inherit; color: #0F172A; background: #fff; outline: none; transition: border-color .12s, box-shadow .12s; }
+.rd-field input, .rd-field textarea { width: 100%; box-sizing: border-box; padding: 11px 12px; border-radius: 10px; border: 1.5px solid #E2E8F0; font-family: inherit; font-weight: 400; font-size: 0.9375rem; line-height: 1.4; color: #0F172A; background: #fff; outline: none; transition: border-color .12s, box-shadow .12s; }
 .rd-field textarea { resize: vertical; min-height: 84px; }
 .rd-field input:focus, .rd-field textarea:focus { border-color: #1B4F8A; box-shadow: 0 0 0 3px rgba(27,79,138,.12); }
 .rd-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .rd-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.rd-chips button { padding: 7px 13px; border-radius: 999px; border: 1.5px solid #E2E8F0; background: #fff; color: #334155; font: 600 0.8125rem/1.2 inherit; font-family: inherit; cursor: pointer; transition: all .12s; }
+.rd-chips button { padding: 7px 13px; border-radius: 999px; border: 1.5px solid #E2E8F0; background: #fff; color: #334155; font-family: inherit; font-weight: 600; font-size: 0.8125rem; line-height: 1.2; cursor: pointer; transition: all .12s; }
 .rd-chips button:hover { border-color: #94A3B8; }
 .rd-chips button.on { background: #1B4F8A; border-color: #1B4F8A; color: #fff; }
 .rd-ideas { margin: 0 0 10px; }
@@ -378,7 +434,7 @@ const DIALOG_CSS = `
 .rd-span { display: flex; align-items: center; gap: 7px; margin: 12px 0 0; padding: 9px 12px; border-radius: 10px; background: #F8FAFC; font-size: 0.8125rem; color: #334155; }
 .rd-span svg { color: #1B4F8A; flex-shrink: 0; }
 .rd-span b { color: #1B4F8A; font-weight: 700; }
-.rd-link { padding: 0; border: none; background: none; color: #1B4F8A; font: 600 0.8125rem/1.4 inherit; font-family: inherit; cursor: pointer; margin-top: 10px; }
+.rd-link { padding: 0; border: none; background: none; color: #1B4F8A; font-family: inherit; font-weight: 600; font-size: 0.8125rem; line-height: 1.4; cursor: pointer; margin-top: 10px; }
 .rd-link:hover { text-decoration: underline; }
 .rd-more { margin-top: 12px; }
 .rd-me { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid #E2E8F0; }
@@ -387,13 +443,17 @@ const DIALOG_CSS = `
 .rd-me-n { margin: 0; font-size: 0.875rem; font-weight: 700; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rd-me-c { margin: 2px 0 0; font-size: 0.8125rem; color: #64748B; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rd-fine { margin: 10px 0 0; font-size: 0.75rem; color: #94A3B8; line-height: 1.5; }
+.rd-fine a { color: #64748B; }
+.rd-acct { display: flex; gap: 2px; padding: 3px; margin-bottom: 12px; border-radius: 11px; background: #F1F5F9; }
+.rd-acct button { flex: 1; padding: 8px 10px; border: none; border-radius: 8px; background: none; color: #64748B; font-family: inherit; font-weight: 600; font-size: 0.8125rem; line-height: 1.2; cursor: pointer; transition: all .15s; }
+.rd-acct button.on { background: #fff; color: #0F172A; box-shadow: 0 1px 3px rgba(15,23,42,.1); }
 .rd-foot { padding: 14px 20px 18px; border-top: 1px solid #F1F5F9; background: #fff; }
 .rd-err { margin: 0 0 10px; padding: 9px 12px; border-radius: 10px; background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; font-size: 0.8125rem; }
-.rd-primary { display: block; width: 100%; box-sizing: border-box; padding: 15px; border: none; border-radius: 12px; background: #1B4F8A; color: #fff; text-align: center; text-decoration: none; font: 700 0.9375rem/1 inherit; font-family: inherit; cursor: pointer; box-shadow: 0 4px 16px rgba(27,79,138,.25); transition: background .15s; }
+.rd-primary { display: block; width: 100%; box-sizing: border-box; padding: 15px; border: none; border-radius: 12px; background: #1B4F8A; color: #fff; text-align: center; text-decoration: none; font-family: inherit; font-weight: 700; font-size: 0.9375rem; line-height: 1; cursor: pointer; box-shadow: 0 4px 16px rgba(27,79,138,.25); transition: background .15s; }
 .rd-primary:hover { background: #163F70; }
 .rd-primary:disabled { opacity: .7; cursor: wait; }
 .rd-free { margin: 9px 0 0; text-align: center; font-size: 0.75rem; color: #64748B; }
-.rd-ghost { padding: 12px; border: none; background: none; color: #1B4F8A; font: 600 0.875rem/1 inherit; font-family: inherit; cursor: pointer; text-decoration: none; text-align: center; }
+.rd-ghost { padding: 12px; border: none; background: none; color: #1B4F8A; font-family: inherit; font-weight: 600; font-size: 0.875rem; line-height: 1; cursor: pointer; text-decoration: none; text-align: center; }
 .rd-block { display: block; margin-top: 6px; }
 .rd-muted { margin: 16px 0 0; font-size: 0.875rem; color: #475569; line-height: 1.55; }
 .rd-how { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }

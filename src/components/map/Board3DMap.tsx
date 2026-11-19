@@ -24,6 +24,8 @@ type Props = {
   height_px?: number;
   /** Start already tilted and skip the fly-in (dashboards). */
   instant?: boolean;
+  /** Open as a plain flat map; 3D is an extra behind a "+ 3D view" button (board page). */
+  startFlat?: boolean;
 };
 
 const STYLE_3D = 'mapbox://styles/mapbox/standard';
@@ -85,12 +87,12 @@ function boardModel(lat: number, lng: number, format: string | null | undefined,
   return { type: 'FeatureCollection' as const, features: parts };
 }
 
-export default function Board3DMap({ lat, lng, format, width, height, name, facing, nearby = [], height_px = 420, instant }: Props) {
+export default function Board3DMap({ lat, lng, format, width, height, name, facing, nearby = [], height_px = 420, instant, startFlat }: Props) {
   const mapRef = useRef<MapRef>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const orbiting = useRef(false);
   const flown = useRef(false);
-  const [is3D, setIs3D] = useState(true);
+  const [is3D, setIs3D] = useState(!startFlat);
   const [satellite, setSatellite] = useState(false);
   const [orbit, setOrbit] = useState(false);
   const [ready, setReady] = useState(false);
@@ -132,13 +134,18 @@ export default function Board3DMap({ lat, lng, format, width, height, name, faci
       flown.current = true;
       io.disconnect();
       if (instant) return;
+      if (startFlat) {
+        // A plain map first: zoom to the board, no tilt or circling. 3D is an extra.
+        mapRef.current?.flyTo({ center: [lng, lat], zoom: 16.8, pitch: 0, bearing: 0, duration: reduceMotion ? 0 : 1800, essential: true });
+        return;
+      }
       close();
       const map = mapRef.current?.getMap();
       map?.once('moveend', () => { if (!reduceMotion) setOrbit(true); });
     }, { threshold: 0.35 });
     io.observe(el);
     return () => io.disconnect();
-  }, [ready, close, instant, reduceMotion]);
+  }, [ready, close, instant, reduceMotion, startFlat, lat, lng]);
 
   function onLoad() {
     const map = mapRef.current?.getMap();
@@ -159,7 +166,13 @@ export default function Board3DMap({ lat, lng, format, width, height, name, faci
     stopOrbit();
     const next = !is3D;
     setIs3D(next);
-    map.easeTo({ pitch: next ? 66 : 0, bearing: next ? viewBearing : 0, zoom: next ? 18.3 : 16.5, duration: 900 });
+    if (next) {
+      close(1600);
+      // Circle the board once it has flown in, the first time 3D is opened.
+      if (startFlat && !reduceMotion) mapRef.current?.getMap().once('moveend', () => setOrbit(true));
+      return;
+    }
+    map.easeTo({ pitch: 0, bearing: 0, zoom: 16.8, duration: 900 });
   }
 
   const btn: React.CSSProperties = {
@@ -168,6 +181,7 @@ export default function Board3DMap({ lat, lng, format, width, height, name, faci
     boxShadow: '0 2px 8px rgba(15,23,42,0.12)', whiteSpace: 'nowrap',
   };
   const on: React.CSSProperties = { ...btn, background: '#1B4F8A', color: '#fff', borderColor: '#1B4F8A' };
+  const plus: React.CSSProperties = { ...on, padding: '7px 13px 7px 11px', boxShadow: '0 4px 14px rgba(27,79,138,0.35)' };
 
   return (
     <div ref={wrapRef} data-board-3d-map style={{ position: 'relative', height: height_px, borderRadius: 16, overflow: 'hidden', background: '#E2E8F0' }}
@@ -205,7 +219,7 @@ export default function Board3DMap({ lat, lng, format, width, height, name, faci
               {name ? (name.length > 28 ? name.slice(0, 27) + '…' : name) : 'This board'}
             </span>
             {/* Long stalk so the label floats above the 3D board instead of covering it. */}
-            <span style={{ width: 2, height: 58, background: 'linear-gradient(#0F172A, rgba(15,23,42,0.15))' }} />
+            <span style={{ width: 2, height: is3D ? 58 : 12, background: 'linear-gradient(#0F172A, rgba(15,23,42,0.15))', transition: 'height .4s' }} />
           </div>
         </Marker>
 
@@ -218,12 +232,21 @@ export default function Board3DMap({ lat, lng, format, width, height, name, faci
       </OOHMap>
 
       <div style={{ position: 'absolute', top: 10, left: 10, right: 52, display: 'flex', gap: 6, flexWrap: 'wrap', zIndex: 2 }}>
-        <button type="button" style={is3D ? on : btn} onClick={toggle3D} aria-pressed={is3D} data-map-3d-toggle>{is3D ? '3D' : '2D'} view</button>
+        {startFlat && !is3D ? (
+          <button type="button" style={plus} onClick={toggle3D} aria-pressed={false} data-map-3d-toggle>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            3D view
+          </button>
+        ) : (
+          <button type="button" style={is3D && !startFlat ? on : btn} onClick={toggle3D} aria-pressed={is3D} data-map-3d-toggle>{startFlat ? 'Flat map' : `${is3D ? '3D' : '2D'} view`}</button>
+        )}
         <button type="button" style={satellite ? on : btn} onClick={() => setSatellite(s => !s)} aria-pressed={satellite}>Satellite</button>
-        <button type="button" style={orbit ? on : btn} onClick={() => { if (!orbit) { setIs3D(true); close(900); } setOrbit(o => !o); }} aria-pressed={orbit} data-map-orbit>
-          {orbit ? 'Stop' : 'Look around'}
-        </button>
-        <button type="button" style={btn} onClick={() => { stopOrbit(); setIs3D(true); close(1200); }} aria-label="Back to the board">⌖</button>
+        {(!startFlat || is3D) && <>
+          <button type="button" style={orbit ? on : btn} onClick={() => { if (!orbit) { setIs3D(true); close(900); } setOrbit(o => !o); }} aria-pressed={orbit} data-map-orbit>
+            {orbit ? 'Stop' : 'Look around'}
+          </button>
+          <button type="button" style={btn} onClick={() => { stopOrbit(); setIs3D(true); close(1200); }} aria-label="Back to the board">⌖</button>
+        </>}
       </div>
       {nearby.length > 0 && (
         <span style={{ position: 'absolute', bottom: 34, left: 10, zIndex: 2, ...btn, cursor: 'default', gap: 6 }}>

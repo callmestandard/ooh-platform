@@ -233,7 +233,7 @@ export default function MyRequestsPage() {
         .mr-new { display: inline-flex; align-items: center; gap: 7px; padding: 10px 16px; border-radius: 10px; background: #0F172A; color: #fff; font-size: 0.8125rem; font-weight: 700; text-decoration: none; transition: background .15s; }
         .mr-new:hover { background: #1E293B; }
         .mr-tabs { display: inline-flex; gap: 2px; padding: 3px; border-radius: 11px; background: #F1F5F9; margin-bottom: 16px; }
-        .mr-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border: none; border-radius: 8px; background: none; color: #64748B; font: 600 0.8125rem/1 inherit; font-family: inherit; cursor: pointer; transition: all .15s; }
+        .mr-tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border: none; border-radius: 8px; background: none; color: #64748B; font-family: inherit; font-weight: 600; font-size: 0.8125rem; line-height: 1; cursor: pointer; transition: all .15s; }
         .mr-tabs button span { font-size: 0.6875rem; padding: 2px 6px; border-radius: 6px; background: rgba(15,23,42,.06); }
         .mr-tabs button.on { background: #fff; color: #0F172A; box-shadow: 0 1px 3px rgba(15,23,42,.1); }
         .mr-err { padding: 12px 14px; border-radius: 12px; background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; font-size: 0.8125rem; margin-bottom: 14px; }
@@ -272,13 +272,13 @@ export default function MyRequestsPage() {
         .mr-confirm { flex-basis: 100%; }
         .mr-confirm p { margin: 0 0 10px; font-size: 0.8125rem; color: #0F172A; line-height: 1.5; }
         .mr-confirm div { display: flex; gap: 8px; flex-wrap: wrap; }
-        .mr-btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 16px; border-radius: 10px; border: 1px solid #CBD5E1; background: #fff; color: #0F172A; font: 700 0.8125rem/1 inherit; font-family: inherit; cursor: pointer; text-decoration: none; white-space: nowrap; transition: all .15s; }
+        .mr-btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 16px; border-radius: 10px; border: 1px solid #CBD5E1; background: #fff; color: #0F172A; font-family: inherit; font-weight: 700; font-size: 0.8125rem; line-height: 1; cursor: pointer; text-decoration: none; white-space: nowrap; transition: all .15s; }
         .mr-btn:hover { border-color: #94A3B8; }
         .mr-btn.mr-primary { background: #1B4F8A; border-color: #1B4F8A; color: #fff; box-shadow: 0 2px 10px rgba(27,79,138,.25); }
         .mr-btn.mr-primary:hover { background: #163F70; }
         .mr-btn:disabled { opacity: .6; cursor: wait; }
         .mr-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid #F1F5F9; font-size: 0.75rem; color: #94A3B8; }
-        .mr-cancel { padding: 0; border: none; background: none; color: #64748B; font: 600 0.75rem/1 inherit; font-family: inherit; cursor: pointer; }
+        .mr-cancel { padding: 0; border: none; background: none; color: #64748B; font-family: inherit; font-weight: 600; font-size: 0.75rem; line-height: 1; cursor: pointer; }
         .mr-cancel:hover { color: #B91C1C; }
         .mr-empty { text-align: center; padding: 48px 24px; border-radius: 20px; background: #fff; border: 1px dashed #CBD5E1; }
         .mr-empty-ico { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 16px; background: #EFF6FF; color: #1B4F8A; display: grid; place-items: center; }

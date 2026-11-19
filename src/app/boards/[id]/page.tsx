@@ -312,11 +312,11 @@ export default function PublicBoardPage() {
                 </div>
                 {hasPin ? (
                   <Board3DMap lat={board.latitude as number} lng={board.longitude as number} format={board.format}
-                    width={board.width} height={board.height} name={name} facing={board.facing_deg} nearby={nearby} />
+                    width={board.width} height={board.height} name={name} facing={board.facing_deg} nearby={nearby} startFlat />
                 ) : (
                   <div className="bp-card" style={{ color: '#64748B', fontSize: '0.875rem' }}>The exact map location hasn&apos;t been added yet. {address ? `Address: ${address}.` : ''}</div>
                 )}
-                {hasPin && <p style={{ margin: '8px 2px 0', fontSize: '0.75rem', color: '#94A3B8' }}>Drag to look around. The 3D board is drawn to its listed size.</p>}
+                {hasPin && <p style={{ margin: '8px 2px 0', fontSize: '0.75rem', color: '#94A3B8' }}>Press <b>+ 3D view</b> to see the board drawn to its listed size on the street.</p>}
               </section>
 
               {/* Details */}
