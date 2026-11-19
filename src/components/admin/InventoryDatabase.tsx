@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { streetViewFor } from '@/lib/street-view';
 import { VERIFICATION_META, verificationOf, formatVerifiedDate, type VerificationStatus } from '@/lib/board-verification';
 import { boardFormatLabel } from '@/lib/board-formats';
 import { formatNaira } from '@/lib/utils';
@@ -80,10 +81,11 @@ const STATUSES: InvStatus[] = ['available', 'booked', 'unavailable', 'decommissi
 const VERIFICATIONS: VerificationStatus[] = ['pending', 'verified', 'partner_verified'];
 const VER_DOT: Record<VerificationStatus, string> = { pending: '#A1A1AA', verified: '#2563EB', partner_verified: '#059669' };
 
-type Issue = 'photo' | 'pin' | 'rate' | 'owner' | 'pending' | 'dupes';
+type Issue = 'photo' | 'pin' | 'pinoff' | 'rate' | 'owner' | 'pending' | 'dupes';
 const ISSUES: { key: Issue; label: string; done: string; hint: string }[] = [
   { key: 'photo',   label: 'No photo',      done: 'All have photos',  hint: 'Buyers skip boards without a photo' },
   { key: 'pin',     label: 'No map pin',    done: 'All pinned',       hint: 'Not shown on the map' },
+  { key: 'pinoff',  label: 'Pin may be off', done: 'Pins match roads', hint: 'The board’s name mentions a road that isn’t near its pin' },
   { key: 'rate',    label: 'No rate',       done: 'All priced',       hint: 'Buyers see “Request quote”' },
   { key: 'owner',   label: 'Owner unknown', done: 'All owners known', hint: 'No owner account or name' },
   { key: 'pending', label: 'Not verified',  done: 'All verified',     hint: 'Owner hasn’t confirmed yet' },
@@ -133,6 +135,7 @@ function hasIssue(b: InvBoard, issue: Issue, ownerOf: Props['ownerOf']): boolean
     case 'owner': return !b.owner_id && !ownerOf(b).name;
     case 'pending': return verificationOf(b) === 'pending';
     case 'dupes': return false; // worked out across boards, in the component
+    case 'pinoff': return false; // checked against the street map, in the component
   }
 }
 
@@ -448,7 +451,12 @@ export default function InventoryDatabase(props: Props) {
 
   const dupGroups = useMemo<DupGroup[]>(() => findDuplicateGroups(boards, dismissedPairs ?? new Set()), [boards, dismissedPairs]);
   const dupIds = useMemo(() => new Set(dupGroups.flatMap(g => g.ids)), [dupGroups]);
-  const isIssue = useCallback((b: InvBoard, k: Issue) => (k === 'dupes' ? dupIds.has(b.id) : hasIssue(b, k, ownerOf)), [dupIds, ownerOf]);
+  // Pins whose board name mentions a road that isn't near the pin (board id → road the pin is on).
+  const pinOff = usePinChecks(boards);
+  const isIssue = useCallback(
+    (b: InvBoard, k: Issue) => (k === 'dupes' ? dupIds.has(b.id) : k === 'pinoff' ? pinOff.has(b.id) : hasIssue(b, k, ownerOf)),
+    [dupIds, pinOff, ownerOf],
+  );
 
   // Remember the view, sort and grouping for this browser.
   useEffect(() => {
@@ -468,7 +476,7 @@ export default function InventoryDatabase(props: Props) {
 
   // Counts for the attention strip.
   const issueCounts = useMemo(() => {
-    const c = { photo: 0, pin: 0, rate: 0, owner: 0, pending: 0, dupes: 0 } as Record<Issue, number>;
+    const c = { photo: 0, pin: 0, pinoff: 0, rate: 0, owner: 0, pending: 0, dupes: 0 } as Record<Issue, number>;
     for (const b of boards) for (const { key } of ISSUES) if (isIssue(b, key)) c[key]++;
     return c;
   }, [boards, isIssue]);
@@ -961,10 +969,61 @@ export default function InventoryDatabase(props: Props) {
           onEditPhotos={() => onEditPhotos(peek)}
           onMovePin={() => onMovePin(peek)}
           onDelete={() => onDelete(peek)}
+          pinOffRoad={pinOff.get(peek.id)}
         />
       )}
     </div>
   );
+}
+
+// ── Pin check ──────────────────────────────────────────────────────────────
+
+const PIN_CHECK_KEY = 'ooh_pin_checks_v1';
+type PinCheck = { off: boolean; road: string | null };
+
+/**
+ * Compares each board's name with the road its pin sits on (Mapbox street
+ * data, one tile per board, a few at a time). Results are kept in this
+ * browser, so only new or moved pins are checked again.
+ */
+function usePinChecks(boards: InvBoard[]) {
+  const [results, setResults] = useState<Record<string, PinCheck>>({});
+  const keyOf = (b: InvBoard) => `${b.latitude},${b.longitude}|${[b.name, b.area].filter(Boolean).join(' ')}`;
+
+  useEffect(() => {
+    let cached: Record<string, PinCheck> = {};
+    try { cached = JSON.parse(localStorage.getItem(PIN_CHECK_KEY) || '{}'); } catch {}
+    const todo = boards.filter(b => b.latitude != null && b.longitude != null && !(keyOf(b) in cached));
+    let live = true;
+    const save = () => { try { localStorage.setItem(PIN_CHECK_KEY, JSON.stringify(cached)); } catch {} };
+    Promise.resolve().then(() => { if (live) setResults({ ...cached }); });
+    (async () => {
+      let next = 0;
+      const worker = async () => {
+        while (live && next < todo.length) {
+          const b = todo[next++];
+          const r = await streetViewFor(b.latitude!, b.longitude!, [b.name, b.area].filter(Boolean).join(' '));
+          if (!r) continue; // no road data: say nothing rather than guess
+          cached[keyOf(b)] = { off: !!r.roadMismatch, road: r.road };
+        }
+      };
+      await Promise.all([worker(), worker(), worker(), worker()]);
+      if (!live) return;
+      save();
+      setResults({ ...cached });
+    })();
+    return () => { live = false; };
+  }, [boards]);
+
+  return useMemo(() => {
+    const off = new Map<string, string>();
+    for (const b of boards) {
+      if (b.latitude == null || b.longitude == null) continue;
+      const r = results[keyOf(b)];
+      if (r?.off) off.set(b.id, r.road ?? 'an unnamed road');
+    }
+    return off;
+  }, [boards, results]);
 }
 
 // ── Side peek ──────────────────────────────────────────────────────────────
@@ -978,13 +1037,15 @@ function Row({ icon, label, children }: { icon: string; label: string; children:
   );
 }
 
-function Peek({ b, index, total, onPrev, onNext, onClose, statusCell, verCell, owner, brand, guide, onGuideHidden, onEditDetails, onEditPhotos, onMovePin, onDelete }: {
+function Peek({ b, index, total, onPrev, onNext, onClose, statusCell, verCell, owner, brand, guide, onGuideHidden, onEditDetails, onEditPhotos, onMovePin, onDelete, pinOffRoad }: {
   b: InvBoard; index: number; total: number; onPrev?: () => void; onNext?: () => void; onClose: () => void;
   statusCell: React.ReactNode; verCell: React.ReactNode; owner: React.ReactNode;
   brand: { brand: string | null; ends_on: string | null } | undefined;
   guide?: { text: string | null; hidden: boolean };
   onGuideHidden?: (hide: boolean) => void;
   onEditDetails: () => void; onEditPhotos: () => void; onMovePin: () => void; onDelete: () => void;
+  /** Set when the board's name mentions a road that isn't near its pin: the road the pin is on. */
+  pinOffRoad?: string;
 }) {
   const [photoAt, setPhotoAt] = useState<{ id: string; i: number }>({ id: b.id, i: 0 });
   const photo = photoAt.id === b.id ? photoAt.i : 0;
@@ -1061,6 +1122,11 @@ function Peek({ b, index, total, onPrev, onNext, onClose, statusCell, verCell, o
                   ? <span className="invdb-mono">{b.latitude.toFixed(5)}, {b.longitude.toFixed(5)}</span>
                   : <span className="invdb-warn">Not set</span>}
                 <button type="button" className="invdb-link" onClick={onMovePin}>{b.latitude != null ? 'Move' : 'Add pin'}</button>
+                {pinOffRoad != null && (
+                  <span className="invdb-warn invdb-prop-note" style={{ display: 'block', marginTop: 4 }} data-pin-off>
+                    The name mentions a road that isn’t near this pin (the pin is on {pinOffRoad}). Check it with Move.
+                  </span>
+                )}
               </Row>
               <Row icon={I.format} label="Format">{boardFormatLabel(b.format)}</Row>
               <Row icon={I.size} label="Size">{size ?? <span className="invdb-muted">Not listed</span>}</Row>
