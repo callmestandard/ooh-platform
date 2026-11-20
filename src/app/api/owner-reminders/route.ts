@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logAppError, logCronRun } from '@/lib/error-log';
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth, unauthorized } from '@/lib/require-auth';
 import { emailOwnerReminder, ownerReminderEmail } from '@/lib/email';
@@ -73,9 +74,15 @@ export async function GET(req: NextRequest) {
   if (req.headers.get('authorization') !== `Bearer ${secret}`) return unauthorized();
 
   const { data, error } = await db.rpc('owner_reminders_due', { p_owner_key: null });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    await logAppError('cron', 'owner-reminders: ' + error.message);
+    await logCronRun('owner-reminders', false, { error: error.message.slice(0, 200) });
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   const result = await send((data ?? []) as Due[], 6 * 24 * 3600 * 1000);
-  console.log('[owner-reminders] weekly', JSON.stringify({ due: (data ?? []).length, sent: result.sent, failed: result.failed.length, skipped: result.skipped.length }));
+  const summary = { due: (data ?? []).length, sent: result.sent, failed: result.failed.length, skipped: result.skipped.length };
+  console.log('[owner-reminders] weekly', JSON.stringify(summary));
+  await logCronRun('owner-reminders', result.failed.length === 0 || result.sent > 0, summary);
   return NextResponse.json({ due: (data ?? []).length, ...result });
 }
 

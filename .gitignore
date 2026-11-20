@@ -46,3 +46,6 @@ next-env.d.ts
 scripts/intel/out/
 scripts/geo/data/
 scripts/geo/out/
+
+# Local database backups (scripts/backup.mjs): contain personal data, never commit
+/backups/

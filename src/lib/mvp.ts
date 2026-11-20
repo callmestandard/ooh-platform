@@ -47,7 +47,7 @@ const RULES: Record<string, RoleRules> = {
   },
   admin: {
     home: '/dashboard/admin/requests',
-    allow: ['/dashboard/admin', '/dashboard/admin/requests', '/dashboard/admin/quotations', '/dashboard/admin/campaigns', '/dashboard/admin/needs-checking', '/dashboard/admin/owners', '/dashboard/admin/launch-ready','/dashboard/admin/claims', '/dashboard/admin/import-boards', '/dashboard/admin/post-board'],
+    allow: ['/dashboard/admin', '/dashboard/admin/requests', '/dashboard/admin/quotations', '/dashboard/admin/campaigns', '/dashboard/admin/health', '/dashboard/admin/needs-checking', '/dashboard/admin/owners', '/dashboard/admin/launch-ready','/dashboard/admin/claims', '/dashboard/admin/import-boards', '/dashboard/admin/post-board'],
     tabs: ['overview', 'inventory', 'users'],
   },
 };
