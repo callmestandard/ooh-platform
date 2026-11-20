@@ -26,6 +26,16 @@ export const VERIFICATION_META: Record<VerificationStatus, { label: string; shor
   },
 };
 
+/** How our team verified a board (067). Admin-only detail; never shown to buyers. */
+export type VerificationMethod = 'site_visit' | 'owner_confirmed' | 'photo_check' | 'other';
+export const VERIFY_METHODS: { value: VerificationMethod; label: string; help: string }[] = [
+  { value: 'site_visit', label: 'Site visit', help: 'Someone from our team saw the board at this spot.' },
+  { value: 'owner_confirmed', label: 'Owner confirmed', help: 'The owner confirmed the board, its size and its location.' },
+  { value: 'photo_check', label: 'Photo check', help: 'Recent photos match the pin, e.g. Street View or a dated site photo.' },
+  { value: 'other', label: 'Other', help: 'Say how in the note.' },
+];
+export const methodLabel = (m: string | null | undefined) => VERIFY_METHODS.find(x => x.value === m)?.label ?? null;
+
 export function verificationOf(board: { verification_status?: string | null }): VerificationStatus {
   const s = board.verification_status;
   return s === 'verified' || s === 'partner_verified' ? s : 'pending';

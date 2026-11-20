@@ -13,6 +13,7 @@ import { VERIFICATION_META, verificationOf, type VerificationStatus } from '@/li
 import { MVP_MODE, mvpTabs } from '@/lib/mvp';
 import BoardPhotosEditor from '@/components/admin/BoardPhotosEditor';
 import BoardPinEditor from '@/components/admin/BoardPinEditor';
+import VerifyMethodDialog, { type VerifyAnswer } from '@/components/admin/VerifyMethodDialog';
 import BoardDetailsEditor from '@/components/admin/BoardDetailsEditor';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FunnelPanel from '@/components/admin/FunnelPanel';
@@ -41,6 +42,8 @@ type Board = {
   area: string | null;
   verification_status: string | null;
   last_verified_at: string | null;
+  verification_method?: string | null;
+  verification_note?: string | null;
   source: string | null;
   photo_urls: string[] | null;
   latitude: number | null;
@@ -268,6 +271,8 @@ function AdminContent() {
   const [photoBoard, setPhotoBoard] = useState<Board | null>(null);
   // Board whose map pin is being moved.
   const [pinBoard, setPinBoard] = useState<Board | null>(null);
+  const [verifyAsk, setVerifyAsk] = useState<{ names: string[]; resolve: (a: VerifyAnswer | null) => void } | null>(null);
+  const askVerifyMethod = useCallback((names: string[]) => new Promise<VerifyAnswer | null>(resolve => setVerifyAsk({ names, resolve })), []);
   // Board whose details (name, description, location, size, rate…) are being edited.
   const [detailsBoard, setDetailsBoard] = useState<Board | null>(null);
   // Board waiting for the delete confirmation.
@@ -327,6 +332,7 @@ function AdminContent() {
       ]);
       if (bRes.error) throw bRes.error;
       if (bRes.data) setBoards(await attachVisibleRates(await withBoardPrivate(bRes.data as Board[])));
+      loadVerificationTrail();
       supabase.from('board_owner_names').select('board_id, owner_name').then(({ data }) =>
         setOwnerNames(Object.fromEntries(((data as { board_id: string; owner_name: string }[]) || []).map(r => [r.board_id, r.owner_name]))));
       loadMediaOwners();
@@ -516,13 +522,36 @@ function AdminContent() {
     showToast('Flagged for review');
   }
 
-  // The database stamps last_verified_at and blocks this for non-admins (042).
-  async function setBoardVerification(board: Board, next: VerificationStatus) {
+  // How each board was verified, and why some went back to pending (067). Loaded on
+  // its own so the inventory still works if that migration hasn't been run.
+  async function loadVerificationTrail(ids?: string[]) {
+    let q = supabase.from('boards').select('id, verification_status, verification_method, verification_note');
+    if (ids) q = q.in('id', ids);
+    const { data, error } = await q.limit(1000);
+    if (error || !data) return;
+    const byId = new Map((data as { id: string; verification_status: string | null; verification_method: string | null; verification_note: string | null }[]).map(r => [r.id, r]));
+    setBoards(prev => prev.map(b => { const r = byId.get(b.id); return r ? { ...b, ...r } : b; }));
+  }
+
+  // The database stamps last_verified_at and blocks this for non-admins (042), and
+  // records how it was verified (067). Marking Verified asks how, unless a bulk action already asked.
+  async function setBoardVerification(board: Board, next: VerificationStatus, answer?: VerifyAnswer) {
     if (next === verificationOf(board)) return;
-    const { data, error } = await supabase.from('boards').update({ verification_status: next }).eq('id', board.id)
-      .select('verification_status, last_verified_at').single();
-    if (error) { showToast(`Could not update ${board.name}: ${error.message}`, 'error'); return; }
-    setBoards(prev => prev.map(b => b.id === board.id ? { ...b, ...data } : b));
+    let how = answer ?? null;
+    if (next === 'verified' && !how) {
+      how = await askVerifyMethod([board.name]);
+      if (!how) return;
+    }
+    const patch: Record<string, unknown> = { verification_status: next };
+    if (next === 'verified' && how) { patch.verification_method = how.method; patch.verification_note = how.note || null; }
+    let res = await supabase.from('boards').update(patch).eq('id', board.id).select('verification_status, last_verified_at').single();
+    // Before 067 is run the new columns don't exist: save the status alone.
+    if (res.error && /verification_(method|note)/.test(res.error.message)) {
+      res = await supabase.from('boards').update({ verification_status: next }).eq('id', board.id).select('verification_status, last_verified_at').single();
+    }
+    if (res.error) { showToast(`Could not update ${board.name}: ${res.error.message}`, 'error'); return; }
+    setBoards(prev => prev.map(b => b.id === board.id ? { ...b, ...res.data } : b));
+    loadVerificationTrail([board.id]);
     showToast(`${board.name} → ${VERIFICATION_META[next].label}`);
   }
 
@@ -1054,7 +1083,8 @@ function AdminContent() {
           }}
           brandOf={board => currentBrands[board.id]}
           onStatus={(board, next) => setBoardStatus(board as Board, next)}
-          onVerification={(board, next) => setBoardVerification(board as Board, next)}
+          onVerification={(board, next, answer) => setBoardVerification(board as Board, next, answer)}
+          askVerifyMethod={askVerifyMethod}
           onEditDetails={board => setDetailsBoard(board as Board)}
           onEditPhotos={board => setPhotoBoard(board as Board)}
           onMovePin={board => setPinBoard(board as Board)}
@@ -1766,6 +1796,10 @@ function AdminContent() {
         />
       )}
 
+      {verifyAsk && (
+        <VerifyMethodDialog names={verifyAsk.names} onDone={a => { verifyAsk.resolve(a); setVerifyAsk(null); }} />
+      )}
+
       <ConfirmDialog
         open={!!deleteBoard}
         variant="danger"
@@ -1793,10 +1827,16 @@ function AdminContent() {
       {pinBoard && (
         <BoardPinEditor
           board={pinBoard}
-          onSaved={(lat, lng) => {
-            setBoards(prev => prev.map(b => b.id === pinBoard.id ? { ...b, latitude: lat, longitude: lng } : b));
+          onSaved={async (lat, lng) => {
+            const before = pinBoard;
+            setBoards(prev => prev.map(b => b.id === before.id ? { ...b, latitude: lat, longitude: lng } : b));
             setPinBoard(null);
-            showToast('Pin saved', 'success');
+            // Moving a verified pin more than 50 m sends the board back to pending (067).
+            const { data } = await supabase.from('boards').select('verification_status, last_verified_at').eq('id', before.id).single();
+            if (data) setBoards(prev => prev.map(b => b.id === before.id ? { ...b, ...data } : b));
+            await loadVerificationTrail([before.id]);
+            if (verificationOf(before) === 'verified' && data && verificationOf(data) === 'pending') showToast('Pin saved. It moved more than 50 m, so the board is back to pending: verify it again.', 'info');
+            else showToast('Pin saved', 'success');
           }}
           onClose={() => setPinBoard(null)}
         />

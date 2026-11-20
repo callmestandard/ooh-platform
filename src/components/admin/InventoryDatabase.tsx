@@ -11,7 +11,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { streetViewFor } from '@/lib/street-view';
-import { VERIFICATION_META, verificationOf, formatVerifiedDate, type VerificationStatus } from '@/lib/board-verification';
+import { VERIFICATION_META, verificationOf, formatVerifiedDate, methodLabel, type VerificationStatus } from '@/lib/board-verification';
+import type { VerifyAnswer } from './VerifyMethodDialog';
 import { boardFormatLabel } from '@/lib/board-formats';
 import { formatNaira } from '@/lib/utils';
 import { boardPath } from '@/lib/public-links';
@@ -42,6 +43,8 @@ export type InvBoard = {
   created_at: string;
   verification_status: string | null;
   last_verified_at: string | null;
+  verification_method?: string | null;
+  verification_note?: string | null;
   source: string | null;
   photo_urls: string[] | null;
   latitude: number | null;
@@ -59,7 +62,10 @@ type Props = {
   reachable?: (b: InvBoard) => boolean;
   brandOf: (b: InvBoard) => { brand: string | null; ends_on: string | null } | undefined;
   onStatus: (b: InvBoard, next: Exclude<InvStatus, 'booked'>) => Promise<void> | void;
-  onVerification: (b: InvBoard, next: VerificationStatus) => Promise<void> | void;
+  /** answer: how it was verified, when a bulk action already asked (067). */
+  onVerification: (b: InvBoard, next: VerificationStatus, answer?: VerifyAnswer) => Promise<void> | void;
+  /** Asks once how a set of boards was verified; null when cancelled. */
+  askVerifyMethod?: (names: string[]) => Promise<VerifyAnswer | null>;
   onEditDetails: (b: InvBoard) => void;
   onEditPhotos: (b: InvBoard) => void;
   onMovePin: (b: InvBoard) => void;
@@ -463,7 +469,7 @@ function DupReview({ groups, byId, keepPick, busy, onPick, onOpen, rateText, can
 // ── Main ───────────────────────────────────────────────────────────────────
 
 export default function InventoryDatabase(props: Props) {
-  const { boards, ownerOf, reachable, brandOf, onStatus, onVerification, onEditDetails, onEditPhotos, onMovePin, onDelete, guideOf, onGuideHidden, dismissedPairs, onMerge, onDismissDuplicates, mediaOwners, onAssignOwner, onArchive } = props;
+  const { boards, ownerOf, reachable, brandOf, onStatus, onVerification, askVerifyMethod, onEditDetails, onEditPhotos, onMovePin, onDelete, guideOf, onGuideHidden, dismissedPairs, onMerge, onDismissDuplicates, mediaOwners, onAssignOwner, onArchive } = props;
 
   const [prefs] = useState(readPrefs);
   const [view, setView] = useState<View>(prefs.view);
@@ -606,9 +612,16 @@ export default function InventoryDatabase(props: Props) {
   async function bulk(action: { status?: Exclude<InvStatus, 'booked'>; verification?: VerificationStatus }) {
     setBulkBusy(true);
     const targets = boards.filter(b => selectedShown.has(b.id));
+    let answer: VerifyAnswer | undefined;
+    if (action.verification === 'verified' && askVerifyMethod) {
+      const toVerify = targets.filter(b => verificationOf(b) !== 'verified');
+      const a = toVerify.length ? await askVerifyMethod(toVerify.map(b => b.name)) : null;
+      if (toVerify.length && !a) { setBulkBusy(false); return; }
+      answer = a ?? undefined;
+    }
     for (const b of targets) {
       if (action.status && b.status !== 'booked' && b.status !== action.status) await onStatus(b, action.status);
-      if (action.verification && verificationOf(b) !== action.verification) await onVerification(b, action.verification);
+      if (action.verification && verificationOf(b) !== action.verification) await onVerification(b, action.verification, answer);
     }
     setBulkBusy(false);
     setSelected(new Set());
@@ -691,6 +704,13 @@ export default function InventoryDatabase(props: Props) {
       onChange={v => onVerification(b, v)}
     />
   );
+  // How it was verified, or why it went back to pending (067). Admin-only detail.
+  const verHint = (b: InvBoard) => {
+    const v = verificationOf(b);
+    if (v === 'verified') return <span className="invdb-muted" style={{ display: 'block', fontSize: '0.6875rem', marginTop: 2 }} title={b.verification_note ?? undefined}>{methodLabel(b.verification_method) ?? 'Method not recorded'}</span>;
+    if (v === 'pending' && b.verification_note) return <span className="invdb-warn" style={{ display: 'block', fontSize: '0.6875rem', marginTop: 2, maxWidth: 180, whiteSpace: 'normal' }}>{b.verification_note}</span>;
+    return null;
+  };
   const rateText = (b: InvBoard) => b.asking_rate
     ? <span className="invdb-rate">{formatNaira(b.asking_rate)}<small>/mo</small></span>
     : <span className="invdb-muted">Request quote</span>;
@@ -930,7 +950,7 @@ export default function InventoryDatabase(props: Props) {
                     </div>
                   </td>
                   <td onClick={e => e.stopPropagation()}>{statusCell(b)}</td>
-                  <td onClick={e => e.stopPropagation()}>{verCell(b)}</td>
+                  <td onClick={e => e.stopPropagation()}>{verCell(b)}{verHint(b)}</td>
                   <td>
                     <span className="invdb-place">{placeText(b)}</span>
                     {b.latitude == null && <span className="invdb-warn invdb-sub-line">No map pin</span>}

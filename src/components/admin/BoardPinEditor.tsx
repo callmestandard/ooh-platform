@@ -11,7 +11,7 @@ import LocationSearch from '@/app/dashboard/owner/post-board/LocationSearch';
  * or drag the pin. Saves straight to the board.
  */
 export default function BoardPinEditor({ board, onSaved, onClose }: {
-  board: { id: string; name: string; address: string | null; city: string | null; latitude: number | null; longitude: number | null };
+  board: { id: string; name: string; address: string | null; city: string | null; latitude: number | null; longitude: number | null; verification_status?: string | null };
   onSaved: (lat: number | null, lng: number | null) => void;
   onClose: () => void;
 }) {
@@ -72,6 +72,11 @@ export default function BoardPinEditor({ board, onSaved, onClose }: {
           </p>
         </div>
 
+        {board.verification_status === 'verified' && board.latitude !== null && (
+          <p data-pin-verified-warning style={{ margin: '10px 20px 0', padding: '8px 10px', borderRadius: 8, background: '#FFFBEB', color: '#92400E', fontSize: '0.75rem' }}>
+            This board is verified. Moving the pin more than 50 m puts it back to pending until someone verifies it again.
+          </p>
+        )}
         {error && <p style={{ margin: '10px 20px 0', fontSize: '0.8125rem', color: '#DC2626' }}>{error}</p>}
         <div style={{ padding: '16px 20px 18px', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
           <button type="button" style={btn} onClick={onClose}>Cancel</button>
