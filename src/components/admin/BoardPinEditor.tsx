@@ -5,13 +5,14 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import LocationPinPickerLoader from '@/app/dashboard/owner/post-board/LocationPinPickerLoader';
 import LocationSearch from '@/app/dashboard/owner/post-board/LocationSearch';
+import { likelyLocationUrl, likelyPlaceQuery } from '@/lib/likely-location';
 
 /**
  * Move a published board's map pin: search a place or GPS, click the map,
  * or drag the pin. Saves straight to the board.
  */
 export default function BoardPinEditor({ board, onSaved, onClose }: {
-  board: { id: string; name: string; address: string | null; city: string | null; latitude: number | null; longitude: number | null; verification_status?: string | null };
+  board: { id: string; name: string; address: string | null; city: string | null; latitude: number | null; longitude: number | null; verification_status?: string | null; area?: string | null; state?: string | null };
   onSaved: (lat: number | null, lng: number | null) => void;
   onClose: () => void;
 }) {
@@ -20,6 +21,9 @@ export default function BoardPinEditor({ board, onSaved, onClose }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const changed = lat !== board.latitude || lng !== board.longitude;
+  // A link out to Google's guess from the address; labelled "not confirmed" (never sets the pin itself).
+  const likelyQuery = likelyPlaceQuery(board);
+  const likelyUrl = likelyLocationUrl(board);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -53,6 +57,21 @@ export default function BoardPinEditor({ board, onSaved, onClose }: {
           </div>
           <button type="button" onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 20, color: '#94A3B8', cursor: 'pointer', lineHeight: 1 }}>✕</button>
         </div>
+
+        {likelyUrl && (
+          <div data-likely-spot style={{ margin: '14px 20px 0', padding: '10px 12px', borderRadius: 10, border: '1px dashed #CBD5E1', background: '#F8FAFC', display: 'flex', gap: 12, alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 0, flex: '1 1 260px' }}>
+              <p style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>
+                Most likely spot <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#92400E', background: '#FEF3C7', borderRadius: 4, padding: '1px 6px', marginLeft: 4 }}>not confirmed</span>
+              </p>
+              <p style={{ margin: '3px 0 0', fontSize: '0.75rem', color: '#64748B' }}>
+                Google&apos;s best guess for “{likelyQuery}”. If the board is there, copy that spot&apos;s link from Google Maps and paste it in the search box below.
+              </p>
+            </div>
+            <a href={likelyUrl} target="_blank" rel="noopener noreferrer"
+              style={{ ...btn, textDecoration: 'none', whiteSpace: 'nowrap', color: '#1B4F8A' }}>Open in Google Maps ↗</a>
+          </div>
+        )}
 
         <div style={{ padding: '16px 20px 0' }}>
           <LocationSearch city={board.city ?? undefined} onPick={({ lat: la, lng: lo }) => { setLat(la); setLng(lo); }} />
