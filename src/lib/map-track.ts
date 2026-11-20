@@ -13,7 +13,7 @@ export type MapEvent = 'map_view' | 'board_click' | 'map_search' | 'filter' | 'l
 const sent = new Set<string>();
 
 export function trackMap(event: MapEvent, detail = '', boardId?: string | null): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || navigator.webdriver) return; // skip bots and automated test browsers
   const d = detail.toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 40);
   const once = `${event}:${d}:${boardId ?? ''}`;
   if (sent.has(once)) return;

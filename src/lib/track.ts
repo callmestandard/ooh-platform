@@ -27,7 +27,7 @@ export function visitorId(): string | null {
 }
 
 export function track(event: FunnelEvent, boardId?: string | null): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || navigator.webdriver) return; // skip bots and automated test browsers (e.g. Vercel deploy checks)
   const once = `${event}:${boardId ?? ''}`;
   if (sent.has(once)) return;
   sent.add(once);
