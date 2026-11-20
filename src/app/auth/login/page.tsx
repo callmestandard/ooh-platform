@@ -175,18 +175,15 @@ function LoginContent() {
             {MVP_MODE ? 'Find billboards across Nigeria and ask their owners for a price.' : 'Where billboard owners list space, agencies plan campaigns, and brands see results in real time.'}
           </p>
 
-          <div style={{ display: 'flex', gap: '32px', marginTop: '40px' }}>
-            {[
-              { value: '₦100B+', label: 'Market size' },
-              { value: '143',    label: 'Boards live' },
-              { value: '8',      label: 'Active campaigns' },
-            ].map(({ value, label }) => (
-              <div key={label}>
-                <div style={{ fontSize: '1.375rem', fontWeight: 700, color: '#F8FAFC', letterSpacing: '-0.02em', fontFamily: 'monospace' }}>{value}</div>
-                <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)', marginTop: '2px' }}>{label}</div>
-              </div>
+          {/* No figures here: only statements that are always true (no invented stats). */}
+          <ul style={{ listStyle: 'none', padding: 0, margin: '40px 0 0', display: 'grid', gap: '12px' }}>
+            {['Boards across Nigeria, with photos and locations', 'Ask for a price; we confirm with the owner', 'A written quotation before anything is booked'].map(t => (
+              <li key={t} style={{ display: 'flex', gap: '10px', alignItems: 'center', fontSize: '0.875rem', color: 'rgba(255,255,255,0.7)' }}>
+                <span aria-hidden style={{ width: 18, height: 18, borderRadius: '50%', background: 'rgba(245,158,11,0.15)', color: '#F59E0B', display: 'grid', placeItems: 'center', fontSize: '0.6875rem', fontWeight: 700 }}>✓</span>
+                {t}
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
 
         <div style={{ position: 'relative' }}>
