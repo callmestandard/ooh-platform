@@ -458,11 +458,12 @@ function tidyPhone(raw: string): string {
  * the first Nigerian mobile number, and a name from a "Contact person:" style
  * label if there is one. Slides are searched last-first.
  */
-export function findContact(slides: string[][]): { name: string; phone: string } | null {
+export function findContact(slides: string[][]): { name: string; phone: string; email: string } | null {
   for (const lines of [...slides].reverse()) {
     const text = lines.join('\n');
     const phone = text.match(PHONE_RE);
     if (!phone) continue;
+    const email = (text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/)?.[0] ?? '').toLowerCase();
     let name = '';
     for (const l of lines) {
       const m = l.match(/^\s*(?:contact(?:\s+person)?|sales(?:\s+(?:contact|rep|manager|executive))?|marketer|account\s+manager|name|call)\s*[:\-–]\s*(.+)$/i);
@@ -470,7 +471,7 @@ export function findContact(slides: string[][]): { name: string; phone: string }
       const candidate = m[1].replace(PHONE_RE, '').replace(/\b(tel|phone|mobile|whatsapp|on|at)\b\s*[:.]?\s*$/i, '').replace(/[\s,;|/\-–—]+$/, '').trim();
       if (/^[A-Za-z][A-Za-z .'-]{1,60}$/.test(candidate) && !/@|www|\d/.test(candidate)) { name = candidate; break; }
     }
-    return { name, phone: tidyPhone(phone[0]) };
+    return { name, phone: tidyPhone(phone[0]), email };
   }
   return null;
 }

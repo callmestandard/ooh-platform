@@ -25,6 +25,7 @@ export async function GET() {
     ['Longitude', 'GPS longitude — optional'],
     ['Contact Name', 'Sales contact for this board — optional (blank rows use the contact set on the import page)'],
     ['Phone', 'Their WhatsApp / phone number — optional'],
+    ['Email', 'Their email — optional. Saved for our team; never shown to buyers'],
     ['Notes', 'Notes visible to agencies browsing your board'],
     [null],
     ['* = required field'],
@@ -42,19 +43,19 @@ export async function GET() {
   wsInstr['!cols'] = [{ wch: 18 }, { wch: 72 }];
   XLSX.utils.book_append_sheet(wb, wsInstr, 'Instructions');
 
-  const headers = ['Name', 'Address', 'Area', 'City', 'State', 'Format', 'Width (m)', 'Height (m)', 'Rate (₦)', 'Latitude', 'Longitude', 'Contact Name', 'Phone', 'Notes'];
+  const headers = ['Name', 'Address', 'Area', 'City', 'State', 'Format', 'Width (m)', 'Height (m)', 'Rate (₦)', 'Latitude', 'Longitude', 'Contact Name', 'Phone', 'Email', 'Notes'];
   const examples = [
-    ['Lekki-Epe Expressway Unipole', 'Chevron Roundabout, Lekki Phase 1', 'Lekki', 'Lagos', 'Lagos State', 'unipole', 4, 3, 850000, '', '', 'Chidi Okafor', '08031234567', 'Illuminated, high traffic volume'],
-    ['Wuse II Billboard', 'Plot 12, Adetokunbo Ademola Crescent, Wuse II', 'Wuse II', 'Abuja', 'FCT', 'billboard', 6, 3, 1200000, '', '', '', '', ''],
-    ['Airport Road Gantry', 'Muritala Muhammed Airport Road, Ikeja', 'Ikeja', 'Lagos', 'Lagos State', 'gantry', 12, 3, 1800000, 6.5775, 3.3212, 'Chidi Okafor', '08031234567', 'Both-sided face'],
-    ['Trans Amadi LED', 'Trans Amadi Industrial Layout, PH', 'Trans Amadi', 'Port Harcourt', 'Rivers State', 'led', 4, 3, 600000, '', '', '', '', 'Digital, 24h illuminated'],
+    ['Lekki-Epe Expressway Unipole', 'Chevron Roundabout, Lekki Phase 1', 'Lekki', 'Lagos', 'Lagos State', 'unipole', 4, 3, 850000, '', '', 'Chidi Okafor', '08031234567', 'sales@example.ng', 'Illuminated, high traffic volume'],
+    ['Wuse II Billboard', 'Plot 12, Adetokunbo Ademola Crescent, Wuse II', 'Wuse II', 'Abuja', 'FCT', 'billboard', 6, 3, 1200000, '', '', '', '', '', ''],
+    ['Airport Road Gantry', 'Muritala Muhammed Airport Road, Ikeja', 'Ikeja', 'Lagos', 'Lagos State', 'gantry', 12, 3, 1800000, 6.5775, 3.3212, 'Chidi Okafor', '08031234567', 'sales@example.ng', 'Both-sided face'],
+    ['Trans Amadi LED', 'Trans Amadi Industrial Layout, PH', 'Trans Amadi', 'Port Harcourt', 'Rivers State', 'led', 4, 3, 600000, '', '', '', '', '', 'Digital, 24h illuminated'],
   ];
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...examples]);
   ws['!cols'] = [
     { wch: 38 }, { wch: 38 }, { wch: 16 }, { wch: 16 },
     { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 14 },
-    { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 14 }, { wch: 32 },
+    { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 14 }, { wch: 24 }, { wch: 32 },
   ];
   ws['!freeze'] = { xSplit: 0, ySplit: 1 };
   XLSX.utils.book_append_sheet(wb, ws, 'Boards');

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { ownerContactKey, cleanContact } from '@/lib/owner-contacts';
+import { ownerContactKey, cleanContact, cleanEmail } from '@/lib/owner-contacts';
 import { requireAuth, unauthorized } from '@/lib/require-auth';
 import { isCityCentrePin } from '@/lib/import-match';
 
@@ -29,6 +29,8 @@ type InsertRow = {
   available_from?: string | null;
   contact_name?: string | null;
   contact_phone?: string | null;
+  /** Saved on the owner's sales contact (admin import); boards have no email column. */
+  contact_email?: string | null;
   /** Admin only: the brand on the board now and when their campaign ends (YYYY-MM-DD). */
   current_brand?: string | null;
   brand_ends_on?: string | null;
@@ -212,13 +214,26 @@ async function adminImport(uid: string, rows: InsertRow[], admin: AdminImport) {
   // Remember the sales contacts used, so they can be picked next time for this owner.
   const key = ownerContactKey(ownerId, ownerName);
   if (key && ids.length) {
-    const seen = new Set<string>();
-    const contacts = rows.map(r => cleanContact(r.contact_name, r.contact_phone))
-      .filter(c => (c.contact_name || c.contact_phone) && !seen.has(`${c.contact_name}|${c.contact_phone}`) && seen.add(`${c.contact_name}|${c.contact_phone}`))
-      .map(c => ({ ...c, owner_key: key, created_by: uid, last_used_at: new Date().toISOString() }));
-    if (contacts.length) {
+    // One entry per name+phone, keeping the first valid email given for it.
+    const byContact = new Map<string, { contact_name: string; contact_phone: string; email: string | null }>();
+    for (const r of rows) {
+      const c = cleanContact(r.contact_name, r.contact_phone);
+      const email = cleanEmail(r.contact_email);
+      if (!c.contact_name && !c.contact_phone && !email) continue;
+      const k = `${c.contact_name}|${c.contact_phone}`;
+      const had = byContact.get(k);
+      if (!had) byContact.set(k, { ...c, email });
+      else if (!had.email && email) had.email = email;
+    }
+    const now = new Date().toISOString();
+    const all = [...byContact.values()].map(c => ({ ...c, owner_key: key, created_by: uid, last_used_at: now }));
+    // Contacts without an email are saved without that column, so an email saved before is kept.
+    const withEmail = all.filter(c => c.email);
+    const noEmail = all.filter(c => !c.email).map(c => ({ contact_name: c.contact_name, contact_phone: c.contact_phone, owner_key: c.owner_key, created_by: c.created_by, last_used_at: c.last_used_at }));
+    for (const batch of [withEmail, noEmail]) {
+      if (!batch.length) continue;
       const { error: contactError } = await supabaseAdmin.from('owner_sales_contacts')
-        .upsert(contacts, { onConflict: 'owner_key,contact_name,contact_phone' });
+        .upsert(batch, { onConflict: 'owner_key,contact_name,contact_phone' });
       if (contactError) console.error('[import-boards admin] sales contacts', contactError);
     }
   }

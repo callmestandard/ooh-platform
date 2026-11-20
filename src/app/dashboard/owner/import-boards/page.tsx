@@ -13,7 +13,7 @@ import { extractBoard, deckCity, findContact, deckBoilerplate, withoutBoilerplat
 import SavedContacts from '@/components/admin/SavedContacts';
 import PhotoCropper from '@/components/admin/PhotoCropper';
 import PhotoReview, { type ReviewItem } from '@/components/admin/PhotoReview';
-import { ownerContactKey } from '@/lib/owner-contacts';
+import { ownerContactKey, EMAIL_RE } from '@/lib/owner-contacts';
 import { geocodeBoard, cityCentre } from '@/lib/geocode-board';
 import { findMatches, photoPrint, metres, type Candidate, type Match } from '@/lib/import-match';
 import { gpsFromPhotos, stopPhotoReader } from '@/lib/deck-import/photo-gps';
@@ -56,6 +56,8 @@ type ImportRow = {
   /** Sales contact from the sheet; blank rows use the contact set for the whole import. */
   contact_name: string;
   contact_phone: string;
+  /** Sales contact email ('' when none or not a valid address). */
+  contact_email: string;
   /** Deck imports: key of the slide's photo in deckPhotos ('' if none). */
   photo_key: string;
   /** True when the row came from a deck slide (row_no is then the slide number). */
@@ -101,6 +103,7 @@ const FIELD_DEFS = [
   { field: 'faces',        label: 'Faces',         required: false },
   { field: 'contact_name', label: 'Sales contact name', required: false },
   { field: 'contact_phone', label: 'Contact phone / WhatsApp', required: false },
+  { field: 'contact_email', label: 'Contact email', required: false },
   { field: 'notes',        label: 'Notes',         required: false },
 ];
 
@@ -128,6 +131,7 @@ const FIELD_HINTS: Record<string, string[]> = {
   faces:       ['faces', 'face', 'no of faces', 'number of faces', 'sides', 'no of sides'],
   contact_name: ['contact name', 'contact person', 'sales contact', 'contact', 'marketer', 'sales rep', 'sales person', 'salesperson', 'account manager'],
   contact_phone: ['phone', 'phone number', 'tel', 'telephone', 'mobile', 'whatsapp', 'contact number', 'contact phone', 'gsm', 'phone no'],
+  contact_email: ['email', 'e mail', 'email address', 'contact email', 'sales email', 'mail', 'e mail address'],
   notes:       ['notes', 'remarks', 'comments', 'details', 'info', 'other'],
 };
 
@@ -250,6 +254,8 @@ function validateRows(
     const face_count = facesRaw && Number.isInteger(facesRaw) && facesRaw >= 1 && facesRaw <= 10 ? facesRaw : null;
     const contact_name = get(row, 'contact_name').slice(0, 120);
     const contact_phone = get(row, 'contact_phone').slice(0, 40);
+    const emailRaw = get(row, 'contact_email').trim();
+    const contact_email = EMAIL_RE.test(emailRaw) ? emailRaw.toLowerCase().slice(0, 200) : '';
     const from_slide = row['__slide'] != null;
     const rowNo = from_slide ? Number(row['__slide']) : idx + 2;
 
@@ -269,6 +275,7 @@ function validateRows(
     const issues: string[] = [];
     if (!name) issues.push('Missing board name');
     if (!city) issues.push('Missing city');
+    if (emailRaw && !contact_email) issues.push(`Email "${emailRaw.slice(0, 60)}" doesn't look right — imports without it`);
     // Rates are optional (a board without one shows "contact for rate"), but a
     // value we could not read is reported rather than quietly dropped.
     if (asking_rate_raw && !asking_rate) issues.push(`Could not read the rate "${asking_rate_raw}" — imports without a rate`);
@@ -326,6 +333,7 @@ function validateRows(
       face_count,
       contact_name,
       contact_phone,
+      contact_email,
       photo_key: String(row['__photo'] ?? ''),
       from_slide,
       status,
@@ -452,6 +460,8 @@ export default function ImportBoardsPage() {
   // Sales contact for every board in this import (a sheet's own contact columns win).
   const [importContactName, setImportContactName] = useState('');
   const [importContactPhone, setImportContactPhone] = useState('');
+  const [importContactEmail, setImportContactEmail] = useState('');
+  const importEmailBad = !!importContactEmail.trim() && !EMAIL_RE.test(importContactEmail.trim());
   const [contactFromDeck, setContactFromDeck] = useState(false);
   // Admin mode: our team imports a deck or list for an owner, or as unclaimed boards.
   const [adminMode, setAdminMode] = useState(false);
@@ -514,6 +524,7 @@ export default function ImportBoardsPage() {
       if (deckContact && !importContactName.trim() && !importContactPhone.trim()) {
         setImportContactName(deckContact.name);
         setImportContactPhone(deckContact.phone);
+        if (deckContact.email && !importContactEmail.trim()) setImportContactEmail(deckContact.email);
         setContactFromDeck(true);
       }
       Object.values(deckPhotos).forEach(ph => URL.revokeObjectURL(ph.url));
@@ -860,6 +871,7 @@ export default function ImportBoardsPage() {
         ...(r.face_count ? { face_count: r.face_count } : {}),
         contact_name: r.contact_name || importContactName.trim() || null,
         contact_phone: r.contact_phone || importContactPhone.trim() || null,
+        contact_email: r.contact_email || (importEmailBad ? '' : importContactEmail.trim().toLowerCase()) || null,
         ...(photoUrl[r._id] ? { photo_urls: [photoUrl[r._id]] } : {}),
       });
       const isUpdate = (r: ImportRow) => r.action === 'update' && !!r.match;
@@ -1050,11 +1062,15 @@ export default function ImportBoardsPage() {
                   style={{ padding: '8px 10px', border: '1px solid #E2E8F0', borderRadius: 8, fontFamily: 'inherit', fontSize: '0.8125rem' }} />
                 <input value={importContactPhone} onChange={e => { setImportContactPhone(e.target.value); setContactFromDeck(false); }} placeholder="WhatsApp / phone, e.g. 08012345678" maxLength={40} type="tel" aria-label="Contact WhatsApp or phone number"
                   style={{ padding: '8px 10px', border: '1px solid #E2E8F0', borderRadius: 8, fontFamily: 'inherit', fontSize: '0.8125rem' }} />
+                <input value={importContactEmail} onChange={e => { setImportContactEmail(e.target.value); setContactFromDeck(false); }} placeholder="Email, e.g. sales@company.ng" maxLength={200} type="email" aria-label="Contact email" aria-invalid={importEmailBad}
+                  style={{ padding: '8px 10px', border: `1px solid ${importEmailBad ? '#FCA5A5' : '#E2E8F0'}`, borderRadius: 8, fontFamily: 'inherit', fontSize: '0.8125rem' }} />
               </div>
+              {importEmailBad && <p data-email-bad style={{ fontSize: '0.6875rem', color: '#DC2626', margin: '6px 0 0' }}>That email doesn&apos;t look right. Fix it, or it won&apos;t be saved.</p>}
               <p style={{ fontSize: '0.6875rem', color: contactFromDeck ? '#6D28D9' : '#94A3B8', margin: '6px 0 0' }}>
                 {contactFromDeck
                   ? 'Found in the deck. Check it. It goes on every board in this import and is saved for this owner.'
                   : 'Goes on every board in this import and is saved for this owner. A spreadsheet with its own contact columns uses those instead.'}
+                {' '}The email is saved on the owner&apos;s contact, not shown to buyers, and nothing is sent to it.
               </p>
             </div>
           </div>
@@ -1109,7 +1125,7 @@ export default function ImportBoardsPage() {
             <a href="/api/import-boards/template" style={{ fontSize: '0.8125rem', color: '#1B4F8A', fontWeight: 500, textDecoration: 'none' }}>
               Download blank template (.xlsx)
             </a>
-            <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>— 11 columns, 4 example rows, instructions sheet</span>
+            <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>— 15 columns, 4 example rows, instructions sheet</span>
           </div>
 
           {deckMode && deckSummary && (

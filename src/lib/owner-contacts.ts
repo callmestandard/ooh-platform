@@ -15,3 +15,11 @@ export function cleanContact(name: string | null | undefined, phone: string | nu
     contact_phone: (phone ?? '').trim().replace(/\s+/g, ' ').slice(0, 40),
   };
 }
+
+/** Same rule as the database check on owner_sales_contacts.email (063). */
+export const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+export function cleanEmail(email: string | null | undefined): string | null {
+  const e = (email ?? '').trim().toLowerCase();
+  return e && e.length <= 200 && EMAIL_RE.test(e) ? e : null;
+}
