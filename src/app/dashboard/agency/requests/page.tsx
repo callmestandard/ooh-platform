@@ -10,6 +10,7 @@ import {
 import { Journey, StageTag, BUYER_NEXT, toneOf, naira, fmtDate, fmtShort, spanText, ago } from '@/components/requests/journey';
 import { BuyerQuotationCard, BQ_CSS, loadMyQuotations } from '@/components/quotations/BuyerQuotation';
 import type { BuyerQuotation } from '@/lib/quotations';
+import BuyerBookings from '@/components/campaigns/BuyerBookings';
 
 type Filter = 'active' | 'closed' | 'all';
 const DONE: RequestStage[] = ['confirmed', 'cancelled', 'unavailable'];
@@ -86,6 +87,8 @@ export default function MyRequestsPage() {
           Find a board
         </a>
       </header>
+
+      <BuyerBookings />
 
       {requests.length > 0 && (
         <div className="mr-tabs" role="tablist">

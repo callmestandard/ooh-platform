@@ -1,45 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
-// Public, no-login POE upload flow (poe/[token]/page.tsx) — a field rep opens
-// this link on their phone with no account. Uses the service role key
-// server-side and looks the booking up by its poe_token, since bookings now
-// require auth+ownership under RLS (migration 012) and an anonymous field
-// rep has neither.
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+// The install link (/poe/[token]) opened by an installer with no account.
+// Server only: the token is checked in the database (poe_view), which also
+// refuses links for unconfirmed bookings or bookings that ended over 30 days ago.
+export async function GET(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
+  if (!rateLimit(`poe-view:${ip}`, 30)) return rateLimitResponse();
+  const db = getSupabaseAdmin();
+  if (!db) return NextResponse.json({ status: 'error' }, { status: 503 });
 
-  const { data: booking, error } = await supabase
-    .from('bookings')
-    .select(`
-      id, status, poe_token, start_date, end_date,
-      boards (name, address, city, format, width, height),
-      campaigns (id, name, client_name)
-    `)
-    .eq('poe_token', token)
-    .single();
+  const { data: view, error } = await db.rpc('poe_view', { p_token: token });
+  if (error || !view) return NextResponse.json({ status: 'invalid' });
 
-  if (error || !booking) {
-    return NextResponse.json({ status: 'invalid' });
-  }
-
-  const { data: existing } = await supabase
-    .from('compliance_checks')
-    .select('id, status')
-    .eq('booking_id', booking.id)
-    .eq('status', 'verified')
-    .single();
-
-  if (existing) {
-    return NextResponse.json({ status: 'already_submitted', booking });
-  }
-
-  return NextResponse.json({ status: 'ok', booking });
+  // Approved artwork, so the installer can check what goes up. Links last an hour.
+  const artwork = await Promise.all(
+    ((view.artwork ?? []) as { id: string; file_name: string; path: string; mime_type: string | null }[]).map(async a => {
+      const { data } = await db.storage.from('creatives').createSignedUrl(a.path, 3600);
+      return { id: a.id, file_name: a.file_name, mime_type: a.mime_type, url: data?.signedUrl ?? null };
+    }),
+  );
+  const { booking_id: _omit, ...rest } = view;
+  return NextResponse.json({ status: 'ok', view: { ...rest, artwork } });
 }

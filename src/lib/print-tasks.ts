@@ -220,6 +220,6 @@ export async function uploadPrintPhoto(bookingId: string, file: File): Promise<s
     console.error('[print-tasks] photo upload failed:', error?.message);
     return null;
   }
-  const { data: { publicUrl } } = supabase.storage.from(PRINT_PHOTO_BUCKET).getPublicUrl(data.path);
-  return publicUrl;
+  // Private bucket (064): keep the path; openBookingFile() makes a short-lived link.
+  return data.path;
 }

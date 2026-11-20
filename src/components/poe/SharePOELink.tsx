@@ -17,33 +17,15 @@ export default function SharePOELink({ bookingId, boardName, variant = 'button' 
   async function generateAndShare() {
     setLoading(true);
 
-    // Get the poe_token for this booking
-    let { data, error } = await supabase
-      .from('bookings')
-      .select('poe_token')
-      .eq('id', bookingId)
-      .single();
-
-    if (error) {
+    // Install links are made by our team only (064): a long random token,
+    // for confirmed bookings. Everyone else gets an error and no link.
+    const { data: token, error } = await supabase.rpc('admin_poe_link', { p_booking_id: bookingId, p_new: false });
+    if (error || !token) {
       setLoading(false);
       return;
     }
 
-    // Generate and persist a token if one doesn't exist yet
-    if (!data?.poe_token) {
-      const newToken = crypto.randomUUID();
-      const { error: updateError } = await supabase
-        .from('bookings')
-        .update({ poe_token: newToken })
-        .eq('id', bookingId);
-      if (updateError) {
-        setLoading(false);
-        return;
-      }
-      data = { poe_token: newToken };
-    }
-
-    const url = `${window.location.origin}/poe/${data.poe_token}`;
+    const url = `${window.location.origin}/poe/${token}`;
     setLink(url);
 
     // Try to copy to clipboard
@@ -61,7 +43,7 @@ export default function SharePOELink({ bookingId, boardName, variant = 'button' 
   function shareOnWhatsApp() {
     if (!link) return;
     const msg = encodeURIComponent(
-      `Hi! Please submit your proof of execution (POE) for *${boardName}* using this link:\n\n${link}\n\nTake a clear photo of the board and capture your GPS location. Thank you.`
+      `Hi! Please submit your proof of execution (POE) for *${boardName}* using this link:\n\n${link}\n\nTake a clear photo of the board and add your location. Thank you.`
     );
     window.open(`https://wa.me/?text=${msg}`, '_blank');
   }

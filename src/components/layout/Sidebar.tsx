@@ -121,6 +121,7 @@ const adminNav: NavItem[] = [
   { id: "requests",   label: "Requests",         path: "/dashboard/admin/requests",             icon: <Icon path="M22 12h-6l-2 3h-4l-2-3H2 M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /> },
   { id: "quotations", label: "Quotations",       path: "/dashboard/admin/quotations",           icon: <Icon path="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h4" /> },
   { id: "checking",   label: "Needs Checking",   path: "/dashboard/admin/needs-checking",       icon: <Icon path="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M12 6v6l4 2" /> },
+  { id: "campaigns",  label: "Campaigns",        path: "/dashboard/admin/campaigns",            icon: <Icon path="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" /> },
   { id: "owners",     label: "Media Owners",     path: "/dashboard/admin/owners",               icon: <Icon path="M3 21h18 M5 21V7l7-4 7 4v14 M9 21v-6h6v6 M9 10h.01 M15 10h.01" /> },
   { id: "launch",     label: "Launch-ready",     path: "/dashboard/admin/launch-ready",         icon: <Icon path="M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4L12 14.01l-3-3" /> },
   { id: "claims",     label: "Board Claims",     path: "/dashboard/admin/claims",               icon: <Icon path="M9 11l3 3L22 4 M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /> },
@@ -154,7 +155,7 @@ function pick(nav: NavItem[], ids: string[], overrides: Record<string, Partial<N
 const mvpNavByRole: Partial<Record<DemoRole, NavItem[]>> = {
   agency: pick(agencyNav, ["marketplace", "requests", "negotiations", "settings"], { marketplace: { path: "/marketplace" } }),
   owner:  pick(ownerNav, ["my-boards", "post-board", "import-boards", "availability-requests", "negotiations", "claim-boards", "settings"], { "availability-requests": { label: "Requests" } }),
-  admin:  pick(adminNav, ["overview", "requests", "quotations", "checking", "owners", "launch", "claims", "inventory", "add-board", "import", "users", "settings"]),
+  admin:  pick(adminNav, ["overview", "requests", "quotations", "campaigns", "checking", "owners", "launch", "claims", "inventory", "add-board", "import", "users", "settings"]),
 };
 
 type Props = {

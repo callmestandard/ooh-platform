@@ -109,8 +109,7 @@ export default function CreativeUploadPanel({ bookingId, board, existing, onClos
     }
     setProgress(70);
 
-    // 2. Get public URL
-    const { data: { publicUrl } } = supabase.storage.from('creatives').getPublicUrl(storageData.path);
+    // 2. The bucket is private (064): store the path; files open through short-lived links.
     setProgress(85);
 
     // 3. Insert creative_uploads row
@@ -118,7 +117,8 @@ export default function CreativeUploadPanel({ bookingId, board, existing, onClos
       .from('creative_uploads')
       .insert({
         booking_id:  bookingId,
-        file_url:    publicUrl,
+        file_url:    storageData.path,
+        file_path:   storageData.path,
         file_name:   file.name,
         file_size:   file.size,
         mime_type:   file.type,

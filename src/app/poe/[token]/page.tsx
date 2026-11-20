@@ -1,629 +1,245 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { createNotification } from '@/lib/notifications';
-import { logActivity } from '@/lib/activity-log';
 
-type BookingInfo = {
-  id: string;
-  status: string;
-  poe_token: string;
-  start_date: string;
-  end_date: string;
-  boards: {
-    name: string;
-    address: string;
-    city: string;
-    format: string;
-    width: number;
-    height: number;
-  };
-  campaigns: {
-    id: string;
-    name: string;
-    client_name: string;
-  };
+// Install link: an installer (no account) sends a photo of the board once the
+// ad is up. The photo goes into private storage; our team checks it before
+// the buyer sees it or the booking is shown as live.
+
+type View = {
+  status: string; start_date: string | null; end_date: string | null; campaign: string | null;
+  board: { name: string; address: string | null; area: string | null; city: string | null; format: string | null;
+           width: number | null; height: number | null; latitude: number | null; longitude: number | null };
+  artwork: { id: string; file_name: string; mime_type: string | null; url: string | null }[];
+  proofs: { status: 'submitted' | 'verified' | 'flagged'; submitted_at: string; review_note: string | null }[];
 };
+type Step = 'loading' | 'invalid' | 'form' | 'sending' | 'sent';
 
-const FORMAT_LABELS: Record<string, string> = {
-  billboard: 'Billboard', unipole: 'Unipole', gantry: 'Gantry',
-  bridge_panel: 'Bridge Panel', wall_drape: 'Wall Drape',
-};
+const fmt = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
+const when = (d: string) => new Date(d).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+const FORMATS: Record<string, string> = { billboard: 'Billboard', unipole: 'Unipole', gantry: 'Gantry', bridge_panel: 'Bridge panel', wall_drape: 'Wall drape', led: 'LED screen' };
 
-type Step = 'loading' | 'invalid' | 'already_submitted' | 'form' | 'submitting' | 'success';
-
-export default function POEUploadPage() {
-  const { token } = useParams();
+export default function InstallPhotoPage() {
+  const { token } = useParams<{ token: string }>();
   const [step, setStep] = useState<Step>('loading');
-  const [booking, setBooking] = useState<BookingInfo | null>(null);
+  const [view, setView] = useState<View | null>(null);
   const [photo, setPhoto] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [locationError, setLocationError] = useState('');
-  const [gettingLocation, setGettingLocation] = useState(false);
-  const [submitterName, setSubmitterName] = useState('');
+  const [preview, setPreview] = useState<string | null>(null);
+  const [loc, setLoc] = useState<{ lat: number; lng: number } | null>(null);
+  const [locMsg, setLocMsg] = useState('');
+  const [locating, setLocating] = useState(false);
+  const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState('');
+  const [distance, setDistance] = useState<number | null>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (token) fetchBooking();
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/poe/${token}`);
+      const r = await res.json();
+      if (!res.ok || r.status !== 'ok') { setStep('invalid'); return; }
+      setView(r.view);
+      setStep(s => (s === 'sent' ? s : 'form'));
+    } catch { setStep('invalid'); }
   }, [token]);
+  useEffect(() => { if (token) void load(); }, [token, load]);
+  useEffect(() => { try { const n = localStorage.getItem('poe_name'); if (n) setName(n); } catch { /* private mode */ } }, []);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
-  async function fetchBooking() {
-    const res = await fetch(`/api/poe/${token}`);
-    const result = await res.json();
-
-    if (!res.ok || result.status === 'invalid') {
-      setStep('invalid');
-      return;
-    }
-
-    setBooking(result.booking as BookingInfo);
-    setStep(result.status === 'already_submitted' ? 'already_submitted' : 'form');
+  function pick(f: File | undefined) {
+    if (!f) return;
+    if (f.type && !f.type.startsWith('image/')) { setError('Choose a photo.'); return; }
+    if (f.size > 10 * 1024 * 1024) { setError('That photo is over 10 MB. Take it again at a lower size.'); return; }
+    setError('');
+    setPhoto(f);
+    setPreview(URL.createObjectURL(f));
   }
 
-  function handlePhotoSelect(file: File) {
-    setPhoto(file);
-    const reader = new FileReader();
-    reader.onload = e => setPhotoPreview(e.target?.result as string);
-    reader.readAsDataURL(file);
-    setErrors(e => ({ ...e, photo: '' }));
-  }
-
-  async function getLocation() {
-    setGettingLocation(true);
-    setLocationError('');
-    if (!navigator.geolocation) {
-      setLocationError('GPS not available on this device');
-      setGettingLocation(false);
-      return;
-    }
+  function locate() {
+    if (!navigator.geolocation) { setLocMsg('This phone cannot share its location.'); return; }
+    setLocating(true); setLocMsg('');
     navigator.geolocation.getCurrentPosition(
-      pos => {
-        setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setGettingLocation(false);
-        setErrors(e => ({ ...e, location: '' }));
-      },
-      err => {
-        setLocationError('Could not get your location. Please enable GPS and try again.');
-        setGettingLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 15000 }
+      p => { setLoc({ lat: p.coords.latitude, lng: p.coords.longitude }); setLocating(false); },
+      () => { setLocMsg('Location was blocked. You can still send the photo; it may take longer to check.'); setLocating(false); },
+      { enableHighAccuracy: true, timeout: 15000 },
     );
   }
 
-  function validate() {
-    const e: Record<string, string> = {};
-    if (!photo) e.photo = 'Please take or upload a photo of the board';
-    if (!location) e.location = 'GPS location is required to verify the board is live';
-    if (!submitterName.trim()) e.name = 'Please enter your name';
-    return e;
-  }
-
-  async function handleSubmit() {
-    const e = validate();
-    if (Object.keys(e).length > 0) { setErrors(e); return; }
-    if (!booking) return;
-
-    setStep('submitting');
-
-    let photoUrl: string | null = null;
-
-    // Upload photo to Supabase Storage if available
-    if (photo) {
-      const fileName = `poe/${booking.id}/${Date.now()}_${photo.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('compliance-photos')
-        .upload(fileName, photo, { upsert: true });
-
-      if (!uploadError && uploadData) {
-        const { data: urlData } = supabase.storage
-          .from('compliance-photos')
-          .getPublicUrl(fileName);
-        photoUrl = urlData?.publicUrl || null;
-      }
-    }
-
-    const completeRes = await fetch(`/api/poe/${token}/complete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        photoUrl,
-        latitude: location?.lat,
-        longitude: location?.lng,
-        submitterName,
-        notes: notes || null,
-        deviceInfo: navigator.userAgent,
-      }),
-    });
-
-    if (!completeRes.ok) {
+  async function send() {
+    if (!photo) { setError('Take or choose a photo of the board first.'); return; }
+    if (!name.trim()) { setError('Add your name.'); return; }
+    setError(''); setStep('sending');
+    try {
+      const type = photo.type || 'image/jpeg';
+      const slot = await fetch(`/api/poe/${token}/upload`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, size: photo.size }) });
+      const s = await slot.json();
+      if (!slot.ok) throw new Error(s.error || 'Could not start the upload.');
+      const up = await supabase.storage.from('compliance-photos').uploadToSignedUrl(s.path, s.token, photo, { contentType: type });
+      if (up.error) throw new Error('The photo did not upload. Check your connection and try again.');
+      const done = await fetch(`/api/poe/${token}/complete`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: s.path, latitude: loc?.lat, longitude: loc?.lng, submitterName: name.trim(), notes: notes.trim() || null, deviceInfo: navigator.userAgent }),
+      });
+      const d = await done.json();
+      if (!done.ok) throw new Error(d.error || 'Could not send the photo.');
+      try { localStorage.setItem('poe_name', name.trim()); } catch { /* private mode */ }
+      setDistance(d.distance_m ?? null);
+      setStep('sent');
+      setPhoto(null); setPreview(null); setNotes('');
+      void load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong. Try again.');
       setStep('form');
-      setErrors({ submit: 'Failed to submit. Please try again.' });
-      return;
     }
-
-    const { complianceCheckId } = await completeRes.json();
-
-    const campaignId = (booking.campaigns as { id?: string } | null)?.id ?? null;
-    await logActivity({
-      entityType: 'compliance_check',
-      entityId: complianceCheckId,
-      campaignId,
-      action: 'compliance.submitted',
-      summary: `POE submitted for ${booking.boards?.name || 'board'} — ${booking.campaigns?.name || 'campaign'}`,
-      actorRole: 'owner',
-      actorName: submitterName,
-      metadata: { booking_id: booking.id },
-    });
-    await logActivity({
-      entityType: 'booking',
-      entityId: booking.id,
-      campaignId,
-      action: 'booking.status_changed',
-      summary: `${booking.boards?.name} marked live after POE submission`,
-      actorRole: 'owner',
-      actorName: submitterName,
-      changes: { status: { from: booking.status, to: 'live' } },
-    });
-
-    // Notify the agency that proof has been submitted
-    await createNotification({
-      recipientRole: 'agency',
-      type: 'poe_submitted',
-      title: 'POE submitted',
-      body: `${booking.boards?.name} — ${booking.campaigns?.name}`,
-      link: `/dashboard/agency/compliance`,
-    });
-
-    setStep('success');
   }
 
-  // ── Shared styles ──
-  const s = {
-    page: {
-      minHeight: '100vh',
-      background: '#F8FAFC',
-      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
-      WebkitFontSmoothing: 'antialiased' as const,
-    } as React.CSSProperties,
-    header: {
-      background: '#0F172A',
-      padding: '16px 20px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '10px',
-    } as React.CSSProperties,
-    container: {
-      maxWidth: 480,
-      margin: '0 auto',
-      padding: '20px 16px 40px',
-    } as React.CSSProperties,
-    card: {
-      background: '#fff',
-      border: '1px solid #E8EDF2',
-      borderRadius: '14px',
-      padding: '20px',
-      marginBottom: '12px',
-    } as React.CSSProperties,
-    label: {
-      display: 'block',
-      fontSize: '0.8125rem',
-      fontWeight: 600,
-      color: '#374151',
-      marginBottom: '6px',
-    } as React.CSSProperties,
-    input: {
-      width: '100%',
-      padding: '11px 14px',
-      border: '1px solid #E2E8F0',
-      borderRadius: '10px',
-      fontSize: '1rem',
-      outline: 'none',
-      fontFamily: 'inherit',
-      boxSizing: 'border-box' as const,
-      background: '#fff',
-      color: '#0F172A',
-    } as React.CSSProperties,
-    error: {
-      fontSize: '0.75rem',
-      color: '#EF4444',
-      marginTop: '4px',
-      fontWeight: 500,
-    } as React.CSSProperties,
-    btn: {
-      width: '100%',
-      padding: '14px',
-      borderRadius: '12px',
-      border: 'none',
-      fontSize: '1rem',
-      fontWeight: 700,
-      cursor: 'pointer',
-      fontFamily: 'inherit',
-      transition: 'all 0.15s',
-    } as React.CSSProperties,
-  };
+  const b = view?.board;
+  const approved = view?.proofs.some(p => p.status === 'verified');
+  const latest = view?.proofs[0];
 
-  // ── Loading ──
-  if (step === 'loading') {
-    return (
-      <div style={{ ...s.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ width: 36, height: 36, border: '3px solid #E2E8F0', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto 12px' }} />
-          <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>Loading...</p>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Invalid token ──
-  if (step === 'invalid') {
-    return (
-      <div style={s.page}>
-        <div style={s.header}>
-          <OOHLogoSmall />
-        </div>
-        <div style={s.container}>
-          <div style={{ ...s.card, textAlign: 'center', padding: '40px 20px' }}>
-            <div style={{ width: 56, height: 56, background: '#FEF2F2', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-              </svg>
-            </div>
-            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0F172A', margin: '0 0 8px' }}>Invalid link</h2>
-            <p style={{ fontSize: '0.875rem', color: '#64748B', margin: 0 }}>
-              This link is invalid or has expired. Please contact your agency for a new link.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Already submitted ──
-  if (step === 'already_submitted') {
-    return (
-      <div style={s.page}>
-        <div style={s.header}>
-          <OOHLogoSmall />
-        </div>
-        <div style={s.container}>
-          <div style={{ ...s.card, textAlign: 'center', padding: '40px 20px' }}>
-            <div style={{ width: 56, height: 56, background: '#ECFDF5', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-            </div>
-            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0F172A', margin: '0 0 8px' }}>Already submitted</h2>
-            <p style={{ fontSize: '0.875rem', color: '#64748B', margin: '0 0 16px' }}>
-              Proof of execution for <strong>{booking?.boards?.name}</strong> has already been submitted and verified.
-            </p>
-            <div style={{ background: '#F8FAFC', borderRadius: '10px', padding: '12px 16px', textAlign: 'left' }}>
-              <p style={{ fontSize: '0.75rem', color: '#94A3B8', margin: '0 0 4px' }}>Board</p>
-              <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0F172A', margin: 0 }}>{booking?.boards?.name}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Success ──
-  if (step === 'success') {
-    return (
-      <div style={s.page}>
-        <div style={s.header}>
-          <OOHLogoSmall />
-        </div>
-        <div style={s.container}>
-          <div style={{ ...s.card, textAlign: 'center', padding: '48px 20px' }}>
-            <div style={{ width: 72, height: 72, background: '#ECFDF5', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '3px solid #A7F3D0' }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-            </div>
-            <h2 style={{ fontSize: '1.375rem', fontWeight: 800, color: '#0F172A', margin: '0 0 10px', letterSpacing: '-0.02em' }}>
-              Proof submitted!
-            </h2>
-            <p style={{ fontSize: '0.9375rem', color: '#64748B', margin: '0 0 24px', lineHeight: 1.6 }}>
-              Your proof of execution for <strong style={{ color: '#0F172A' }}>{booking?.boards?.name}</strong> has been received.
-            </p>
-            <div style={{ background: '#F8FAFC', borderRadius: '12px', padding: '16px', textAlign: 'left', marginBottom: '20px' }}>
-              {[
-                { label: 'Board', value: booking?.boards?.name },
-                { label: 'Location', value: booking?.boards?.city },
-                { label: 'Campaign', value: booking?.campaigns?.name },
-                { label: 'Submitted by', value: submitterName },
-                { label: 'GPS verified', value: location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : '—' },
-              ].map(({ label, value }) => (
-                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #F1F5F9' }}>
-                  <span style={{ fontSize: '0.8125rem', color: '#94A3B8' }}>{label}</span>
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A', textAlign: 'right', maxWidth: '55%' }}>{value || '—'}</span>
-                </div>
-              ))}
-            </div>
-            <p style={{ fontSize: '0.8125rem', color: '#94A3B8', margin: 0 }}>
-              The agency has been notified. You can close this page.
-            </p>
-          </div>
-        </div>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    );
-  }
-
-  // ── Submitting ──
-  if (step === 'submitting') {
-    return (
-      <div style={{ ...s.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ width: 48, height: 48, border: '3px solid #E2E8F0', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto 16px' }} />
-          <p style={{ fontSize: '1rem', fontWeight: 600, color: '#0F172A', margin: '0 0 4px' }}>Submitting proof...</p>
-          <p style={{ fontSize: '0.875rem', color: '#94A3B8', margin: 0 }}>Uploading photo and verifying GPS location</p>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Main form ──
   return (
-    <div style={s.page}>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-        input:focus { border-color: #1B4F8A !important; box-shadow: 0 0 0 3px rgba(27,79,138,0.08); }
-        textarea:focus { border-color: #1B4F8A !important; box-shadow: 0 0 0 3px rgba(27,79,138,0.08); outline: none; }
-      `}</style>
+    <div className="ip">
+      <style>{CSS}</style>
+      <header className="ip-head">
+        <span className="ip-brand">OOH <b>Platform</b></span>
+        <span className="ip-tag">Install photo</span>
+      </header>
 
-      {/* Header */}
-      <div style={s.header}>
-        <OOHLogoSmall />
-        <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-          <p style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.4)', margin: 0 }}>Proof of execution</p>
-          <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', margin: 0, fontWeight: 600 }}>Secure upload</p>
-        </div>
-      </div>
+      <main className="ip-main">
+        {step === 'loading' && <div className="ip-card ip-center"><div className="ip-spin" /><p className="ip-muted">Opening…</p></div>}
 
-      <div style={s.container}>
-        {/* Board info card */}
-        <div style={{ ...s.card, background: '#0F172A', border: 'none', animation: 'fadeUp 0.3s ease' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <div>
-              <p style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.4)', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>Board details</p>
-              <h2 style={{ fontSize: '1.0625rem', fontWeight: 700, color: '#F8FAFC', margin: 0, letterSpacing: '-0.01em' }}>
-                {booking?.boards?.name}
-              </h2>
-            </div>
-            <span style={{ background: '#1B4F8A', color: '#93C5FD', fontSize: '0.6875rem', fontWeight: 700, padding: '3px 9px', borderRadius: '999px' }}>
-              {FORMAT_LABELS[booking?.boards?.format || ''] || booking?.boards?.format}
-            </span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-            {[
-              { label: 'Address', value: booking?.boards?.address },
-              { label: 'City', value: booking?.boards?.city },
-              { label: 'Campaign', value: booking?.campaigns?.name },
-              { label: 'Client', value: booking?.campaigns?.client_name },
-            ].map(({ label, value }) => (
-              <div key={label}>
-                <p style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.35)', margin: '0 0 2px', fontWeight: 600 }}>{label}</p>
-                <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.8)', margin: 0, fontWeight: 500 }}>{value || '—'}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Instructions */}
-        <div style={{ ...s.card, background: '#FFFBEB', border: '1px solid #FDE68A' }}>
-          <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#92400E', margin: '0 0 6px' }}>
-            Before you submit
-          </p>
-          <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '0.8125rem', color: '#78350F', lineHeight: 1.7 }}>
-            <li>Make sure the creative is fully deployed and visible</li>
-            <li>Take a clear photo showing the full board face</li>
-            <li>Enable GPS on your phone before capturing location</li>
-            <li>Submit immediately after deployment — not hours later</li>
-          </ul>
-        </div>
-
-        {/* Step 1: Photo */}
-        <div style={{ ...s.card, animation: 'fadeUp 0.3s ease 0.05s both' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-            <div style={{ width: 24, height: 24, background: '#1B4F8A', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#fff' }}>1</span>
-            </div>
-            <label style={{ ...s.label, margin: 0 }}>Take a photo of the board</label>
-          </div>
-
-          {photoPreview ? (
-            <div style={{ position: 'relative', marginBottom: '10px' }}>
-              <img src={photoPreview} alt="Board photo" style={{ width: '100%', borderRadius: '10px', maxHeight: '280px', objectFit: 'cover' }} />
-              <button
-                onClick={() => { setPhoto(null); setPhotoPreview(null); }}
-                style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', fontSize: '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-              {/* Camera button */}
-              <button
-                onClick={() => cameraRef.current?.click()}
-                style={{ padding: '16px 12px', background: '#0F172A', border: 'none', borderRadius: '12px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}
-              >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                  <circle cx="12" cy="13" r="4"/>
-                </svg>
-                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#F8FAFC' }}>Take photo</span>
-                <span style={{ fontSize: '0.6875rem', color: 'rgba(255,255,255,0.4)' }}>Use camera</span>
-              </button>
-              {/* Upload button */}
-              <button
-                onClick={() => fileRef.current?.click()}
-                style={{ padding: '16px 12px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}
-              >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1B4F8A" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="17 8 12 3 7 8"/>
-                  <line x1="12" y1="3" x2="12" y2="15"/>
-                </svg>
-                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>Upload photo</span>
-                <span style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>From gallery</span>
-              </button>
-            </div>
-          )}
-          <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
-            onChange={e => e.target.files?.[0] && handlePhotoSelect(e.target.files[0])} />
-          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
-            onChange={e => e.target.files?.[0] && handlePhotoSelect(e.target.files[0])} />
-          {errors.photo && <p style={s.error}>{errors.photo}</p>}
-        </div>
-
-        {/* Step 2: GPS */}
-        <div style={{ ...s.card, animation: 'fadeUp 0.3s ease 0.1s both' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-            <div style={{ width: 24, height: 24, background: '#1B4F8A', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#fff' }}>2</span>
-            </div>
-            <label style={{ ...s.label, margin: 0 }}>Capture your GPS location</label>
-          </div>
-
-          {location ? (
-            <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '10px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-              <div>
-                <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#065F46', margin: '0 0 2px' }}>Location captured</p>
-                <p style={{ fontSize: '0.75rem', color: '#059669', margin: 0, fontFamily: 'monospace' }}>
-                  {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
-                </p>
-              </div>
-              <button onClick={() => setLocation(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: '0.875rem' }}>✕</button>
-            </div>
-          ) : (
-            <button
-              onClick={getLocation}
-              disabled={gettingLocation}
-              style={{
-                ...s.btn,
-                background: gettingLocation ? '#F1F5F9' : '#0F172A',
-                color: gettingLocation ? '#94A3B8' : '#F8FAFC',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-              }}
-            >
-              {gettingLocation ? (
-                <>
-                  <div style={{ width: 18, height: 18, border: '2px solid #CBD5E1', borderTopColor: '#1B4F8A', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-                  Getting your location...
-                </>
-              ) : (
-                <>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                  </svg>
-                  Tap to capture GPS location
-                </>
-              )}
-            </button>
-          )}
-          {locationError && <p style={{ ...s.error, marginTop: '8px' }}>{locationError}</p>}
-          {errors.location && <p style={s.error}>{errors.location}</p>}
-        </div>
-
-        {/* Step 3: Your name */}
-        <div style={{ ...s.card, animation: 'fadeUp 0.3s ease 0.15s both' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-            <div style={{ width: 24, height: 24, background: '#1B4F8A', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <span style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#fff' }}>3</span>
-            </div>
-            <label style={{ ...s.label, margin: 0 }}>Your name</label>
-          </div>
-          <input
-            type="text"
-            placeholder="e.g. Emeka Okafor"
-            value={submitterName}
-            onChange={e => { setSubmitterName(e.target.value); setErrors(er => ({ ...er, name: '' })); }}
-            style={{ ...s.input, border: `1px solid ${errors.name ? '#EF4444' : '#E2E8F0'}`, fontSize: '1rem' }}
-          />
-          {errors.name && <p style={s.error}>{errors.name}</p>}
-        </div>
-
-        {/* Optional notes */}
-        <div style={{ ...s.card, animation: 'fadeUp 0.3s ease 0.2s both' }}>
-          <label style={{ ...s.label, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            Notes
-            <span style={{ fontSize: '0.6875rem', color: '#94A3B8', fontWeight: 400 }}>(optional)</span>
-          </label>
-          <textarea
-            rows={3}
-            placeholder="Board condition, any issues, special notes for the agency..."
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            style={{ ...s.input, resize: 'none', minHeight: '80px', lineHeight: 1.5 }}
-          />
-        </div>
-
-        {/* Error */}
-        {errors.submit && (
-          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '10px', padding: '12px 16px', marginBottom: '12px', fontSize: '0.875rem', color: '#7F1D1D', fontWeight: 500 }}>
-            {errors.submit}
+        {step === 'invalid' && (
+          <div className="ip-card ip-center">
+            <h1 className="ip-h">This link does not work</h1>
+            <p className="ip-muted">It may have been replaced, or the booking has ended. Ask the OOH Platform team for a new link.</p>
           </div>
         )}
 
-        {/* Submit button */}
-        <button
-          onClick={handleSubmit}
-          style={{
-            ...s.btn,
-            background: '#1B4F8A',
-            color: '#fff',
-            fontSize: '1.0625rem',
-            padding: '16px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-          }}
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-          Submit proof of execution
-        </button>
+        {view && b && step !== 'invalid' && step !== 'loading' && (
+          <>
+            <section className="ip-card ip-board">
+              <p className="ip-label">Board</p>
+              <h1 className="ip-h">{b.name}</h1>
+              <p className="ip-muted">{[b.address, b.area, b.city].filter(Boolean).join(', ') || 'Address not recorded'}</p>
+              <dl className="ip-facts">
+                {b.format && <div><dt>Format</dt><dd>{FORMATS[b.format] ?? b.format}</dd></div>}
+                {b.width && b.height && <div><dt>Size</dt><dd>{b.width} × {b.height} ft</dd></div>}
+                <div><dt>Runs</dt><dd>{fmt(view.start_date)} – {fmt(view.end_date)}</dd></div>
+                {view.campaign && <div><dt>Campaign</dt><dd>{view.campaign}</dd></div>}
+              </dl>
+              {b.latitude != null && b.longitude != null && (
+                <a className="ip-link" href={`https://www.google.com/maps/search/?api=1&query=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer">Open directions ↗</a>
+              )}
+            </section>
 
-        <p style={{ textAlign: 'center', fontSize: '0.75rem', color: '#CBD5E1', marginTop: '16px' }}>
-          Secured by OOH Platform · Your submission is recorded with timestamp and GPS
-        </p>
-      </div>
+            <section className="ip-card">
+              <p className="ip-label">Artwork to put up</p>
+              {view.artwork.length === 0
+                ? <p className="ip-muted">No approved artwork on file yet. Check with the OOH Platform team before installing.</p>
+                : <ul className="ip-art">{view.artwork.map(a => (
+                    <li key={a.id}>
+                      {a.url && a.mime_type?.startsWith('image/') ? <img src={a.url} alt="" /> : <span className="ip-file">{(a.file_name.split('.').pop() || 'file').toUpperCase()}</span>}
+                      <span className="ip-art-name">{a.file_name}</span>
+                      {a.url && <a className="ip-link" href={a.url} target="_blank" rel="noreferrer">Open</a>}
+                    </li>))}
+                  </ul>}
+            </section>
+
+            {latest && (
+              <section className={`ip-card ip-state ${approved ? 'ok' : latest.status === 'flagged' ? 'bad' : 'wait'}`}>
+                {approved ? <><b>Photo approved.</b> Thank you. Send another only if the ad changes or gets damaged.</>
+                  : latest.status === 'flagged' ? <><b>Please send a new photo.</b> {latest.review_note}</>
+                  : <><b>Photo received {when(latest.submitted_at)}.</b> Our team is checking it.</>}
+              </section>
+            )}
+
+            {step === 'sent' && (
+              <section className="ip-card ip-state ok" role="status">
+                <b>Sent. Thank you.</b> Our team will check the photo{distance != null ? ` (taken about ${distance} m from the board's map pin)` : ''}. Nothing else to do unless we ask for another.
+              </section>
+            )}
+
+            {step !== 'sent' && (
+              <section className="ip-card">
+                <p className="ip-label">{latest ? 'Send another photo' : 'Send a photo of the installed board'}</p>
+                <p className="ip-muted ip-tip">Stand where drivers see it. Get the whole face in, with the street in view.</p>
+
+                <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={e => pick(e.target.files?.[0])} />
+                <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => pick(e.target.files?.[0])} />
+                {preview
+                  ? <div className="ip-preview"><img src={preview} alt="Your photo" /><button type="button" className="ip-btn ghost" onClick={() => { setPhoto(null); setPreview(null); }}>Retake</button></div>
+                  : <div className="ip-pick">
+                      <button type="button" className="ip-btn primary" onClick={() => cameraRef.current?.click()}>Take photo</button>
+                      <button type="button" className="ip-btn ghost" onClick={() => fileRef.current?.click()}>Choose from phone</button>
+                    </div>}
+
+                <div className="ip-field">
+                  <span>Location</span>
+                  {loc ? <p className="ip-okline">Location added ✓</p>
+                    : <button type="button" className="ip-btn ghost" onClick={locate} disabled={locating}>{locating ? 'Finding you…' : 'Add my location'}</button>}
+                  <small>{locMsg || 'Helps us confirm the photo is from this board.'}</small>
+                </div>
+                <label className="ip-field"><span>Your name</span>
+                  <input value={name} onChange={e => setName(e.target.value)} maxLength={120} autoComplete="name" placeholder="e.g. Sam Okafor" />
+                </label>
+                <label className="ip-field"><span>Note <i>(optional)</i></span>
+                  <textarea value={notes} onChange={e => setNotes(e.target.value)} maxLength={1000} rows={2} placeholder="Anything we should know, e.g. a light is out" />
+                </label>
+                {error && <p className="ip-err" role="alert">{error}</p>}
+                <button type="button" className="ip-btn primary wide" onClick={send} disabled={step === 'sending'}>{step === 'sending' ? 'Sending…' : 'Send photo'}</button>
+                <p className="ip-muted ip-fine">The photo is stored privately. Only the OOH Platform team, the advertiser and the board&apos;s owner can see it.</p>
+              </section>
+            )}
+          </>
+        )}
+      </main>
     </div>
   );
 }
 
-function OOHLogoSmall() {
-  return (
-    <svg width="100" height="22" viewBox="0 0 160 36" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="2" width="28" height="18" rx="2" fill="#1B4F8A"/>
-      <rect x="3" y="5" width="22" height="12" rx="1.5" fill="#0F172A"/>
-      <rect x="10" y="20" width="2.5" height="6" fill="#1B4F8A"/>
-      <rect x="15.5" y="20" width="2.5" height="6" fill="#1B4F8A"/>
-      <rect x="34" y="6" width="24" height="16" rx="2" fill="#1B4F8A"/>
-      <rect x="37" y="9" width="18" height="10" rx="1.5" fill="#0F172A"/>
-      <rect x="42" y="22" width="2.5" height="6" fill="#1B4F8A"/>
-      <rect x="47.5" y="22" width="2.5" height="6" fill="#1B4F8A"/>
-      <rect x="64" y="2" width="4" height="28" rx="2" fill="#1B4F8A"/>
-      <rect x="80" y="2" width="4" height="28" rx="2" fill="#1B4F8A"/>
-      <rect x="64" y="13" width="20" height="4" rx="1" fill="#1B4F8A"/>
-      <circle cx="88" cy="4" r="3" fill="#F59E0B"/>
-      <text x="98" y="20" fontFamily="Georgia, serif" fontSize="18" fontWeight="700" fill="#F8FAFC" letterSpacing="-0.5">OOH</text>
-      <text x="99" y="30" fontFamily="Arial, sans-serif" fontSize="6.5" fontWeight="400" fill="rgba(255,255,255,0.35)" letterSpacing="3">PLATFORM</text>
-    </svg>
-  );
-}
+const CSS = `
+.ip { min-height: 100vh; background: #F1F5F9; font-family: inherit; color: #0F172A; }
+.ip-head { background: #0F172A; color: #F8FAFC; display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; }
+.ip-brand { font-weight: 600; letter-spacing: -.01em; } .ip-brand b { color: #F59E0B; font-weight: 700; }
+.ip-tag { font-size: .75rem; color: rgba(248,250,252,.65); }
+.ip-main { max-width: 520px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
+.ip-card { background: #fff; border: 1px solid #E2E8F0; border-radius: 14px; padding: 16px; }
+.ip-center { text-align: center; padding: 40px 20px; }
+.ip-spin { width: 32px; height: 32px; border: 3px solid #E2E8F0; border-top-color: #1B4F8A; border-radius: 50%; margin: 0 auto 10px; animation: ipspin .7s linear infinite; }
+@keyframes ipspin { to { transform: rotate(360deg); } }
+.ip-label { font-size: .6875rem; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; color: #64748B; margin: 0 0 6px; }
+.ip-h { font-size: 1.125rem; font-weight: 700; margin: 0 0 4px; letter-spacing: -.01em; }
+.ip-muted { font-size: .875rem; color: #64748B; margin: 0; line-height: 1.5; }
+.ip-tip { margin-bottom: 12px; } .ip-fine { font-size: .75rem; margin-top: 10px; text-align: center; }
+.ip-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 12px 0 0; }
+.ip-facts dt { font-size: .6875rem; color: #94A3B8; } .ip-facts dd { margin: 0; font-size: .875rem; font-weight: 600; }
+.ip-link { display: inline-block; margin-top: 10px; font-size: .875rem; font-weight: 600; color: #1B4F8A; text-decoration: none; }
+.ip-art { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ip-art li { display: flex; align-items: center; gap: 10px; }
+.ip-art li .ip-link { margin: 0 0 0 auto; }
+.ip-art img, .ip-file { width: 56px; height: 40px; border-radius: 6px; object-fit: cover; background: #F1F5F9; flex: none; }
+.ip-file { display: grid; place-items: center; font-size: .625rem; font-weight: 700; color: #64748B; }
+.ip-art-name { font-size: .8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ip-state { font-size: .875rem; line-height: 1.5; }
+.ip-state.ok { background: #ECFDF5; border-color: #A7F3D0; color: #065F46; }
+.ip-state.wait { background: #EFF6FF; border-color: #BFDBFE; color: #1E3A8A; }
+.ip-state.bad { background: #FFF7ED; border-color: #FED7AA; color: #9A3412; }
+.ip-pick { display: grid; gap: 8px; }
+.ip-preview { position: relative; } .ip-preview img { width: 100%; max-height: 320px; object-fit: cover; border-radius: 10px; display: block; }
+.ip-preview .ip-btn { position: absolute; right: 8px; bottom: 8px; background: rgba(255,255,255,.95); }
+.ip-btn { border: 1px solid #CBD5E1; background: #fff; color: #0F172A; border-radius: 10px; padding: 12px 14px; font: inherit; font-size: .9375rem; font-weight: 600; cursor: pointer; }
+.ip-btn.primary { background: #1B4F8A; border-color: #1B4F8A; color: #fff; }
+.ip-btn.wide { width: 100%; margin-top: 4px; padding: 14px; }
+.ip-btn:disabled { opacity: .6; cursor: default; }
+.ip-field { display: grid; gap: 6px; margin-top: 14px; }
+.ip-field > span { font-size: .8125rem; font-weight: 600; } .ip-field i { font-weight: 400; color: #94A3B8; font-style: normal; }
+.ip-field small { font-size: .75rem; color: #64748B; }
+.ip-field input, .ip-field textarea { border: 1px solid #CBD5E1; border-radius: 10px; padding: 11px 12px; font: inherit; font-size: 1rem; resize: vertical; }
+.ip-field input:focus, .ip-field textarea:focus { outline: none; border-color: #1B4F8A; box-shadow: 0 0 0 3px rgba(27,79,138,.1); }
+.ip-okline { margin: 0; font-size: .875rem; color: #047857; font-weight: 600; }
+.ip-err { color: #B91C1C; font-size: .875rem; margin: 12px 0 0; }
+`;

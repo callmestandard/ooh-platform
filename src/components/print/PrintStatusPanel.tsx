@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { openBookingFile } from '@/lib/campaign-progress';
 import { getCurrentProfile } from '@/lib/auth';
 import { logActivity, getActivityActor } from '@/lib/activity-log';
 import ActivityTimeline from '@/components/activity/ActivityTimeline';
@@ -221,7 +222,7 @@ export default function PrintStatusPanel({
                   <p style={{ fontSize: '0.75rem', color: PRINT_STATUS_STYLE[task.status].color, margin: '6px 0 0', fontStyle: 'italic' }}>&ldquo;{task.notes}&rdquo;</p>
                 )}
                 {task.photo_url && (
-                  <a href={task.photo_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.6875rem', fontWeight: 600, color: PRINT_STATUS_STYLE[task.status].color, textDecoration: 'underline', display: 'inline-block', marginTop: 6 }}>
+                  <a href={task.photo_url} onClick={e => { e.preventDefault(); void openBookingFile('compliance-photos', task.photo_url); }} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.6875rem', fontWeight: 600, color: PRINT_STATUS_STYLE[task.status].color, textDecoration: 'underline', display: 'inline-block', marginTop: 6 }}>
                     View photo ↗
                   </a>
                 )}
