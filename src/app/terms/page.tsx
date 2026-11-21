@@ -61,13 +61,15 @@ const sections: LegalSection[] = [
   {
     id: 'payment', title: 'Payment',
     body: <>
-      <p>You pay as set out in the quotation and the invoice we send you. Only pay into a bank account that our team has confirmed to you directly in writing. If you receive payment details you are unsure about, check with us on WhatsApp before paying. <Tbc>standard payment terms (deposit, when the balance is due, late payment)</Tbc></p>
+      <p>You pay as set out in the quotation and the invoice we send you. Only pay into a bank account that our team has confirmed to you directly in writing. If you receive payment details you are unsure about, check with us on WhatsApp before paying.</p>
+      <p>Unless your quotation says otherwise, full payment (100%) is due before your board is posted. We schedule posting once payment has been received in full. <Tbc>late payment</Tbc></p>
     </>,
   },
   {
     id: 'cancellation', title: 'Changes and cancellation',
     body: <>
-      <p>The cancellation terms for a booking are those in its quotation. If you need to change dates or cancel, tell us as early as possible; the media owner may charge for cancellations, especially once printing or installation has started. <Tbc>standard cancellation policy and notice periods</Tbc></p>
+      <p>The cancellation terms for a booking are those in its quotation. If you need to change dates or cancel, tell us as early as possible; the media owner may charge for cancellations, especially once printing or installation has started.</p>
+      <p>Unless your quotation says otherwise, you can cancel free of charge, in writing, before your creative goes to print. Once printing or posting has started, payment is not refundable.</p>
     </>,
   },
   {
