@@ -135,24 +135,30 @@ function SettingsPanel() {
   const [s, setS] = useState<Settings | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from('commercial_settings').select('validity_days, vat_rate, payment_terms, cancellation_terms, special_conditions, approved, updated_at').eq('id', 1).maybeSingle();
       setS(data as Settings | null);
+      if (data) setSaved(JSON.stringify(data));
     })();
   }, []);
   if (!s) return null;
   const save = async () => {
     setBusy(true); setMsg(null);
     const { data: { session } } = await supabase.auth.getSession();
-    const { error } = await supabase.from('commercial_settings').update({
+    const { data, error } = await supabase.from('commercial_settings').update({
       validity_days: Number(s.validity_days), vat_rate: Number(s.vat_rate), payment_terms: s.payment_terms,
       cancellation_terms: s.cancellation_terms, special_conditions: s.special_conditions, approved: s.approved,
       updated_by: session?.user.id ?? null, updated_at: new Date().toISOString(),
-    }).eq('id', 1);
+    }).eq('id', 1).select('updated_at');
     setBusy(false);
-    setMsg(error ? error.message : 'Saved. New quotations use these defaults; existing ones keep their own terms.');
+    // An update that matches no row (e.g. not signed in as admin) returns no error, so check a row came back.
+    if (error || !data?.length) { setMsg(`Not saved. ${error?.message ?? 'Sign in with an admin account and try again.'}`); return; }
+    setSaved(JSON.stringify(s));
+    setMsg('Saved. New quotations use these defaults; existing ones keep their own terms.');
   };
+  const dirty = saved !== null && saved !== JSON.stringify(s);
   return (
     <section className="qp-sec" data-commercial-settings>
       <h2>Default terms for new quotations {!s.approved && <span className="qp-bad">Draft — not yet approved</span>}</h2>
@@ -165,7 +171,10 @@ function SettingsPanel() {
         <label className="wide">Special conditions<textarea className="aq-in" rows={2} value={s.special_conditions} onChange={e => setS({ ...s, special_conditions: e.target.value })} /></label>
       </div>
       <label className="aq-check" style={{ marginTop: 8 }}><input type="checkbox" checked={s.approved} onChange={e => setS({ ...s, approved: e.target.checked })} /> The business owner has approved these terms</label>
-      <div className="aq-actions"><button className="aq-btn primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save defaults'}</button></div>
+      <div className="aq-actions" style={{ alignItems: 'center' }}>
+        <button className="aq-btn primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save defaults'}</button>
+        {dirty && !busy && <span data-unsaved style={{ fontSize: '0.75rem', fontWeight: 600, color: '#B45309' }}>Not saved yet. Press Save defaults.</span>}
+      </div>
       {msg && <p className="aq-muted" style={{ marginTop: 6 }}>{msg}</p>}
     </section>
   );
