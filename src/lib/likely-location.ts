@@ -54,7 +54,7 @@ const titleCase = (s: string) => s === s.toUpperCase() ? s.toLowerCase().replace
 
 /** The places a board faces: "Ikeja, Iyana ipaja and Dopemu" → three places. */
 function facingPlaces(after: string): string[] {
-  return after.replace(SIDE, ' ').replace(/[;.].*$/, '').split(/,|\/|\band\b|&/i)
+  return after.replace(SIDE, ' ').replace(/\bV\s*\/\s*I(sland)?\b/gi, 'Victoria Island').replace(/[;.].*$/, '').split(/,|\/|\band\b|&/i)
     .map(p => p.replace(/\s{2,}/g, ' ').replace(/^[\s:-]+|[\s:-]+$/g, '').trim())
     .filter(p => p.length >= 3 && !FACING.test(p) && !/^(beyond|others?|etc|environs)$/i.test(p));
 }
@@ -66,17 +66,34 @@ function withTown(main: string, b: Where): string {
   return [...uniq, 'Nigeria'].join(', ');
 }
 
+const splitTexts = (b: Where) => [b.address, b.name].map(t => (t ?? '').trim()).filter(Boolean).map(t => ({ t, ...splitFacing(t) }));
+
+/** The traffic a board faces, from the owner's FTF/FTT note, plus the places it names. */
+function facingOf(split: ReturnType<typeof splitTexts>): { text: string | null; places: string[] } {
+  const facingFrom = split.find(x => x.dir && facingPlaces(x.after).length);
+  const places = facingFrom ? facingPlaces(facingFrom.after).map(titleCase) : [];
+  // Some imported names stop mid-place ("FTF Outer", "FTF Third"): leave those words out of the sentence.
+  const shown = places.filter(p => !HALF_PLACE.test(p));
+  if (!facingFrom || !shown.length) return { text: null, places };
+  return { text: facingSentence(facingFrom.dir, shown), places };
+}
+
+const HALF_PLACE = /^(outer|inner|third|state|national|iyana|nnamdi|old|new|upper|lower|federal|first|second|ahmadu|obafemi|murtala)$/i;
+
+function facingSentence(dir: 'from' | 'to' | 'both' | null, places: string[]): string {
+  const list = places.slice(0, 4).join(', ') + (places.length > 4 ? ' and more' : '');
+  const way = dir === 'from' ? 'coming from' : dir === 'to' ? 'going to' : 'to and from';
+  return `Faces traffic ${way} ${list}`;
+}
+
+/** "Faces traffic coming from Ife": the owner's FTF/FTT note in plain words, or null. */
+export const facingText = (b: Where): string | null => facingOf(splitTexts(b)).text;
+
 export function likelyLocation(b: Where): Likely | null {
   const town = [b.area, b.city, b.state].map(x => (x ?? '').trim().toLowerCase());
   const useful = (s: string) => s.length >= 8 && !town.includes(s.toLowerCase());
-  const texts = [b.address, b.name].map(t => (t ?? '').trim()).filter(Boolean);
-  const split = texts.map(t => ({ t, ...splitFacing(t) }));
-
-  const facingFrom = split.find(x => x.dir && facingPlaces(x.after).length);
-  const places = facingFrom ? facingPlaces(facingFrom.after).map(titleCase) : [];
-  const facing = facingFrom && places.length
-    ? `Faces traffic ${facingFrom.dir === 'from' ? 'from' : facingFrom.dir === 'to' ? 'to' : 'from/to'} ${places.slice(0, 4).join(', ')}`
-    : null;
+  const split = splitTexts(b);
+  const { text: facing, places } = facingOf(split);
 
   // 1. The board's own spot: the text before FTF/FTT, address first unless it's a description.
   const spots = split.map(x => ({ raw: x.t, spot: cleanPlaceText(x.before) })).filter(x => useful(x.spot));

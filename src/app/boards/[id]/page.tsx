@@ -12,6 +12,7 @@ import { computeTrustBadge, TrustBadgePill, type TrustBadge } from '@/lib/agent-
 import { VerificationBadge, VERIFICATION_META, verificationOf, formatVerifiedDate, dimensionsText, UNKNOWN } from '@/lib/board-verification';
 import { boardIdFromParam, boardPath, citySlug } from '@/lib/public-links';
 import { displayName } from '@/lib/display-name';
+import { facingText } from '@/lib/likely-location';
 import SiteHeader from '@/components/public/SiteHeader';
 import WhatsAppButton from '@/components/WhatsAppButton';
 import SaveButton from '@/components/shortlist/SaveButton';
@@ -163,6 +164,7 @@ export default function PublicBoardPage() {
   const format = FORMAT_LABELS[board.format] || board.format || 'Billboard';
   const place = [board.area, board.city, board.state && board.state !== board.city ? board.state : null].filter(Boolean).join(', ');
   const address = board.address && displayName(board.address) !== name ? displayName(board.address) : null;
+  const facing = facingText(board);
   const verified = verificationOf(board);
   const verifiedOn = formatVerifiedDate(board.last_verified_at);
 
@@ -317,6 +319,15 @@ export default function PublicBoardPage() {
                     width={board.width} height={board.height} name={name} facing={board.facing_deg} nearby={nearby} startFlat />
                 ) : (
                   <div className="bp-card" style={{ color: '#64748B', fontSize: '0.875rem' }}>The exact map location hasn&apos;t been added yet. {address ? `Address: ${address}.` : ''}</div>
+                )}
+                {facing && (
+                  <div data-board-facing className="bp-card" style={{ marginTop: 10, display: 'flex', gap: 10, alignItems: 'center', padding: '12px 14px' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B4F8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: '#0F172A' }}>{facing}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: '#64748B' }}>From the media owner&apos;s description (FTF/FTT). Ask us to confirm before you book if it matters.</p>
+                    </div>
+                  </div>
                 )}
                 {hasPin && <p style={{ margin: '8px 2px 0', fontSize: '0.75rem', color: '#94A3B8' }}>Press <b>+ 3D view</b> to see the board drawn to its listed size on the street.</p>}
               </section>

@@ -38,6 +38,8 @@ export type MapBoard = {
   digital?: boolean;
   /** Width × height, e.g. "12m × 4m". */
   size?: string | null;
+  /** "Faces traffic coming from Ife", from the owner's FTF/FTT note. */
+  facing?: string | null;
 };
 
 export type MapView = { bounds: [number, number, number, number]; lng: number; lat: number; zoom: number };
@@ -343,11 +345,12 @@ export default function MarketplaceMap({
                   <p style={{ fontSize: '0.75rem', color: '#64748B', margin: '0 0 8px' }}>{[open.area, open.city].filter(Boolean).join(', ')} · {[open.size, boardFormatLabel(open.format)].filter(Boolean).join(' · ')}</p>
                   {(() => {
                     const sm = intelSummary(intel?.get(open.id));
-                    if (!sm.people && !sm.places) return null;
+                    if (!sm.people && !sm.places && !open.facing) return null;
                     return (
                       <div data-card-intel style={{ margin: '0 0 9px', padding: '7px 9px', borderRadius: 9, background: '#F8FAFC', display: 'grid', gap: 2 }}>
                         {sm.people && <p style={{ margin: 0, fontSize: '0.75rem', color: '#0F172A', fontWeight: 600 }}>{sm.people}</p>}
                         {sm.places && <p style={{ margin: 0, fontSize: '0.6875rem', color: '#64748B', lineHeight: 1.35 }}>{sm.places}</p>}
+                        {open.facing && <p data-card-facing style={{ margin: sm.people || sm.places ? '3px 0 0' : 0, fontSize: '0.6875rem', color: '#1B4F8A', fontWeight: 600, lineHeight: 1.35 }}>→ {open.facing}</p>}
                       </div>
                     );
                   })()}

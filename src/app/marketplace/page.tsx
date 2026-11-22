@@ -21,6 +21,7 @@ import ShortlistTray from '@/components/shortlist/ShortlistTray';
 import { sinceText } from '@/lib/owner-links';
 import MapExplorer, { loadMap, type ExplorerBoard } from './MapExplorer';
 import { INTEL_FILTERS, intelSummary, loadAllIntel, type BoardIntel, type IntelFilter } from '@/lib/intel';
+import { facingText } from '@/lib/likely-location';
 import { trackMap } from '@/lib/map-track';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -242,6 +243,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function BoardModal({ board, onClose, onRequestQuote, intel }: { board: Board; onClose: () => void; onRequestQuote: () => void; intel?: BoardIntel | null }) {
   const around = intelSummary(intel);
+  const facing = facingText(board);
   return (
     <div
       style={{
@@ -304,13 +306,26 @@ function BoardModal({ board, onClose, onRequestQuote, intel }: { board: Board; o
             ))}
           </div>
 
-          {(around.people || around.places) && (
-            <div data-modal-intel style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 14px', borderRadius: 10, border: '1px solid #E8EDF2', marginBottom: 14 }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B4F8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" strokeDasharray="2 3"/></svg>
-              <div style={{ minWidth: 0 }}>
-                {around.people && <p style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>{around.people}</p>}
-                {around.places && <p style={{ margin: '1px 0 0', fontSize: '0.75rem', color: '#64748B' }}>{around.places}</p>}
-              </div>
+          {(around.people || around.places || facing) && (
+            <div data-modal-intel style={{ display: 'grid', gap: 9, padding: '10px 14px', borderRadius: 10, border: '1px solid #E8EDF2', marginBottom: 14 }}>
+              {(around.people || around.places) && (
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B4F8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" strokeDasharray="2 3"/></svg>
+                  <div style={{ minWidth: 0 }}>
+                    {around.people && <p style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>{around.people}</p>}
+                    {around.places && <p style={{ margin: '1px 0 0', fontSize: '0.75rem', color: '#64748B' }}>{around.places}</p>}
+                  </div>
+                </div>
+              )}
+              {facing && (
+                <div data-modal-facing style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B4F8A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: '0.8125rem', fontWeight: 600, color: '#0F172A' }}>{facing}</p>
+                    <p style={{ margin: '1px 0 0', fontSize: '0.75rem', color: '#64748B' }}>From the media owner&apos;s description</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -527,6 +542,7 @@ function MarketplaceContent() {
       place: [b.area, b.city].filter(Boolean).join(', ') || UNKNOWN,
       spec: [FORMAT_LABELS[b.format] ?? b.format, b.width && b.height ? `${b.width}m × ${b.height}m` : null, b.illuminated ? 'Lit' : null].filter(Boolean).join(' · '),
       priceText: priced ? rateText(b) : null,
+      facing: facingText(b),
     };
   }), [filtered, vaguePins]);
   const filterKey = JSON.stringify([search, stateFilter, areaFilter, formatFilter, kindFilter, verifyFilter, statusFilter, priceMax === Infinity ? 0 : priceMax, nearFilter]);
