@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import OOHMap, { Popup, type MapRef } from '@/components/map/OOHMap';
+import OOHMap, { Popup, Source, Layer, Marker, type MapRef } from '@/components/map/OOHMap';
+import { boardsWithinRadius, boardsWithinCorridor, corridorPolygon, circlePolygon, type GeoPoint } from '@/components/map/corridor';
+import { fetchDrivingRoute } from '@/components/map/ooh-map-shared';
 import BoardPins, { type BoardPin } from '@/components/map/BoardPins';
 import { VerificationBadge, VERIFICATION_META, verificationOf, type VerificationStatus } from '@/lib/board-verification';
 import { boardFormatLabel } from '@/lib/board-formats';
@@ -89,7 +91,15 @@ type Props = {
   fitPadding?: { top: number; bottom: number; left: number; right: number };
   /** What is around each board (shown on the card). */
   intel?: Map<string, BoardIntel>;
+  /** Explorer: the boards inside the area the buyer drew, or null when none is drawn. */
+  onArea?: (ids: Set<string> | null) => void;
+  /** Explorer: bump to remove the drawn area from outside (the list's "Clear area"). */
+  clearArea?: number;
 };
+
+type AreaMode = 'spot' | 'road';
+/** Most taps a road can take (the directions service allows 25 waypoints). */
+const MAX_ROAD_TAPS = 12;
 
 /** Boards near where most of them are: drops strays far from the middle. */
 function coreOf(boards: MapBoard[]): MapBoard[] {
@@ -106,7 +116,59 @@ function coreOf(boards: MapBoard[]): MapBoard[] {
 export default function MarketplaceMap({
   boards, onOpen, hoveredId = null, onHover, selectedId, onSelect, onView, initialCamera,
   fitKey, trimOutliers, cooperative = true, preview = true, explorer, verificationColors, focus, fitPadding, intel,
+  onArea, clearArea = 0,
 }: Props) {
+  // ── Select an area: a circle around a spot, or a strip along a road ──
+  const [drawing, setDrawing] = useState(false);
+  const [areaMode, setAreaMode] = useState<AreaMode>('spot');
+  const [taps, setTaps] = useState<GeoPoint[]>([]);
+  const [radiusKm, setRadiusKm] = useState(1);
+  const [widthKm, setWidthKm] = useState(0.3);
+  const [road, setRoad] = useState<{ key: string; line: GeoPoint[] | null } | null>(null);
+  const tapsKey = areaMode === 'road' && taps.length >= 2 ? taps.map(p => `${p.lng.toFixed(5)},${p.lat.toFixed(5)}`).join(';') : '';
+
+  // Follow the real road between the taps; straight lines if that fails.
+  useEffect(() => {
+    if (!tapsKey) return;
+    let live = true;
+    fetchDrivingRoute(taps.map(p => [p.lng, p.lat]))
+      .then(r => { if (live) setRoad({ key: tapsKey, line: r ? r.geometry.coordinates.map(([lng, lat]) => ({ lng, lat })) : null }); })
+      .catch(() => { if (live) setRoad({ key: tapsKey, line: null }); });
+    return () => { live = false; };
+    // taps is captured through tapsKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tapsKey]);
+
+  const routing = !!tapsKey && road?.key !== tapsKey;
+  const roadLine = tapsKey ? (road?.key === tapsKey && road.line ? road.line : taps) : null;
+  const areaShape = useMemo(() => {
+    if (areaMode === 'spot' && taps.length === 1) return circlePolygon(taps[0], radiusKm);
+    if (areaMode === 'road' && roadLine && roadLine.length >= 2) return corridorPolygon(roadLine, widthKm);
+    return null;
+  }, [areaMode, taps, radiusKm, roadLine, widthKm]);
+  const inArea = useMemo(() => {
+    if (!areaShape) return null;
+    const hits = areaMode === 'spot' ? boardsWithinRadius(boards, taps[0], radiusKm) : boardsWithinCorridor(boards, roadLine ?? [], widthKm);
+    return new Set(hits.map(b => b.id));
+  }, [areaShape, areaMode, boards, taps, radiusKm, roadLine, widthKm]);
+
+  const onAreaRef = useRef(onArea);
+  useEffect(() => { onAreaRef.current = onArea; }, [onArea]);
+  useEffect(() => { onAreaRef.current?.(inArea); }, [inArea]);
+
+  const seenClear = useRef(clearArea);
+  useEffect(() => {
+    if (seenClear.current === clearArea) return;
+    seenClear.current = clearArea;
+    setTaps([]); setDrawing(false);
+  }, [clearArea]);
+
+  function startArea(mode: AreaMode) {
+    if (mode !== areaMode) { setAreaMode(mode); setTaps([]); }
+    setDrawing(true);
+    trackMap('layer', `area_${mode}`);
+  }
+
   const [layersOpen, setLayersOpen] = useState(false);
   const [showPop, setShowPop] = useState(false);
   const [showPlaces, setShowPlaces] = useState(false);
@@ -179,12 +241,23 @@ export default function MarketplaceMap({
     }
   }, [focusId, focusPad, ready, boards]);
 
-  // Escape closes the card.
+  // Escape closes the card (or stops drawing, keeping the area).
   useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { setStack(null); select(null); } };
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (drawing) { setDrawing(false); return; }
+      setStack(null); select(null);
+    };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [select]);
+  }, [select, drawing]);
+
+  // A crosshair while taps place the area.
+  useEffect(() => {
+    const canvas = ready ? mapRef.current?.getMap().getCanvasContainer() : null;
+    if (!canvas) return;
+    canvas.classList.toggle('ooh-drawing', drawing);
+  }, [drawing, ready]);
 
   const pins = useMemo<BoardPin[]>(
     () => boards.map(b => ({
@@ -214,6 +287,12 @@ export default function MarketplaceMap({
         }}
         onMoveEnd={emitView}
         onClick={e => {
+          if (drawing) {
+            const p = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+            setStack(null); select(null);
+            setTaps(t => (areaMode === 'spot' ? [p] : t.length >= MAX_ROAD_TAPS ? t : [...t, p]));
+            return;
+          }
           // A click on empty map closes the card (pins handle their own clicks).
           const hit = mapRef.current?.queryRenderedFeatures(e.point).some(f => String(f.layer?.id ?? '').startsWith('marketplace-boards'));
           if (!hit) { setStack(null); select(null); }
@@ -228,13 +307,29 @@ export default function MarketplaceMap({
         {explorer && (
           <IntelLayers population={showPop} places={showPlaces} categories={cats} beforeId="marketplace-boards-clusters" onPlacesStatus={onPlacesStatus} />
         )}
+        {explorer && areaShape && (
+          <Source id="area-select" type="geojson" data={areaShape}>
+            <Layer id="area-select-fill" type="fill" beforeId="marketplace-boards-clusters" paint={{ 'fill-color': '#1B4F8A', 'fill-opacity': 0.1 }} />
+            <Layer id="area-select-line" type="line" beforeId="marketplace-boards-clusters" paint={{ 'line-color': '#1B4F8A', 'line-width': 2, 'line-opacity': 0.85 }} />
+          </Source>
+        )}
+        {explorer && roadLine && (
+          <Source id="area-road" type="geojson" data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: roadLine.map(p => [p.lng, p.lat]) } }}>
+            <Layer id="area-road-line" type="line" beforeId="marketplace-boards-clusters" layout={{ 'line-cap': 'round', 'line-join': 'round' }} paint={{ 'line-color': '#1B4F8A', 'line-width': 3, 'line-dasharray': [1.5, 1.5] }} />
+          </Source>
+        )}
+        {explorer && taps.map((p, i) => (
+          <Marker key={i} longitude={p.lng} latitude={p.lat} anchor="center">
+            <span className="ooh-tap" data-area-tap>{areaMode === 'road' ? (i === 0 ? 'A' : i === taps.length - 1 && taps.length > 1 ? 'B' : '') : ''}</span>
+          </Marker>
+        ))}
         <BoardPins
           sourceId="marketplace-boards"
           pins={pins}
           activeIds={activeIds}
-          onPinClick={id => { if (id !== selId) trackMap('board_click', 'pin', id); select(id === selId ? null : id); }}
+          onPinClick={id => { if (drawing) return; if (id !== selId) trackMap('board_click', 'pin', id); select(id === selId ? null : id); }}
           onPinHover={onHover}
-          onStackClick={(ids, at) => { select(null); setStack({ ids, at }); }}
+          onStackClick={(ids, at) => { if (drawing) return; select(null); setStack({ ids, at }); }}
           prices={!verificationColors && SHOW_PRICES}
         />
 
@@ -331,11 +426,65 @@ export default function MarketplaceMap({
                 </button>
               ))}
             </div>
-            <button type="button" className={`ooh-layers-btn${layersOpen || showPop || showPlaces ? ' on' : ''}`} aria-expanded={layersOpen} onClick={() => setLayersOpen(o => !o)} data-layers-btn>
+            <button type="button" className={`ooh-layers-btn${drawing || inArea ? ' on' : ''}`} aria-expanded={drawing} data-area-btn
+              onClick={() => { if (drawing) setDrawing(false); else { setLayersOpen(false); startArea(areaMode); } }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="9" strokeDasharray="3 3"/><circle cx="12" cy="12" r="2"/></svg>
+              Select area{inArea ? <b>{inArea.size}</b> : null}
+            </button>
+            <button type="button" className={`ooh-layers-btn${layersOpen || showPop || showPlaces ? ' on' : ''}`} aria-expanded={layersOpen} onClick={() => { setDrawing(false); setLayersOpen(o => !o); }} data-layers-btn>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/></svg>
               Layers{showPop || showPlaces ? <b>{(showPop ? 1 : 0) + (showPlaces ? 1 : 0)}</b> : null}
             </button>
           </div>
+          {drawing && (
+            <div className="ooh-layers ooh-area" role="dialog" aria-label="Select an area" data-area-panel>
+              <div className="ooh-area-top">
+                <p className="ooh-layers-h">Select an area</p>
+                <button type="button" className="ooh-area-done" onClick={() => setDrawing(false)}>Done</button>
+              </div>
+              <div className="ooh-style-switch ooh-area-modes" role="group" aria-label="Kind of area">
+                {([['spot', 'Around a spot'], ['road', 'Along a road']] as [AreaMode, string][]).map(([m, label]) => (
+                  <button key={m} type="button" aria-pressed={areaMode === m} className={areaMode === m ? 'on' : ''} onClick={() => startArea(m)}>{label}</button>
+                ))}
+              </div>
+              <p className="ooh-area-hint" data-area-hint>
+                {areaMode === 'spot'
+                  ? (taps.length ? 'Tap again to move the centre.' : 'Tap the map where you want to advertise.')
+                  : taps.length === 0 ? 'Tap where the road starts.'
+                  : taps.length === 1 ? 'Now tap where it ends. We follow the road between.'
+                  : taps.length >= MAX_ROAD_TAPS ? 'That’s the most taps a road can take.'
+                  : routing ? 'Following the road…' : 'Tap again to carry the road on.'}
+              </p>
+              {areaMode === 'spot' && taps.length === 1 && (
+                <label className="ooh-area-range">
+                  <span>Within <b>{radiusKm < 1 ? `${Math.round(radiusKm * 1000)} m` : `${radiusKm} km`}</b></span>
+                  <input type="range" min={0.25} max={10} step={0.25} value={radiusKm} onChange={e => setRadiusKm(Number(e.target.value))} aria-label="Distance from the spot" />
+                </label>
+              )}
+              {areaMode === 'road' && taps.length >= 2 && (
+                <label className="ooh-area-range">
+                  <span>Up to <b>{Math.round(widthKm * 1000)} m</b> either side of the road</span>
+                  <input type="range" min={0.1} max={2} step={0.1} value={widthKm} onChange={e => setWidthKm(Number(e.target.value))} aria-label="Distance either side of the road" />
+                </label>
+              )}
+              <div className="ooh-area-foot">
+                <span data-area-count className={inArea?.size ? 'yes' : ''}>
+                  {inArea ? `${inArea.size} board${inArea.size !== 1 ? 's' : ''} inside` : 'No area yet'}
+                </span>
+                <span className="ooh-area-acts">
+                  {areaMode === 'road' && taps.length > 0 && <button type="button" onClick={() => setTaps(t => t.slice(0, -1))}>Undo</button>}
+                  {taps.length > 0 && <button type="button" className="clear" onClick={() => setTaps([])}>Clear</button>}
+                </span>
+              </div>
+            </div>
+          )}
+          {!drawing && inArea && (
+            <div className="ooh-area-chip" data-area-chip>
+              <span>{inArea.size} board{inArea.size !== 1 ? 's' : ''} in your area</span>
+              <button type="button" onClick={() => startArea(areaMode)}>Edit</button>
+              <button type="button" onClick={() => setTaps([])} aria-label="Clear area">✕</button>
+            </div>
+          )}
           {layersOpen && (
             <div className="ooh-layers" role="dialog" aria-label="Map layers" data-layers-panel>
               <p className="ooh-layers-h">Layers</p>
@@ -425,6 +574,25 @@ export default function MarketplaceMap({
         .ooh-style-switch button { border: none; background: none; font: 600 12px/1 'Inter', sans-serif; color: #475569; padding: 7px 11px; border-radius: 7px; cursor: pointer; }
         .ooh-style-switch button.on { background: #0F172A; color: #fff; }
         [data-map-explorer] .mapboxgl-ctrl-top-right { margin-top: 2px; }
+        .ooh-drawing, .ooh-drawing .mapboxgl-canvas { cursor: crosshair !important; }
+        .ooh-tap { width: 18px; height: 18px; border-radius: 50%; background: #1B4F8A; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(15,23,42,.35); display: grid; place-items: center; color: #fff; font: 700 9px/1 'Inter', sans-serif; }
+        .ooh-area { display: flex; flex-direction: column; gap: 10px; }
+        .ooh-area-top { display: flex; align-items: center; justify-content: space-between; }
+        .ooh-area-top .ooh-layers-h { margin: 0 0 0 2px; }
+        .ooh-area-done { border: none; background: #0F172A; color: #fff; font: 600 12px/1 'Inter', sans-serif; padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+        .ooh-area-modes { box-shadow: none; background: #F1F5F9; }
+        .ooh-area-modes button { flex: 1; }
+        .ooh-area-hint { margin: 0 2px; font-size: 12px; color: #334155; line-height: 1.4; }
+        .ooh-area-range { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #64748B; margin: 0 2px; }
+        .ooh-area-range b { color: #0F172A; }
+        .ooh-area-range input { width: 100%; accent-color: #1B4F8A; margin: 0; }
+        .ooh-area-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 2px 0; border-top: 1px solid #F1F5F9; font-size: 12px; font-weight: 700; color: #94A3B8; }
+        .ooh-area-foot .yes { color: #065F46; }
+        .ooh-area-acts { display: flex; gap: 12px; }
+        .ooh-area-acts button { border: none; background: none; padding: 0; font: 600 12px/1 'Inter', sans-serif; color: #475569; cursor: pointer; }
+        .ooh-area-acts button.clear { color: #DC2626; }
+        .ooh-area-chip { display: inline-flex; align-items: center; gap: 10px; padding: 6px 6px 6px 11px; background: #0F172A; color: #fff; border-radius: 10px; font: 600 12px/1 'Inter', sans-serif; box-shadow: 0 6px 18px -6px rgba(15,23,42,.5); }
+        .ooh-area-chip button { border: none; background: rgba(255,255,255,.14); color: #fff; font: 600 11px/1 'Inter', sans-serif; padding: 6px 9px; border-radius: 7px; cursor: pointer; }
         .ooh-legend { position: absolute; left: 12px; bottom: 30px; z-index: 5; display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: rgba(255,255,255,.96); border-radius: 10px; box-shadow: 0 2px 8px rgba(15,23,42,.1), 0 0 0 1px rgba(15,23,42,.06); font: 500 11px/1.2 'Inter', sans-serif; color: #475569; }
         .ooh-legend span { display: flex; align-items: center; gap: 6px; }
         .ooh-legend i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(15,23,42,.12); }

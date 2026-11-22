@@ -58,10 +58,13 @@ export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initial
   const [selected, setSelected] = useState<string | null>(null);
   const [refit, setRefit] = useState(0);
   const [lookId, setLookId] = useState<string | null>(null);
+  // Boards inside the area drawn on the map (null = no area).
+  const [area, setArea] = useState<Set<string> | null>(null);
+  const [clearArea, setClearArea] = useState(0);
 
   const shown = useMemo(
-    () => (follow && bounds ? pinned.filter(b => inside(b, bounds)) : pinned),
-    [pinned, bounds, follow],
+    () => (area ? pinned.filter(b => area.has(b.id)) : follow && bounds ? pinned.filter(b => inside(b, bounds)) : pinned),
+    [pinned, bounds, follow, area],
   );
 
   const onView = useCallback((v: MapView) => {
@@ -154,16 +157,27 @@ export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initial
         <aside className="mx-side" aria-label="Boards in this area">
           <div className="mx-head">
             <p className="mx-count" data-in-view>
-              {follow ? `${shown.length} board${shown.length !== 1 ? 's' : ''} in this area` : `${shown.length} board${shown.length !== 1 ? 's' : ''} on the map`}
+              {area ? `${shown.length} board${shown.length !== 1 ? 's' : ''} in your selected area`
+                : follow ? `${shown.length} board${shown.length !== 1 ? 's' : ''} in this area` : `${shown.length} board${shown.length !== 1 ? 's' : ''} on the map`}
             </p>
-            <label className="mx-follow">
-              <input type="checkbox" checked={follow} onChange={e => setFollow(e.target.checked)} />
-              Update as I move the map
-            </label>
+            {area ? (
+              <button type="button" className="mx-clear-area" onClick={() => setClearArea(n => n + 1)} data-clear-area>Clear area</button>
+            ) : (
+              <label className="mx-follow">
+                <input type="checkbox" checked={follow} onChange={e => setFollow(e.target.checked)} />
+                Update as I move the map
+              </label>
+            )}
           </div>
           <div className="mx-list" ref={listRef}>
             {shown.map(card)}
-            {shown.length === 0 && (
+            {shown.length === 0 && area && (
+              <div className="mx-empty">
+                <p>No boards in this area yet. Make it bigger, or try nearby.</p>
+                <button type="button" onClick={() => setClearArea(n => n + 1)}>Clear area</button>
+              </div>
+            )}
+            {shown.length === 0 && !area && (
               <div className="mx-empty">
                 <p>No boards in this part of the map.</p>
                 <button type="button" onClick={() => setRefit(n => n + 1)}>Show all {pinned.length} boards</button>
@@ -197,6 +211,8 @@ export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initial
           explorer
           intel={intel}
           fitPadding={fitPadding}
+          onArea={setArea}
+          clearArea={clearArea}
         />
 
         {lookId && pinnedById.get(lookId) && (
@@ -210,8 +226,8 @@ export default function MapExplorer({ boards, filterKey, onOpen, onGrid, initial
                 {shown.map(card)}
               </div>
             ) : (
-              <button type="button" className="mx-row-empty" onClick={() => setRefit(n => n + 1)}>
-                No boards here · Show all {pinned.length}
+              <button type="button" className="mx-row-empty" onClick={() => (area ? setClearArea(n => n + 1) : setRefit(n => n + 1))}>
+                {area ? 'No boards in this area · Clear it' : `No boards here · Show all ${pinned.length}`}
               </button>
             )}
           </div>
@@ -227,6 +243,7 @@ const CSS = `
 .mx-head { padding: 12px 16px 10px; border-bottom: 1px solid #F1F5F9; display: flex; flex-direction: column; gap: 6px; }
 .mx-count { margin: 0; font-size: 0.9375rem; font-weight: 700; color: #0F172A; }
 .mx-follow { display: inline-flex; align-items: center; gap: 7px; font-size: 0.75rem; color: #64748B; cursor: pointer; user-select: none; width: fit-content; }
+.mx-clear-area { align-self: flex-start; border: none; background: none; padding: 0; color: #DC2626; font: 600 0.75rem/1.2 'Inter', sans-serif; cursor: pointer; }
 .mx-follow input { accent-color: #1B4F8A; width: 14px; height: 14px; margin: 0; }
 .mx-list { flex: 1; overflow-y: auto; padding: 10px 12px 24px; display: flex; flex-direction: column; gap: 8px; position: relative; overscroll-behavior: contain; }
 .mx-card { position: relative; display: flex; gap: 12px; padding: 8px; border-radius: 14px; text-decoration: none; color: inherit; border: 1px solid transparent; transition: background .12s, border-color .12s, box-shadow .12s; }
